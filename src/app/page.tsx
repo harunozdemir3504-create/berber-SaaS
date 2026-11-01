@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Scissors,
@@ -31,6 +32,10 @@ import {
 } from "lucide-react";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
 import {
+  readPersistentSession,
+  PWA_INSTALL_ROLE_KEY,
+} from "@/components/AdminPinGate";
+import {
   DAYS_METADATA,
   Barber,
   Service,
@@ -54,7 +59,9 @@ type VerificationStage =
   | "confirmed";
 
 export default function CustomerBookingPage() {
+  const router = useRouter();
   const {
+    shops,
     currentShop,
     currentShopSlug,
     currentShopExists,
@@ -68,6 +75,47 @@ export default function CustomerBookingPage() {
     getSlotsForDay,
     getServicePriceForBarber,
   } = useBarber();
+
+  // Akıllı PWA & Oturum Yönlendirmesi (Berber vs Müşteri Ayrımı):
+  // - Normal müşteri ana sayfadan (/) girdiğinde veya PWA'yı (/) üzerinden kurduğunda doğrudan randevu ekranında kalır.
+  // - Eğer kullanıcı daha önce /admin üzerinden berber olarak giriş yapmışsa ("Beni Hatırla" aktifse)
+  //   veya PWA'yı /admin sayfasındayken kurmuşsa, kendi yönetim paneline (/admin) yönlendirilir.
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("preview") === "1") {
+      return;
+    }
+
+    const savedSession = readPersistentSession();
+    if (savedSession) {
+      const rememberedShop = shops.find(
+        (s) => s.slug.toLowerCase() === savedSession.shopSlug.toLowerCase()
+      );
+      const currentPin = (rememberedShop?.adminPin || "1234").trim();
+      if (rememberedShop && savedSession.pinSnapshot === currentPin) {
+        router.replace(`/admin?shop=${rememberedShop.slug}`);
+        return;
+      }
+    }
+
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+        true;
+
+    if (isStandalone) {
+      try {
+        const installedRole = localStorage.getItem(PWA_INSTALL_ROLE_KEY);
+        if (installedRole === "admin") {
+          router.replace("/admin");
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [hydrated, shops, router]);
 
   // Wizard Step (1 to 4)
   const [step, setStep] = useState<number>(1);

@@ -20,6 +20,7 @@ import PwaInstallBanner from "@/components/PwaInstallBanner";
 
 export const PERSISTENT_ADMIN_SESSION_KEY =
   "vip_barber_persistent_admin_session_v1";
+export const PWA_INSTALL_ROLE_KEY = "vip_barber_pwa_role_v1";
 
 export interface PersistentAdminSession {
   shopId: string;
@@ -31,7 +32,7 @@ export interface PersistentAdminSession {
 const sessionKey = (slug: string) =>
   `vip_barber_admin_unlocked_${slug.toLowerCase()}`;
 
-function readPersistentSession(): PersistentAdminSession | null {
+export function readPersistentSession(): PersistentAdminSession | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(PERSISTENT_ADMIN_SESSION_KEY);
@@ -318,6 +319,7 @@ export default function AdminPinGate({
           PERSISTENT_ADMIN_SESSION_KEY,
           JSON.stringify(persistentSession)
         );
+        localStorage.setItem(PWA_INSTALL_ROLE_KEY, "admin");
         localStorage.setItem(sessionKey(targetShop.slug), correctPin);
         sessionStorage.setItem(sessionKey(targetShop.slug), correctPin);
       } catch {
@@ -608,6 +610,7 @@ export default function AdminPinGate({
 export function lockAdminSession(slug?: string) {
   try {
     localStorage.removeItem(PERSISTENT_ADMIN_SESSION_KEY);
+    localStorage.removeItem(PWA_INSTALL_ROLE_KEY);
     if (slug) {
       localStorage.removeItem(sessionKey(slug));
       sessionStorage.removeItem(sessionKey(slug));

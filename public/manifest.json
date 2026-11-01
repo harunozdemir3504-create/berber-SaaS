@@ -1,8 +1,8 @@
 {
-  "name": "VIP Berber Yönetim",
-  "short_name": "Berber Panel",
-  "description": "VIP Berberler İçin Gelir Koruma, Akıllı Randevu ve Salon Yönetim Uygulaması",
-  "start_url": "/admin",
+  "name": "VIP Berber Online Randevu",
+  "short_name": "VIP Randevu",
+  "description": "VIP Berber ve Kuaför Salonları İçin Hızlı Online Randevu Uygulaması",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

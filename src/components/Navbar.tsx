@@ -105,7 +105,7 @@ export default function Navbar() {
         {isShopAdmin ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Link
-              href={`/?shop=${currentShop.slug}`}
+              href={`/?shop=${currentShop.slug}&preview=1`}
               className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-200 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-white sm:px-3 sm:py-2 sm:text-xs"
             >
               <ExternalLink className="h-3.5 w-3.5 text-sky-400" />

@@ -79,6 +79,14 @@ export default function PwaInstallBanner({
     };
 
     const handleAppInstalled = () => {
+      try {
+        localStorage.setItem(
+          "vip_barber_pwa_role_v1",
+          isCustomer ? "customer" : "admin"
+        );
+      } catch {
+        // ignore storage errors
+      }
       setIsStandalone(true);
       setDeferredPrompt(null);
       setShowGuideModal(false);
@@ -95,7 +103,7 @@ export default function PwaInstallBanner({
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, []);
+  }, [isCustomer]);
 
   // Do not render if already installed/running in standalone mode or dismissed
   if (isStandalone || dismissed) {
@@ -103,6 +111,15 @@ export default function PwaInstallBanner({
   }
 
   const handleInstallClick = async () => {
+    try {
+      localStorage.setItem(
+        "vip_barber_pwa_role_v1",
+        isCustomer ? "customer" : "admin"
+      );
+    } catch {
+      // ignore storage errors
+    }
+
     // If Android/Chrome native install prompt is available, trigger it directly
     if (deferredPrompt && !isIOS) {
       try {

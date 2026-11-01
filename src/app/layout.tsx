@@ -18,14 +18,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "VIP Berber Yönetim | Akıllı No-Show Randevu & Salon Sistemi",
+  title: "VIP Berber Online Randevu",
   description:
-    "Erkek berberleri ve VIP kuaförler için No-Show (Randevuya Gelmeme) Engelleyici ve Akıllı Randevu Sistemi.",
+    "VIP berber ve kuaför salonları için hızlı ve güvenli online randevu sistemi.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Berber Panel",
+    title: "VIP Randevu",
   },
   icons: {
     icon: [
@@ -53,7 +53,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#c88a53" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Berber Panel" />
+        <meta name="apple-mobile-web-app-title" content="VIP Randevu" />
       </head>
       <body
         className={`${inter.variable} font-sans min-h-screen bg-[#0d0a08] text-[#fdf8f5] antialiased selection:bg-[#c88a53] selection:text-[#1a110b]`}
