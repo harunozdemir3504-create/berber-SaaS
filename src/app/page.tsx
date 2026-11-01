@@ -35,6 +35,8 @@ import {
   Hash,
   AlertTriangle,
   Ban,
+  ChevronDown,
+  Building2,
 } from "lucide-react";
 import {
   DAYS_METADATA,
@@ -83,6 +85,12 @@ export default function CustomerBookingPage() {
 
   // Wizard Step (1 to 4)
   const [step, setStep] = useState<number>(1);
+
+  // Compact Mobile UX Accordion States
+  const [isShopSelectorOpen, setIsShopSelectorOpen] = useState<boolean>(false);
+  const [expandedBarberId, setExpandedBarberId] = useState<string | null>(null);
+  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
+  const [showTestNumbers, setShowTestNumbers] = useState<boolean>(false);
 
   // Step 1: Barber Selection
   const [selectedBarberId, setSelectedBarberId] = useState<string>("any");
@@ -568,60 +576,115 @@ export default function CustomerBookingPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl px-3 pb-28 pt-3 sm:px-6 sm:pb-36 sm:pt-8">
-      {/* VIP Salon Hero Header (Strictly Isolated to Current Tenant Shop) */}
-      <div className="relative mb-3.5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1e1916] via-[#161311] to-[#110f0d] p-3 shadow-xl shadow-black/50 sm:mb-6 sm:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#c88a53]/15 blur-3xl" />
-        <div className="pointer-events-none absolute -left-16 bottom-0 h-36 w-36 rounded-full bg-sky-500/10 blur-2xl" />
+    <div className="mx-auto max-w-3xl px-2.5 pb-24 pt-2 sm:px-6 sm:pb-32 sm:pt-6">
+      {/* Compact VIP Salon Hero Header & Quick Shop Switcher */}
+      <div className="relative mb-2.5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1e1916] via-[#161311] to-[#110f0d] p-2.5 shadow-xl shadow-black/50 sm:mb-4 sm:p-4">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#c88a53]/15 blur-3xl" />
 
-        <div className="relative flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-stone-300 sm:gap-2 sm:text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#c88a53]/40 bg-[#c88a53]/15 px-2 py-0.5 font-bold uppercase tracking-wider text-[#e6ccb2] sm:px-2.5 sm:py-1">
-              <Crown className="h-3 w-3 text-[#c88a53] sm:h-3.5 sm:w-3.5" />
-              {currentShop.name}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-stone-300 sm:px-2.5 sm:py-1">
+        <div className="relative flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {shops.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => setIsShopSelectorOpen((prev) => !prev)}
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-[#c88a53]/45 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-extrabold text-[#e6ccb2] transition hover:border-[#e6ccb2]/60 hover:bg-[#c88a53]/25 sm:text-xs"
+              >
+                <Crown className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
+                <span className="truncate">{currentShop.name}</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 text-[#c88a53] transition-transform duration-200 ${
+                    isShopSelectorOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            ) : (
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-extrabold text-[#e6ccb2] sm:text-xs">
+                <Crown className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
+                <span className="truncate">{currentShop.name}</span>
+              </span>
+            )}
+
+            <span className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[11px] text-stone-300 sm:inline-flex">
               <MapPin className="h-3 w-3 text-sky-400" />
-              <span className="max-w-[110px] truncate sm:max-w-none">{currentShop.district}</span>
+              <span className="truncate">{currentShop.district}</span>
               <span className="text-stone-600">•</span>
               <Clock className="h-3 w-3 text-emerald-400" />
               {shopSettings.openTime}-{shopSettings.closeTime}
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setIsLookupOpen(true);
-              setCancelFeedback(null);
-              setRescheduleSuccessMsg("");
-            }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-400/40 bg-sky-500/15 px-2.5 py-1.5 text-[11px] font-extrabold text-sky-200 shadow-sm transition hover:border-sky-300 hover:bg-sky-500 hover:text-slate-950 sm:px-3.5 sm:py-2 sm:text-xs"
-          >
-            <Search className="h-3 w-3 text-sky-300 sm:h-3.5 sm:w-3.5" />
-            <span>Randevu Sorgula</span>
-          </button>
-        </div>
-
-        <div className="relative mt-2 flex items-center justify-between gap-2 sm:mt-3 sm:items-end">
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-base font-extrabold tracking-tight text-transparent sm:text-2xl">
-              {currentShop.name} — Online Randevu
-            </h1>
-            <p className="mt-0.5 hidden text-xs text-stone-400 sm:block sm:text-sm">
-              {currentShop.subtitle} • Ustanızı, koltuğunuzu ve hizmetinizi
-              seçerek 30 saniyede randevunuzu onaylayın.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] sm:px-3 sm:py-1 sm:text-xs">
-            <Star className="h-3 w-3 fill-amber-400 text-amber-400 sm:h-3.5 sm:w-3.5" />
-            <span className="font-bold text-[#fdf8f5]">4.98</span>
-            <span className="hidden text-amber-200/75 sm:inline">(VIP Salon)</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-1.5 py-1 text-[10px] font-bold text-[#fdf8f5] sm:px-2 sm:text-xs">
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              4.98
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsLookupOpen(true);
+                setCancelFeedback(null);
+                setRescheduleSuccessMsg("");
+              }}
+              className="inline-flex items-center gap-1 rounded-xl border border-sky-400/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-extrabold text-sky-200 shadow-sm transition hover:border-sky-300 hover:bg-sky-500 hover:text-slate-950 sm:px-3 sm:py-1.5 sm:text-xs"
+            >
+              <Search className="h-3 w-3 text-sky-300 sm:h-3.5 sm:w-3.5" />
+              <span>Randevu Sorgula</span>
+            </button>
           </div>
         </div>
 
-        {/* Stepper Bar with High Contrast Active Tab Border */}
-        <div className="relative mt-2.5 grid grid-cols-4 gap-1.5 sm:mt-5 sm:gap-2">
+        {/* Collapsible Compact Shop Selector (Accordion) */}
+        <AnimatePresence initial={false}>
+          {isShopSelectorOpen && shops.length > 1 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 rounded-xl border border-[#c88a53]/30 bg-[#110f0d]/95 p-2">
+                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  <Building2 className="h-3 w-3 text-[#c88a53]" />
+                  Dükkan / Şube Seçin:
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {shops.map((s) => {
+                    const isCurrent = s.slug === currentShop.slug;
+                    return (
+                      <button
+                        key={s.slug}
+                        type="button"
+                        onClick={() => {
+                          setCurrentShopSlug(s.slug);
+                          setIsShopSelectorOpen(false);
+                        }}
+                        className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
+                          isCurrent
+                            ? "border-[#e6ccb2]/55 bg-[#c88a53]/20 font-bold text-[#fdf8f5]"
+                            : "border-white/10 bg-[#161311] text-stone-300 hover:border-white/25 hover:text-white"
+                        }`}
+                      >
+                        <div className="min-w-0 truncate">
+                          <span className="truncate">{s.name}</span>
+                          <span className="ml-1.5 text-[10px] text-stone-400">
+                            ({s.district})
+                          </span>
+                        </div>
+                        {isCurrent && (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Compact 4-Step Stepper Bar */}
+        <div className="relative mt-2 grid grid-cols-4 gap-1 sm:mt-3 sm:gap-2">
           {stepsInfo.map((item) => {
             const isActive = step === item.num;
             const isDone = step > item.num;
@@ -633,37 +696,32 @@ export default function CustomerBookingPage() {
                 type="button"
                 disabled={!canClick}
                 onClick={() => canClick && setStep(item.num)}
-                className={`group relative flex flex-col items-start rounded-xl border p-1.5 text-left transition-all duration-200 sm:p-2.5 ${
+                className={`group relative flex flex-col items-start rounded-xl border px-2 py-1.5 text-left transition-all duration-200 sm:p-2 ${
                   isActive
-                    ? "border-[#e6ccb2]/50 bg-gradient-to-br from-[#c88a53]/30 via-[#b47b48]/15 to-[#1c1613] shadow-lg shadow-[#c88a53]/20"
+                    ? "border-[#e6ccb2]/50 bg-gradient-to-br from-[#c88a53]/30 via-[#b47b48]/15 to-[#1c1613] shadow-md shadow-[#c88a53]/20"
                     : isDone
                     ? "cursor-pointer border-emerald-500/30 bg-emerald-950/20 hover:border-emerald-400/60"
                     : "cursor-default border-white/10 bg-[#0d0a08]/60 opacity-60"
                 }`}
               >
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full items-center gap-1.5">
                   <span
-                    className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-extrabold sm:h-5 sm:w-5 sm:text-[11px] ${
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-extrabold sm:h-4.5 sm:w-4.5 sm:text-[10px] ${
                       isActive
-                        ? "border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-sm"
+                        ? "border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
                         : isDone
                         ? "bg-emerald-500/20 text-emerald-400"
                         : "bg-white/10 text-stone-400"
                     }`}
                   >
-                    {isDone ? <Check className="h-2.5 w-2.5 stroke-[3] sm:h-3 sm:w-3" /> : item.num}
+                    {isDone ? <Check className="h-2.5 w-2.5 stroke-[3]" /> : item.num}
                   </span>
-                  {isDone && (
-                    <span className="hidden text-[10px] font-semibold text-emerald-400 group-hover:underline sm:inline">
-                      Değiştir
-                    </span>
-                  )}
+                  <span className=" truncate text-[10px] font-extrabold text-[#fdf8f5] sm:text-xs">
+                    {item.title}
+                  </span>
                 </div>
-                <span className="mt-1 line-clamp-1 text-[11px] font-extrabold text-[#fdf8f5] sm:mt-1.5 sm:text-xs">
-                  {item.title}
-                </span>
                 <span
-                  className={`line-clamp-1 text-[9px] sm:text-[10px] ${
+                  className={`mt-0.5 w-full truncate text-[9px] sm:text-[10px] ${
                     isActive
                       ? "text-[#e6ccb2]"
                       : isDone
@@ -685,98 +743,59 @@ export default function CustomerBookingPage() {
         {step === 1 && (
           <motion.section
             key="step-1"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="space-y-3 sm:space-y-4"
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="space-y-2.5 sm:space-y-3"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-extrabold text-[#fdf8f5] sm:text-lg">
-                  1. Usta ve Berber Koltuğu Seçimi
-                </h2>
-                <p className="truncate text-[11px] text-stone-400 sm:text-xs">
-                  {currentShop.name} bünyesindeki ustalar ve koltuk tarifeleri
-                </p>
-              </div>
-              <span className="shrink-0 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300 sm:px-2.5 sm:py-1 sm:text-xs">
-                Adım 1 / 4
-              </span>
-            </div>
-
-            {/* Berber Arama / İsim Yazma Çubuğu */}
-            <div className="space-y-1.5">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-400" />
-                <input
-                  type="text"
-                  value={barberSearchQuery}
-                  onChange={(e) => setBarberSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && filteredBarbers.length > 0) {
-                      setSelectedBarberId(filteredBarbers[0].id);
-                    }
-                  }}
-                  placeholder="İsim yazarak berber ara veya aşağıdan seç..."
-                  className="w-full rounded-xl border border-white/15 bg-[#161311] py-2.5 pl-9 pr-9 text-xs text-[#fdf8f5] placeholder-stone-500 shadow-inner transition focus:border-sky-400/70 focus:bg-[#1c1815] focus:outline-none sm:rounded-2xl sm:py-3 sm:pl-10 sm:text-sm"
-                />
-                {barberSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setBarberSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-stone-400 hover:bg-white/10 hover:text-[#fdf8f5]"
-                    title="Aramayı Temizle"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Bilgilendirme ve Aktif Seçim Durumu */}
-              <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-stone-400 sm:text-xs">
-                <span>
-                  {barberSearchQuery ? (
-                    <>
-                      &quot;<strong className="text-[#fdf8f5]">{barberSearchQuery}</strong>&quot; için{" "}
-                      <strong className="text-sky-400">{filteredBarbers.length}</strong> berber bulundu
-                    </>
-                  ) : (
-                    <>Toplam <strong className="text-sky-400">{barbers.length}</strong> usta ve koltuk</>
+              <h2 className="truncate text-sm font-extrabold text-[#fdf8f5] sm:text-base">
+                1. Usta / Koltuk Seçin
+              </h2>
+              {barbers.length > 3 && (
+                <div className="relative w-44 sm:w-56">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sky-400" />
+                  <input
+                    type="text"
+                    value={barberSearchQuery}
+                    onChange={(e) => setBarberSearchQuery(e.target.value)}
+                    placeholder="Usta ara..."
+                    className="w-full rounded-lg border border-white/15 bg-[#161311] py-1 pl-7 pr-6 text-[11px] text-[#fdf8f5] placeholder-stone-500 focus:border-sky-400/70 focus:outline-none sm:text-xs"
+                  />
+                  {barberSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setBarberSearchQuery("")}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-stone-400 hover:text-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   )}
-                </span>
-
-                {selectedBarber && (
-                  <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 sm:text-[11px]">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                    <span className="truncate max-w-[160px]">Seçili: <strong className="text-[#fdf8f5]">{selectedBarber.name}</strong></span>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* Berber Kartları Listesi veya Boş Durum */}
+            {/* Kompakt Berber Kartları Listesi */}
             {filteredBarbers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/15 bg-[#14100d]/70 p-6 text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400">
-                  <Search className="h-5 w-5" />
-                </div>
-                <p className="mt-2.5 text-sm font-bold text-[#fdf8f5]">
+              <div className="rounded-xl border border-dashed border-white/15 bg-[#14100d]/70 p-4 text-center">
+                <p className="text-xs font-bold text-[#fdf8f5]">
                   &quot;{barberSearchQuery}&quot; ile eşleşen berber bulunamadı
                 </p>
                 <button
                   type="button"
                   onClick={() => setBarberSearchQuery("")}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/15 px-3.5 py-1.5 text-xs font-bold text-sky-200 transition hover:bg-sky-500/25 hover:text-white"
+                  className="mt-2 inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1 text-[11px] font-bold text-sky-200"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Tüm Berberleri Göster
+                  <RefreshCw className="h-3 w-3" />
+                  Tümünü Göster
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3.5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {filteredBarbers.map((barber: Barber, idx: number) => {
                   const isSelected = selectedBarber?.id === barber.id;
+                  const isExpanded = expandedBarberId === barber.id;
                   const firstService = services[0];
                   const samplePrice = firstService
                     ? getServicePriceForBarber(firstService, barber)
@@ -787,113 +806,136 @@ export default function CustomerBookingPage() {
                   const theme = getBarberVisualTheme(barber, idx);
 
                   return (
-                    <motion.div
+                    <div
                       key={barber.id}
-                      whileTap={{ scale: 0.985 }}
                       onClick={() => setSelectedBarberId(barber.id)}
-                      className={`group relative cursor-pointer overflow-hidden rounded-xl border p-3 transition-all duration-200 sm:rounded-2xl sm:p-4 ${
+                      className={`group relative cursor-pointer overflow-hidden rounded-xl border p-2.5 transition-all duration-150 sm:p-3 ${
                         isSelected
-                          ? "border-[#e6ccb2]/60 bg-gradient-to-br from-[#281e18] via-[#1c1613] to-[#14100d] shadow-lg shadow-[#c88a53]/20"
+                          ? "border-[#e6ccb2]/60 bg-gradient-to-br from-[#281e18] via-[#1c1613] to-[#14100d] shadow-md shadow-[#c88a53]/20"
                           : "border-white/10 bg-[#161311] hover:border-white/25 hover:bg-[#1d1815]"
                       }`}
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
-                        {barber.badge ? (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold sm:px-2.5 sm:text-[11px] ${theme.badge}`}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <div
+                            className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${theme.avatar} text-xs font-extrabold text-[#fdf8f5] shadow-inner ring-1 sm:h-10 sm:w-10 ${theme.ring}`}
                           >
                             {barber.isAnyOption ? (
-                              <Zap className="h-3 w-3 fill-[#1a110b]" />
+                              <Scissors className="h-4 w-4 text-[#1a110b]" />
                             ) : (
-                              <Sparkles className="h-3 w-3 opacity-90" />
+                              <span>{barber.initials}</span>
                             )}
-                            {barber.badge}
-                          </span>
-                        ) : (
-                          <span />
-                        )}
-
-                        {firstService && samplePrice !== null && (
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:px-2 sm:text-[11px] ${
-                              hasCustomPricing
-                                ? "border border-amber-500/35 bg-amber-500/15 text-amber-300"
-                                : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                            }`}
-                          >
-                            {firstService.name}: {samplePrice} TL
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-start gap-2.5 sm:gap-3.5">
-                        <div
-                          className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${theme.avatar} text-sm font-extrabold text-[#fdf8f5] shadow-inner ring-1 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-base ${theme.ring}`}
-                        >
-                          {barber.isAnyOption ? (
-                            <Scissors className="h-5 w-5 text-[#1a110b] sm:h-6 sm:w-6" />
-                          ) : (
-                            <span>{barber.initials}</span>
-                          )}
-                          {isSelected && (
-                            <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[#0c1410] ring-2 ring-[#14100d] sm:h-5 sm:w-5">
-                              <Check className="h-2.5 w-2.5 stroke-[3] sm:h-3 sm:w-3" />
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-sm font-bold text-[#fdf8f5] transition-colors group-hover:text-[#e6ccb2] sm:text-base">
-                            {barber.name}
-                          </h3>
-                          <p className="truncate text-[11px] text-stone-400 sm:text-xs">{barber.role}</p>
-                          <p className={`mt-0.5 truncate text-[11px] font-bold ${theme.chairText}`}>
-                            {barber.chairName}
-                          </p>
-
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-stone-300 sm:mt-2 sm:gap-3 sm:text-xs">
-                            <span className="inline-flex items-center gap-1 font-semibold">
-                              <Star className="h-3 w-3 fill-amber-400 text-amber-400 sm:h-3.5 sm:w-3.5" />
-                              {barber.rating}
-                              <span className="font-normal text-stone-500">
-                                ({barber.reviewCount})
+                            {isSelected && (
+                              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[#0c1410] ring-2 ring-[#14100d]">
+                                <Check className="h-2.5 w-2.5 stroke-[3]" />
                               </span>
-                            </span>
-                            <span className="text-stone-600">•</span>
-                            <span className="text-stone-400">
-                              {barber.experience}
-                            </span>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="truncate text-xs font-bold text-[#fdf8f5] sm:text-sm">
+                                {barber.name}
+                              </h3>
+                              <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-amber-300">
+                                <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
+                                {barber.rating}
+                              </span>
+                            </div>
+                            <p className={`truncate text-[10px] font-semibold ${theme.chairText}`}>
+                              {barber.chairName}
+                            </p>
                           </div>
                         </div>
+
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {firstService && samplePrice !== null && (
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                hasCustomPricing
+                                  ? "border border-amber-500/35 bg-amber-500/15 text-amber-300"
+                                  : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                              }`}
+                            >
+                              {samplePrice} TL
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedBarberId((prev) =>
+                                prev === barber.id ? null : barber.id
+                              );
+                            }}
+                            title="Usta Detayları"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-stone-400 transition hover:border-white/25 hover:text-white"
+                          >
+                            <ChevronDown
+                              className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                                isExpanded ? "rotate-180 text-[#e6ccb2]" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="mt-2.5 flex flex-wrap gap-1 border-t border-white/10 pt-2 sm:mt-3.5 sm:gap-1.5 sm:pt-3">
-                        {barber.specialties.map((spec) => (
-                          <span
-                            key={spec}
-                            className="rounded-md border border-white/10 bg-[#110f0d] px-1.5 py-0.5 text-[10px] text-stone-300 sm:px-2 sm:text-[11px]"
+                      {/* Açılır-Kapanır Usta Detayları (Accordion) */}
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.18 }}
+                            className="overflow-hidden"
                           >
-                            {spec}
-                          </span>
-                        ))}
-                      </div>
-                    </motion.div>
+                            <div className="mt-2 border-t border-white/10 pt-2 text-[11px] text-stone-300">
+                              <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-stone-400">
+                                <span>{barber.role}</span>
+                                <span>
+                                  Deneyim: <strong className="text-stone-200">{barber.experience}</strong> ({barber.reviewCount} yorum)
+                                </span>
+                              </div>
+                              {barber.badge && (
+                                <div className="mt-1">
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${theme.badge}`}
+                                  >
+                                    <Sparkles className="h-2.5 w-2.5" />
+                                    {barber.badge}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {barber.specialties.map((spec) => (
+                                  <span
+                                    key={spec}
+                                    className="rounded border border-white/10 bg-[#110f0d] px-1.5 py-0.5 text-[9px] text-stone-300"
+                                  >
+                                    {spec}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   );
                 })}
               </div>
             )}
 
-            <div className="pt-1 sm:pt-2">
-              <button
-                type="button"
-                onClick={() => selectedBarber && setStep(2)}
-                disabled={!selectedBarber}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50 sm:rounded-2xl sm:py-4 sm:text-sm"
-              >
-                <span>Hizmet Seçimine İlerle ({selectedBarber?.name})</span>
-                <ChevronRight className="h-4 w-4 stroke-[2.5]" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => selectedBarber && setStep(2)}
+              disabled={!selectedBarber}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-2.5 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50 sm:py-3 sm:text-sm"
+            >
+              <span>Hizmet Seçimine İlerle ({selectedBarber?.name})</span>
+              <ChevronRight className="h-4 w-4 stroke-[2.5]" />
+            </button>
           </motion.section>
         )}
 
@@ -901,38 +943,36 @@ export default function CustomerBookingPage() {
         {step === 2 && (
           <motion.section
             key="step-2"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="space-y-4"
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="space-y-2.5 sm:space-y-3"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <div>
-                  <h2 className="text-lg font-extrabold text-[#fdf8f5]">
+                  <h2 className="text-sm font-extrabold text-[#fdf8f5] sm:text-base">
                     2. Hizmet Seçimi ({selectedBarber?.name})
                   </h2>
-                  <p className="text-xs text-stone-400">
-                    {currentShop.name} güncel hizmet ve fiyat listesi
-                  </p>
                 </div>
               </div>
-              <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-bold text-sky-300">
-                Adım 2 / 4
+              <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+                {selectedServices.length} Seçili • {totalPrice} TL
               </span>
             </div>
 
-            <div className="space-y-2.5 sm:space-y-3">
+            <div className="space-y-1.5 sm:space-y-2">
               {services.map((service: Service) => {
                 const isSelected = selectedServiceIds.includes(service.id);
+                const isExpanded = expandedServiceId === service.id;
                 const effectivePrice = getServicePriceForBarber(
                   service,
                   selectedBarber
@@ -940,69 +980,102 @@ export default function CustomerBookingPage() {
                 const isCustomPriced = effectivePrice !== service.price;
 
                 return (
-                  <motion.div
+                  <div
                     key={service.id}
-                    whileTap={{ scale: 0.99 }}
                     onClick={() => toggleService(service.id)}
-                    className={`cursor-pointer rounded-xl border p-3 transition-all duration-200 sm:rounded-2xl sm:p-4 ${
+                    className={`cursor-pointer rounded-xl border px-3 py-2.5 transition-all duration-150 ${
                       isSelected
-                        ? "border-[#e6ccb2]/55 bg-gradient-to-r from-[#281e18] via-[#1c1613] to-[#14100d] shadow-lg shadow-[#c88a53]/20"
+                        ? "border-[#e6ccb2]/55 bg-gradient-to-r from-[#281e18] via-[#1c1613] to-[#14100d] shadow-md shadow-[#c88a53]/15"
                         : "border-white/10 bg-[#161311] hover:border-white/25 hover:bg-[#1d1815]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-                      <div className="flex items-start gap-2.5 sm:gap-3.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
                         <div
-                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors sm:h-6 sm:w-6 sm:rounded-lg ${
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                             isSelected
-                              ? "border-emerald-400/60 bg-emerald-500 text-[#0c1410] shadow-sm"
+                              ? "border-emerald-400/60 bg-emerald-500 text-[#0c1410]"
                               : "border-white/20 bg-[#110f0d] text-transparent"
                           }`}
                         >
-                          <Check className="h-3.5 w-3.5 stroke-[3] sm:h-4 sm:w-4" />
+                          <Check className="h-3.5 w-3.5 stroke-[3]" />
                         </div>
 
-                        <div>
-                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                            <h3 className="text-sm font-bold text-[#fdf8f5] sm:text-base">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h3 className="truncate text-xs font-bold text-[#fdf8f5] sm:text-sm">
                               {service.name}
                             </h3>
                             {service.vip && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-purple-400/50 bg-gradient-to-r from-purple-500/25 via-fuchsia-500/25 to-indigo-500/25 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-purple-200 sm:px-2.5 sm:text-[10px]">
-                                <Crown className="h-2.5 w-2.5 text-purple-300 sm:h-3 sm:w-3" />
-                                VIP PAKET
+                              <span className="inline-flex items-center gap-0.5 rounded-full border border-purple-400/50 bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-purple-200">
+                                <Crown className="h-2.5 w-2.5 text-purple-300" />
+                                VIP
                               </span>
                             )}
                             {isCustomPriced && (
-                              <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300 sm:px-2 sm:text-[10px]">
-                                Özel Fiyat
+                              <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+                                Özel
                               </span>
                             )}
                           </div>
-                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-stone-400 sm:mt-1 sm:line-clamp-2 sm:text-xs sm:leading-relaxed">
-                            {service.description}
-                          </p>
                         </div>
                       </div>
 
-                      <div className="shrink-0 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="inline-flex items-center gap-0.5 rounded border border-sky-500/25 bg-sky-950/30 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                          <Clock className="h-2.5 w-2.5 text-sky-400" />
+                          {service.duration} dk
+                        </span>
+
+                        <div className="text-right">
                           {isCustomPriced && (
-                            <span className="text-[11px] text-stone-500 line-through sm:text-xs">
-                              {service.price} TL
+                            <span className="mr-1 text-[10px] text-stone-500 line-through">
+                              {service.price}
                             </span>
                           )}
-                          <span className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-sm font-extrabold text-transparent sm:text-base">
+                          <span className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-xs font-extrabold text-transparent sm:text-sm">
                             {effectivePrice} TL
                           </span>
                         </div>
-                        <div className="mt-0.5 inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-950/30 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300 sm:mt-1 sm:px-2 sm:text-[11px]">
-                          <Clock className="h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3" />
-                          {service.duration} dk
-                        </div>
+
+                        {service.description && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedServiceId((prev) =>
+                                prev === service.id ? null : service.id
+                              );
+                            }}
+                            title="Hizmet Detayı"
+                            className="flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-stone-400 transition hover:border-white/25 hover:text-white"
+                          >
+                            <ChevronDown
+                              className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                                isExpanded ? "rotate-180 text-[#e6ccb2]" : ""
+                              }`}
+                            />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </motion.div>
+
+                    <AnimatePresence initial={false}>
+                      {isExpanded && service.description && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                        >
+                          <p className="mt-2 border-t border-white/10 pt-1.5 text-[11px] leading-relaxed text-stone-300">
+                            {service.description}
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })}
             </div>
@@ -1013,152 +1086,126 @@ export default function CustomerBookingPage() {
         {step === 3 && (
           <motion.section
             key="step-3"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="space-y-5"
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="space-y-3"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <div>
-                  <h2 className="text-lg font-extrabold text-[#fdf8f5]">
-                    3. Tarih ve Saat Seçimi
+                  <h2 className="text-sm font-extrabold text-[#fdf8f5] sm:text-base">
+                    3. Gün ve Saat Seçin
                   </h2>
-                  <p className="text-xs text-stone-400">
-                    {currentShop.name} çalışma saatleri: {shopSettings.openTime} -{" "}
-                    {shopSettings.closeTime} ({shopSettings.slotInterval} dk
-                    aralıklarla)
-                  </p>
                 </div>
               </div>
-              <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-bold text-sky-300">
-                Adım 3 / 4
+              <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+                {selectedDay.fullDate}
               </span>
             </div>
 
-            <div>
-              <label className="mb-2.5 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-stone-400">
-                <span className="flex items-center gap-1.5">
-                  <CalendarIcon className="h-3.5 w-3.5 text-sky-400" />
-                  Gün Seçiniz (Yatay Kaydırılabilir)
-                </span>
-                <span className="font-bold text-sky-300">
-                  {selectedDay.fullDate}
-                </span>
-              </label>
+            {/* Kompakt Yatay Gün Seçici */}
+            <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1 pt-0.5 sm:gap-2">
+              {DAYS_METADATA.map((day) => {
+                const isSelected = selectedDay.id === day.id;
+                const isDayClosed = shopSettings.closedDays.includes(
+                  day.dayOfWeek
+                );
+                const daySlots = getSlotsForDay(day.id);
+                const availableCount = daySlots.filter(
+                  (s) => s.state === "available"
+                ).length;
 
-              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1.5 pt-0.5 sm:gap-2.5 sm:pb-2">
-                {DAYS_METADATA.map((day) => {
-                  const isSelected = selectedDay.id === day.id;
-                  const isDayClosed = shopSettings.closedDays.includes(
-                    day.dayOfWeek
-                  );
-                  const daySlots = getSlotsForDay(day.id);
-                  const availableCount = daySlots.filter(
-                    (s) => s.state === "available"
-                  ).length;
-
-                  return (
-                    <button
-                      key={day.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDay(day);
-                        setSelectedSlot(null);
-                      }}
-                      className={`flex min-w-[78px] shrink-0 flex-col items-center rounded-xl border p-2 transition-all duration-200 sm:min-w-[108px] sm:rounded-2xl sm:p-3 ${
+                return (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDay(day);
+                      setSelectedSlot(null);
+                    }}
+                    className={`flex min-w-[64px] shrink-0 flex-col items-center rounded-xl border px-2 py-1.5 transition-all duration-150 sm:min-w-[88px] sm:p-2.5 ${
+                      isSelected
+                        ? isDayClosed
+                          ? "border-rose-500 bg-rose-950/40 text-rose-200"
+                          : "border-[#e6ccb2]/60 bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md shadow-[#c88a53]/25"
+                        : isDayClosed
+                        ? "border-white/5 bg-[#12100e]/70 text-stone-500 opacity-75"
+                        : "border-white/10 bg-[#161311] text-[#fdf8f5] hover:border-white/25"
+                    }`}
+                  >
+                    <span
+                      className={`text-[9px] font-bold uppercase tracking-wider sm:text-[10px] ${
                         isSelected
                           ? isDayClosed
-                            ? "border-rose-500 bg-rose-950/40 text-rose-200"
-                            : "border-[#e6ccb2]/60 bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
-                          : isDayClosed
-                          ? "border-white/5 bg-[#12100e]/70 text-stone-500 opacity-75"
-                          : "border-white/10 bg-[#161311] text-[#fdf8f5] hover:border-white/25"
+                            ? "text-rose-300"
+                            : "text-[#1a110b]/85"
+                          : "text-stone-400"
                       }`}
                     >
+                      {day.label}
+                    </span>
+                    <span className="text-base font-extrabold tracking-tight sm:text-xl">
+                      {day.dayNumber}
+                    </span>
+                    {isDayClosed ? (
+                      <span className="rounded bg-rose-500/20 px-1 py-0.2 text-[8px] font-bold text-rose-400 sm:text-[9px]">
+                        Kapalı
+                      </span>
+                    ) : (
                       <span
-                        className={`text-[10px] font-bold uppercase tracking-wider sm:text-[11px] ${
-                          isSelected
-                            ? isDayClosed
-                              ? "text-rose-300"
-                              : "text-[#1a110b]/85"
-                            : "text-stone-400"
+                        className={`text-[8px] font-bold sm:text-[9px] ${
+                          isSelected ? "text-[#1a110b]" : "text-emerald-400"
                         }`}
                       >
-                        {day.label}
+                        {availableCount} Boş
                       </span>
-                      <span className="my-0.5 text-lg font-extrabold tracking-tight sm:my-1 sm:text-2xl">
-                        {day.dayNumber}
-                      </span>
-                      {isDayClosed ? (
-                        <span className="rounded bg-rose-500/20 px-1 py-0.5 text-[9px] font-bold text-rose-400 sm:px-1.5 sm:text-[10px]">
-                          Kapalı
-                        </span>
-                      ) : (
-                        <span
-                          className={`text-[9px] font-bold sm:text-[10px] ${
-                            isSelected ? "text-[#1a110b]" : "text-emerald-400"
-                          }`}
-                        >
-                          {availableCount} Boş
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {isSelectedDayClosed ? (
-              <div className="rounded-2xl border border-rose-500/40 bg-rose-950/15 p-6 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400">
-                  <CalendarX2 className="h-6 w-6" />
-                </div>
-                <h3 className="mt-3 text-base font-bold text-[#fdf8f5]">
+              <div className="rounded-xl border border-rose-500/40 bg-rose-950/15 p-4 text-center">
+                <CalendarX2 className="mx-auto h-5 w-5 text-rose-400" />
+                <h3 className="mt-1.5 text-sm font-bold text-[#fdf8f5]">
                   {selectedDay.fullDate} Günü Salonumuz Kapalıdır
                 </h3>
-                <p className="mx-auto mt-1 max-w-md text-xs text-stone-300">
-                  <strong>{currentShop.name}</strong> yönetim panelinden{" "}
-                  <strong>{selectedDay.dayName}</strong> günü haftalık tatil
-                  günü olarak belirlenmiştir. Lütfen açık bir gün seçiniz.
+                <p className="mt-0.5 text-[11px] text-stone-300">
+                  Lütfen yukarıdan açık bir gün seçiniz.
                 </p>
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-[#161311]/90 px-3.5 py-2.5 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
-                    <span className="text-[#fdf8f5]">Müsait (Anında Onay)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400"></span>
-                    <span className="text-[#fdf8f5]">
-                      Dolu —{" "}
-                      <strong className="text-amber-300">
-                        Yedek Listeye Yazıl
-                      </strong>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#161311]/90 px-2.5 py-1.5 text-[10px] sm:text-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center gap-1 text-[#fdf8f5]">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      Müsait
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-amber-300">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      Dolu (Yedek Liste)
                     </span>
                   </div>
                   {shopSettings.breakEnabled && (
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-stone-500"></span>
-                      <span className="text-stone-400">
-                        Öğle Molası ({shopSettings.breakStart} -{" "}
-                        {shopSettings.breakEnd})
-                      </span>
-                    </div>
+                    <span className="text-stone-400">
+                      Mola: {shopSettings.breakStart}-{shopSettings.breakEnd}
+                    </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 md:grid-cols-4 sm:gap-2.5">
+                {/* Kompakt 4 Sütunlu Saat Izgarası (Kaydırma Zahmetini Bitirir) */}
+                <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 sm:gap-2">
                   {currentDaySlots.map((slot) => {
                     const isSelected = selectedSlot?.time === slot.time;
 
@@ -1166,13 +1213,12 @@ export default function CustomerBookingPage() {
                       return (
                         <div
                           key={slot.time}
-                          className="flex cursor-not-allowed flex-col items-center justify-center rounded-xl border border-white/5 bg-[#12100e]/70 p-2 opacity-60 sm:p-3"
+                          className="flex cursor-not-allowed flex-col items-center justify-center rounded-xl border border-white/5 bg-[#12100e]/70 px-1.5 py-2 opacity-55"
                         >
-                          <div className="flex items-center gap-1 text-stone-500">
-                            <Coffee className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                            <span className="text-xs font-bold sm:text-sm">{slot.time}</span>
-                          </div>
-                          <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-stone-500 sm:mt-1 sm:text-[10px]">
+                          <span className="text-xs font-bold text-stone-500">
+                            {slot.time}
+                          </span>
+                          <span className="text-[8px] font-semibold uppercase text-stone-500">
                             Mola
                           </span>
                         </div>
@@ -1181,73 +1227,49 @@ export default function CustomerBookingPage() {
 
                     if (slot.state === "available") {
                       return (
-                        <motion.button
+                        <button
                           key={slot.time}
                           type="button"
-                          whileTap={{ scale: 0.97 }}
                           onClick={() => handleSelectSlot(slot)}
-                          className={`group relative flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all sm:p-3.5 ${
+                          className={`flex flex-col items-center justify-center rounded-xl border px-1.5 py-2 transition-all ${
                             isSelected
-                              ? "border-emerald-300/70 bg-gradient-to-r from-emerald-500 to-teal-500 text-[#081510] shadow-lg shadow-emerald-500/25"
+                              ? "border-emerald-300/70 bg-gradient-to-r from-emerald-500 to-teal-500 text-[#081510] shadow-md shadow-emerald-500/25"
                               : "border-emerald-500/20 bg-[#141916] text-[#fdf8f5] hover:border-emerald-400/60 hover:bg-emerald-950/30"
                           }`}
                         >
-                          <div className="flex items-center gap-1">
-                            <Clock
-                              className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${
-                                isSelected
-                                  ? "text-[#081510]"
-                                  : "text-emerald-400"
-                              }`}
-                            />
-                            <span className="text-sm font-extrabold sm:text-base">
-                              {slot.time}
-                            </span>
-                          </div>
+                          <span className="text-xs font-extrabold sm:text-sm">
+                            {slot.time}
+                          </span>
                           <span
-                            className={`mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-[11px] ${
-                              isSelected
-                                ? "font-bold text-[#081510]"
-                                : "text-emerald-400"
+                            className={`text-[9px] font-semibold ${
+                              isSelected ? "text-[#081510]" : "text-emerald-400"
                             }`}
                           >
                             Müsait
                           </span>
-                        </motion.button>
+                        </button>
                       );
                     }
 
                     return (
-                      <motion.button
+                      <button
                         key={slot.time}
                         type="button"
-                        whileTap={{ scale: 0.97 }}
                         onClick={() => handleSelectSlot(slot)}
-                        className={`group relative flex flex-col items-center justify-center rounded-xl border p-2 transition-all sm:p-3 ${
+                        className={`flex flex-col items-center justify-center rounded-xl border px-1.5 py-2 transition-all ${
                           isSelected
-                            ? "border-amber-400/60 bg-amber-500/20 text-[#fdf8f5] shadow-lg shadow-amber-500/20 ring-2 ring-amber-400/50"
-                            : "border-white/10 bg-[#141210] text-stone-400 hover:border-amber-500/45 hover:bg-[#1c1713]"
+                            ? "border-amber-400/60 bg-amber-500/20 text-[#fdf8f5] ring-1 ring-amber-400/50"
+                            : "border-white/10 bg-[#141210] text-stone-400 hover:border-amber-500/45"
                         }`}
                       >
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs font-bold line-through opacity-70 sm:text-sm">
-                            {slot.time}
-                          </span>
-                          <span className="rounded bg-white/10 px-1 py-0.5 text-[9px] font-semibold text-stone-300 sm:px-1.5 sm:text-[10px]">
-                            Dolu
-                          </span>
-                        </div>
-                        <span
-                          className={`mt-1 flex items-center gap-1 text-[9px] font-semibold sm:mt-1.5 sm:text-[11px] ${
-                            isSelected
-                              ? "text-amber-300"
-                              : "text-amber-400/90 group-hover:text-amber-300"
-                          }`}
-                        >
-                          <BellRing className="h-2.5 w-2.5 shrink-0 sm:h-3 sm:w-3" />
-                          <span>Yedek Liste</span>
+                        <span className="text-xs font-bold line-through opacity-75">
+                          {slot.time}
                         </span>
-                      </motion.button>
+                        <span className="flex items-center gap-0.5 text-[8px] font-semibold text-amber-400 sm:text-[9px]">
+                          <BellRing className="h-2.5 w-2.5 shrink-0" />
+                          Yedek
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -1260,46 +1282,33 @@ export default function CustomerBookingPage() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden rounded-2xl border border-amber-500/45 bg-amber-500/10 p-4 shadow-lg shadow-amber-500/15"
+                  className="overflow-hidden rounded-xl border border-amber-500/45 bg-amber-500/10 p-2.5"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-[#1a110b]">
-                      <BellRing className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-amber-300">
-                        Akıllı Yedek Liste Modu Seçildi ({selectedDay.label} •{" "}
-                        {selectedSlot.time})
-                      </h4>
-                      <p className="mt-1 text-xs leading-relaxed text-stone-200">
-                        Bu saat şu an dolu. Yedek listeye kaydolduğunuzda, mevcut
-                        randevu iptal edilirse veya müşteri gelmezse sistem size{" "}
-                        <strong className="text-amber-300">
-                          otomatik WhatsApp bildirimi
-                        </strong>{" "}
-                        göndererek koltuğu öncelikli olarak size tahsis eder.
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2 text-xs text-amber-200">
+                    <BellRing className="h-4 w-4 shrink-0 text-amber-400" />
+                    <span>
+                      <strong>{selectedSlot.time}</strong> dolu. İptal olursa size{" "}
+                      <strong className="text-amber-300">WhatsApp ile öncelik</strong>{" "}
+                      verilir.
+                    </span>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="pt-2">
-              <button
-                type="button"
-                disabled={!selectedSlot || isSelectedDayClosed}
-                onClick={() => selectedSlot && setStep(4)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-4 text-sm font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span>
-                  {isWaitlistMode
-                    ? `${selectedSlot?.time} Yedek Listesi İçin Bilgileri Gir`
-                    : `${selectedDay.label} ${selectedSlot?.time || ""} Randevusunu Tamamla`}
-                </span>
-                <ChevronRight className="h-4 w-4 stroke-[2.5]" />
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={!selectedSlot || isSelectedDayClosed}
+              onClick={() => selectedSlot && setStep(4)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 sm:py-3.5 sm:text-sm"
+            >
+              <span>
+                {isWaitlistMode
+                  ? `${selectedSlot?.time} Yedek Listesi İçin Devam Et`
+                  : `${selectedDay.label} ${selectedSlot?.time || ""} Randevusunu Tamamla`}
+              </span>
+              <ChevronRight className="h-4 w-4 stroke-[2.5]" />
+            </button>
           </motion.section>
         )}
 
@@ -1307,95 +1316,56 @@ export default function CustomerBookingPage() {
         {step === 4 && (
           <motion.section
             key="step-4"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="space-y-5"
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="space-y-3"
           >
             {stage !== "confirmed" && (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setStage("idle");
                       setStep(3);
                     }}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-[#161311] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <div>
-                    <h2 className="text-lg font-extrabold text-[#fdf8f5]">
-                      4. Müşteri Bilgisi & Ortak Güvenlik Ağı Kontrolü
-                    </h2>
-                    <p className="text-xs text-stone-400">
-                      Telefon numaranız Ortak Kara Liste Ağı (Global No-Show Shield) ile kontrol edilir
-                    </p>
-                  </div>
+                  <h2 className="text-sm font-extrabold text-[#fdf8f5] sm:text-base">
+                    4. Bilgileriniz ve Hızlı Onay
+                  </h2>
                 </div>
-                <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-bold text-sky-300">
+                <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300">
                   Adım 4 / 4
                 </span>
               </div>
             )}
 
             {stage !== "confirmed" && (
-              <div className="rounded-2xl border border-white/10 bg-[#161311] p-4 shadow-md">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400">
-                      <Scissors className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-stone-400">
-                        {currentShop.name} • Seçilen Usta & Koltuk
-                      </p>
-                      <p className="text-sm font-bold text-[#fdf8f5]">
-                        {selectedBarber?.name} •{" "}
-                        <span className="text-sky-400">
-                          {selectedBarber?.chairName}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                        isWaitlistMode
-                          ? "bg-amber-500/20 text-amber-300"
-                          : "bg-emerald-500/15 text-emerald-400"
-                      }`}
-                    >
-                      {isWaitlistMode ? "Yedek Liste Kaydı" : "Anında Randevu"}
-                    </span>
-                    <p className="mt-0.5 text-xs font-semibold text-stone-300">
-                      {selectedDay.fullDate} • {selectedSlot?.time}
+              <div className="rounded-xl border border-white/10 bg-[#161311] p-3 shadow-md">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-[#fdf8f5]">
+                      {selectedBarber?.name}{" "}
+                      <span className="text-sky-400">
+                        ({selectedBarber?.chairName})
+                      </span>
+                    </p>
+                    <p className="truncate text-[11px] text-stone-400">
+                      {selectedServices.map((s) => s.name).join(", ")} ({totalDuration} dk)
                     </p>
                   </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="text-stone-400">
-                    <span className="font-semibold text-[#fdf8f5]">
-                      Hizmetler:{" "}
-                    </span>
-                    {selectedServices
-                      .map(
-                        (s) =>
-                          `${s.name} (${getServicePriceForBarber(
-                            s,
-                            selectedBarber
-                          )} TL)`
-                      )
-                      .join(", ")}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded bg-sky-500/15 px-2 py-0.5 font-semibold text-sky-300">{totalDuration} dk</span>
-                    <span className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-base font-extrabold text-transparent">
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-bold text-emerald-400">
+                      {selectedDay.label} • {selectedSlot?.time}
+                    </p>
+                    <p className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-sm font-extrabold text-transparent">
                       {totalPrice} TL
-                    </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1404,33 +1374,33 @@ export default function CustomerBookingPage() {
             {stage === "idle" || stage === "checking_trust" ? (
               <form
                 onSubmit={handleInitiateVerification}
-                className="space-y-4 rounded-2xl border border-white/10 bg-[#161311] p-5 shadow-xl"
+                className="space-y-3 rounded-2xl border border-white/10 bg-[#161311] p-3.5 shadow-xl sm:p-5"
               >
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-stone-300">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-stone-300">
                     Adınız Soyadınız
                   </label>
                   <div className="relative">
-                    <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-400" />
+                    <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-400" />
                     <input
                       type="text"
                       required
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder="Örn: Kerem Alkan"
-                      className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-3.5 pl-10 pr-4 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+                      className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-2.5 pl-9 pr-3 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-sky-400"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300">
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-300">
                       Cep Telefonu Numaranız
                     </label>
                     {customerPhone.length >= 10 && (
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                           isNoShowPhone
                             ? "border-rose-500/30 bg-rose-500/20 text-rose-400"
                             : "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
@@ -1439,7 +1409,7 @@ export default function CustomerBookingPage() {
                         {isNoShowPhone ? (
                           <>
                             <ShieldAlert className="h-3 w-3" />
-                            Ortak Kara Listede Kayıtlı (No-Show)
+                            Kara Listede (No-Show)
                           </>
                         ) : (
                           <>
@@ -1452,74 +1422,88 @@ export default function CustomerBookingPage() {
                   </div>
 
                   <div className="relative">
-                    <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400" />
+                    <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400" />
                     <input
                       type="tel"
                       required
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       placeholder="0555 000 00 00"
-                      className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-3.5 pl-10 pr-4 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                      className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-2.5 pl-9 pr-3 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
                     />
                   </div>
 
-                  <div className="mt-3 rounded-xl border border-white/10 bg-[#110f0d] p-3">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-300">
-                      <Info className="h-3.5 w-3.5 text-sky-400" />
-                      <span>
-                        Ortak Kara Liste Ağı Test Butonları (Tek Tıkla Doldur):
+                  {/* Açılır-Kapanır Demo Test Numaraları (Accordion) */}
+                  <div className="mt-2 rounded-xl border border-white/10 bg-[#110f0d] px-2.5 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowTestNumbers((prev) => !prev)}
+                      className="flex w-full items-center justify-between text-left text-[11px] font-semibold text-stone-400 hover:text-stone-200"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Info className="h-3.5 w-3.5 text-sky-400" />
+                        Demo Test Numaraları (Tek Tıkla Doldur)
                       </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!customerName) setCustomerName("Murat Demir (Test)");
-                          setCustomerPhone("05550000000");
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20"
-                      >
-                        <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
-                        <span>
-                          Ortak Kara Liste Numarası Dene (05550000000)
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!customerName) setCustomerName("Ahmet Yılmaz");
-                          setCustomerPhone("05324567890");
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                        <span>Normal Müşteri Numarası Dene (05324567890)</span>
-                      </button>
-                    </div>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${
+                          showTestNumbers ? "rotate-180 text-[#e6ccb2]" : ""
+                        }`}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {showTestNumbers && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/10 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!customerName) setCustomerName("Murat Demir (Test)");
+                                setCustomerPhone("05550000000");
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-300"
+                            >
+                              <ShieldAlert className="h-3 w-3 text-rose-400" />
+                              <span>Kara Liste (05550000000)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!customerName) setCustomerName("Ahmet Yılmaz");
+                                setCustomerPhone("05324567890");
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-300"
+                            >
+                              <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                              <span>Normal Müşteri (05324567890)</span>
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
                 <AnimatePresence>
                   {isNoShowPhone && blacklistRecord && (
                     <motion.div
-                      initial={{ opacity: 0, y: -6 }}
+                      initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      className="rounded-xl border border-rose-500/50 bg-gradient-to-br from-rose-950/35 via-[#241614] to-[#14100d] p-4"
+                      exit={{ opacity: 0, y: -4 }}
+                      className="rounded-xl border border-rose-500/50 bg-rose-950/30 p-3 text-xs text-[#fdf8f5]"
                     >
-                      <div className="flex items-start gap-3">
-                        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
-                        <div className="text-xs leading-relaxed text-[#fdf8f5]">
-                          <span className="font-extrabold text-rose-300">
-                            Ortak Güvenlik Ağı (Global No-Show Shield) Uyarısı:{" "}
-                          </span>
-                          Bu telefon numarası sistemimize üye başka bir salonda (
+                      <div className="flex items-start gap-2">
+                        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                        <div>
+                          <strong className="text-rose-300">No-Show Uyarısı:</strong> Bu numara{" "}
                           <strong className="text-[#e6ccb2]">
                             {blacklistRecord.reportedByShopName}
-                          </strong>
-                          ) geçmiş randevusuna katılmadığı için Ortak Güvenlik Ağı
-                          tarafından işaretlenmiştir.
+                          </strong>{" "}
+                          salonunda randevusuna gelmediği için işaretlenmiştir.
                         </div>
                       </div>
                     </motion.div>
@@ -1535,16 +1519,16 @@ export default function CustomerBookingPage() {
                 <button
                   type="submit"
                   disabled={stage === "checking_trust"}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-4 text-sm font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-60 sm:py-3.5 sm:text-sm"
                 >
                   {stage === "checking_trust" ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#1a110b] border-t-transparent" />
-                      <span>Ortak Güvenlik Ağından Sorgulanıyor...</span>
+                      <span>Sorgulanıyor...</span>
                     </>
                   ) : (
                     <>
-                      <span>Güven Skorunu Doğrula ve Devam Et</span>
+                      <span>Randevuyu Doğrula ve Devam Et</span>
                       <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                     </>
                   )}

@@ -43,6 +43,8 @@ import {
   AlertTriangle,
   RotateCcw,
   LogOut,
+  ChevronDown,
+  FileText,
 } from "lucide-react";
 import { useBarber } from "@/context/BarberContext";
 import AdminPinGate, { lockAdminSession } from "@/components/AdminPinGate";
@@ -58,6 +60,7 @@ import {
 } from "@/data/mockData";
 
 type AdminTab = "appointments" | "barbers" | "services" | "schedule";
+type AppointmentListTab = "active" | "history";
 
 export default function AdminDashboardPage() {
   const {
@@ -73,6 +76,7 @@ export default function AdminDashboardPage() {
     stats,
     markAppointmentCompleted,
     markAppointmentNoShow,
+    cancelAppointmentByCustomer,
     removeFromBlacklist,
     isPhoneBlacklisted,
     sendWhatsAppReminder,
@@ -96,7 +100,9 @@ export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("appointments");
   const [isQuickModalOpen, setIsQuickModalOpen] = useState<boolean>(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [appointmentListTab, setAppointmentListTab] =
+    useState<AppointmentListTab>("active");
+  const [expandedAptId, setExpandedAptId] = useState<string | null>(null);
   const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{
@@ -205,10 +211,23 @@ export default function AdminDashboardPage() {
 
   const handleComplete = (apt: Appointment) => {
     markAppointmentCompleted(apt.id);
+    setExpandedAptId(null);
     triggerToast(
       `${apt.customerName} Randevusu Tamamlandı`,
-      `${apt.totalPrice} TL tahsilat ${currentShop.name} kasasına kaydedildi.`,
+      `${apt.totalPrice} TL tahsilat ${currentShop.name} kasasına kaydedildi ve "Tamamlanan / İptal" sekmesine taşındı.`,
       "success"
+    );
+  };
+
+  const handleCancelByAdmin = (apt: Appointment) => {
+    const res = cancelAppointmentByCustomer(apt.id);
+    setExpandedAptId(null);
+    triggerToast(
+      `${apt.customerName} Randevusu İptal Edildi`,
+      res.notifiedCount > 0
+        ? `Randevu iptal edildi ve yedek listedeki ${res.notifiedCount} müşteriye otomatik bildirim gönderildi.`
+        : `${apt.time} saati tekrar randevuya açıldı ve "Tamamlanan / İptal" sekmesine taşındı.`,
+      "warning"
     );
   };
 
@@ -226,6 +245,7 @@ export default function AdminDashboardPage() {
     const deposit = Number(noShowConfirmModal.depositAmount) || 100;
     const result = markAppointmentNoShow(apt.id, deposit);
     setNoShowConfirmModal({ isOpen: false, appointment: null, depositAmount: 100 });
+    setExpandedAptId(null);
 
     if (result.notifiedWaitlist) {
       triggerToast(
@@ -438,9 +458,25 @@ export default function AdminDashboardPage() {
     setNewServiceVip(false);
   };
 
+  const activeAppointmentsCount = appointments.filter(
+    (apt) => apt.status === "upcoming"
+  ).length;
+  const completedOrCancelledCount = appointments.filter(
+    (apt) =>
+      apt.status === "completed" ||
+      apt.status === "no_show" ||
+      apt.status === "cancelled"
+  ).length;
+
   const filteredAppointments = appointments.filter((apt) => {
-    if (filterStatus === "all") return apt.status !== "cancelled";
-    return apt.status === filterStatus;
+    if (appointmentListTab === "active") {
+      return apt.status === "upcoming";
+    }
+    return (
+      apt.status === "completed" ||
+      apt.status === "no_show" ||
+      apt.status === "cancelled"
+    );
   });
 
   const previewSlots = getSlotsForDay("day-1");
@@ -482,13 +518,14 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminPinGate>
-      <div className="relative mx-auto max-w-6xl px-3 pb-20 pt-3 sm:px-6 sm:pb-24 sm:pt-8">
+      <div className="relative mx-auto max-w-6xl px-3 pb-20 pt-2.5 sm:px-6 sm:pb-24 sm:pt-6">
       {/* HIZLI RANDEVU / SAAT KAPAT MODALI */}
       <QuickBookingModal
         open={isQuickModalOpen}
         onClose={() => setIsQuickModalOpen(false)}
         onSuccess={(title, subtitle) => {
-          setFilterStatus("all");
+          setAppointmentListTab("active");
+          setActiveTab("appointments");
           triggerToast(title, subtitle, "success");
         }}
       />
@@ -670,183 +707,191 @@ export default function AdminDashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Top Header — Scoped to Current Tenant Shop + Copy Instagram/WhatsApp Link CTA */}
-      <div className="mb-4 flex flex-col justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-r from-[#1e1815] via-[#161311] to-[#110f0d] p-3.5 shadow-lg shadow-black/50 sm:mb-6 sm:gap-4 sm:p-5 lg:flex-row lg:items-center">
-        <div>
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#1a110b] shadow-sm sm:px-3 sm:text-[11px]">
-              BERBER YÖNETİM PANELİ
-            </span>
-            <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] font-bold text-sky-300 sm:px-2.5 sm:text-xs">
-              /?shop={currentShop.slug}
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold sm:px-2.5 sm:text-[11px] ${
-                currentShop.subscriptionStatus === "active"
-                  ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
-                  : "border border-red-500/60 bg-gradient-to-r from-red-600/25 via-amber-500/20 to-red-600/25 text-red-200 shadow-sm"
-              }`}
-            >
-              {currentShop.subscriptionStatus === "active" ? (
-                `Abonelik: Aktif (${currentShop.subscriptionEndDate || "Aktif"})`
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
-                  <span>Süresi Doldu</span>
-                  <span className="font-extrabold text-amber-300">({currentShop.subscriptionEndDate || "Süresi Geçti"})</span>
-                </span>
-              )}
-            </span>
+      {/* Top Header — Scoped to Current Tenant Shop + Prominent "➕ Hızlı Randevu Ekle" CTA */}
+      <div className="mb-3 rounded-2xl border border-white/10 bg-gradient-to-r from-[#1e1815] via-[#161311] to-[#110f0d] p-3 shadow-lg shadow-black/50 sm:mb-5 sm:p-4">
+        <div className="flex flex-col justify-between gap-2.5 lg:flex-row lg:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#1a110b] shadow-sm sm:px-2.5 sm:text-[10px]">
+                BERBER YÖNETİM PANELİ
+              </span>
+              <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-sky-300 sm:text-xs">
+                /?shop={currentShop.slug}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  currentShop.subscriptionStatus === "active"
+                    ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                    : "border border-red-500/60 bg-gradient-to-r from-red-600/25 via-amber-500/20 to-red-600/25 text-red-200 shadow-sm"
+                }`}
+              >
+                {currentShop.subscriptionStatus === "active" ? (
+                  `Abonelik: Aktif (${currentShop.subscriptionEndDate || "Aktif"})`
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <span>Süresi Doldu</span>
+                  </span>
+                )}
+              </span>
+            </div>
+            <h1 className="mt-1 text-base font-extrabold tracking-tight text-[#fdf8f5] sm:text-2xl">
+              {currentShop.name}{" "}
+              <span className="bg-gradient-to-r from-[#e6ccb2] via-[#c88a53] to-[#b47b48] bg-clip-text text-xs font-bold text-transparent sm:text-xl">
+                • Salon Kontrol Merkezi
+              </span>
+            </h1>
           </div>
-          <h1 className="mt-1.5 text-lg font-extrabold tracking-tight text-[#fdf8f5] sm:mt-2 sm:text-3xl">
-            {currentShop.name}{" "}
-            <span className="bg-gradient-to-r from-[#e6ccb2] via-[#c88a53] to-[#b47b48] bg-clip-text text-sm font-bold text-transparent sm:text-2xl">
-              • Salon Kontrol Merkezi
-            </span>
-          </h1>
-          <p className="mt-0.5 hidden text-xs text-stone-400 sm:block">
-            Burada yaptığınız tüm fiyat, koltuk, saat ve kapora değişiklikleri yalnızca{" "}
-            <strong className="text-[#fdf8f5]">{currentShop.name}</strong> vitrinine kaydedilir.
-          </p>
+
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/15 px-2.5 py-1.5 text-[11px] font-extrabold text-purple-200 shadow-sm transition hover:border-purple-300 hover:bg-purple-500/25 hover:text-white sm:px-3.5 sm:py-2 sm:text-xs"
+            >
+              <QrCode className="h-3.5 w-3.5 shrink-0 text-purple-300" />
+              <span>QR Afiş Al</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyBookingLink}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#c88a53]/45 bg-[#1c1613] px-2.5 py-1.5 text-[11px] font-extrabold text-[#e6ccb2] transition hover:border-[#e6ccb2]/70 hover:text-white sm:px-3.5 sm:py-2 sm:text-xs"
+            >
+              {copiedShareLink ? (
+                <>
+                  <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400 stroke-[3]" />
+                  <span>Link Kopyalandı!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
+                  <span>Linki Kopyala</span>
+                </>
+              )}
+            </button>
+
+            <Link
+              href={`/?shop=${currentShop.slug}`}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-400/40 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-extrabold text-sky-200 transition hover:border-sky-300 hover:bg-sky-500/20 hover:text-white sm:px-3.5 sm:py-2 sm:text-xs"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+              <span>Müşteri Vitrini</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                lockAdminSession(currentShop.slug);
+                if (typeof window !== "undefined") {
+                  window.location.href = "/admin";
+                }
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/35 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-extrabold text-rose-300 transition hover:bg-rose-500/20 sm:px-3 sm:py-2 sm:text-xs"
+              title="Oturumu Kapat / Çıkış Yap"
+            >
+              <LogOut className="h-3.5 w-3.5 shrink-0" />
+              <span>Çıkış Yap</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
+        {/* EN ÜSTTE DİKKAT ÇEKİCİ "➕ HIZLI RANDEVU EKLE" BUTONU (Başlığın Hemen Altında) */}
+        <div className="mt-2.5 border-t border-white/10 pt-2.5">
           <button
             type="button"
-            onClick={() => setIsQrModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/15 px-2.5 py-2 text-[11px] font-extrabold text-purple-200 shadow-sm transition hover:border-purple-300 hover:bg-purple-500/25 hover:text-white sm:px-4 sm:py-3 sm:text-xs"
+            onClick={() => setIsQuickModalOpen(true)}
+            className="group relative flex w-full items-center justify-between gap-2 overflow-hidden rounded-xl border border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#d9a36a] to-[#9a6334] px-3.5 py-2.5 text-left text-[#1a110b] shadow-lg shadow-[#c88a53]/35 transition hover:brightness-110 active:scale-[0.99] sm:px-5 sm:py-3"
           >
-            <QrCode className="h-3.5 w-3.5 shrink-0 text-purple-300 sm:h-4 sm:w-4" />
-            <span>QR Afiş Al</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCopyBookingLink}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-2.5 py-2 text-[11px] font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 sm:px-4 sm:py-3 sm:text-xs"
-          >
-            {copiedShareLink ? (
-              <>
-                <Check className="h-3.5 w-3.5 shrink-0 stroke-[3] sm:h-4 sm:w-4" />
-                <span>Link Kopyalandı!</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="h-3.5 w-3.5 shrink-0 stroke-[2.5] sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Instagram/WhatsApp Randevu Linkini Kopyala</span>
-                <span className="sm:hidden">Linki Kopyala</span>
-              </>
-            )}
-          </button>
-
-          <Link
-            href={`/?shop=${currentShop.slug}`}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-400/40 bg-sky-500/10 px-2.5 py-2 text-[11px] font-extrabold text-sky-200 transition hover:border-sky-300 hover:bg-sky-500/20 hover:text-white sm:px-4 sm:py-3 sm:text-xs"
-          >
-            <ExternalLink className="h-3.5 w-3.5 shrink-0 text-sky-400 sm:h-4 sm:w-4" />
-            <span>Müşteri Vitrini</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => {
-              lockAdminSession(currentShop.slug);
-              if (typeof window !== "undefined") {
-                window.location.href = "/admin";
-              }
-            }}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/35 bg-rose-500/10 px-2.5 py-2 text-[11px] font-extrabold text-rose-300 transition hover:bg-rose-500/20 sm:px-3.5 sm:py-3 sm:text-xs"
-            title="Oturumu Kapat / Çıkış Yap"
-          >
-            <LogOut className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-            <span>Çıkış Yap</span>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1a110b] text-sm font-black text-[#e6ccb2] shadow-inner sm:h-8 sm:w-8">
+                ➕
+              </span>
+              <div>
+                <span className="block text-xs font-black tracking-tight text-[#1a110b] sm:text-sm">
+                  ➕ Hızlı Randevu Ekle / Saat Kapat
+                </span>
+                <span className="block text-[10px] font-bold text-[#1a110b]/80 sm:text-xs">
+                  Telefon veya misafir randevusunu tek dokunuşla açılır pencerede ekleyin
+                </span>
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#1a110b]/90 px-2.5 py-1 text-[10px] font-extrabold text-[#e6ccb2] sm:px-3 sm:py-1.5 sm:text-xs">
+              <Plus className="h-3.5 w-3.5 stroke-[3]" />
+              <span>Formu Aç</span>
+            </span>
           </button>
         </div>
       </div>
 
       {/* GELİR KORUMA ÖZETİ CARDS — COMPACT 3-COLUMN ON MOBILE */}
-      <section aria-label="Gelir Koruma Özeti" className="mb-4 sm:mb-7">
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <section aria-label="Gelir Koruma Özeti" className="mb-3 sm:mb-5">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3.5">
           <motion.div
             layout
-            className="relative overflow-hidden rounded-xl border border-[#c88a53]/40 bg-gradient-to-br from-[#261d17] via-[#181412] to-[#12100e] p-2.5 shadow-lg shadow-[#c88a53]/15 transition-all hover:border-[#c88a53]/70 sm:rounded-2xl sm:p-5"
+            className="relative overflow-hidden rounded-xl border border-[#c88a53]/40 bg-gradient-to-br from-[#261d17] via-[#181412] to-[#12100e] p-2 shadow-lg shadow-[#c88a53]/15 transition-all hover:border-[#c88a53]/70 sm:rounded-2xl sm:p-4"
           >
             <div className="flex items-center justify-between gap-1">
               <span className="truncate text-[10px] font-semibold text-[#e6ccb2] sm:text-xs">
                 Kurtarılan Gelir
               </span>
-              <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#c88a53]/20 text-[#e6ccb2] ring-1 ring-[#c88a53]/35 sm:flex">
+              <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#c88a53]/20 text-[#e6ccb2] ring-1 ring-[#c88a53]/35 sm:flex">
                 <TrendingUp className="h-4 w-4 text-[#c88a53]" />
               </div>
             </div>
-            <div className="mt-1 flex items-baseline gap-1 sm:mt-3 sm:gap-2">
-              <span className="bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-sm font-extrabold tracking-tight text-transparent sm:text-3xl">
+            <div className="mt-0.5 flex items-baseline gap-1 sm:mt-2 sm:gap-2">
+              <span className="bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-xs font-extrabold tracking-tight text-transparent sm:text-2xl">
                 {stats.savedRevenue.toLocaleString("tr-TR")} TL
               </span>
             </div>
-            <p className="mt-1.5 hidden text-xs text-stone-400 sm:block">
-              Kapora ve yedek liste ile boş kalmaktan kurtarılan aylık ciro
-            </p>
           </motion.div>
 
           <motion.div
             layout
-            className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-950/25 via-[#161412] to-[#12100e] p-2.5 shadow-lg transition-all hover:border-emerald-500/50 sm:rounded-2xl sm:p-5"
+            className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-950/25 via-[#161412] to-[#12100e] p-2 shadow-lg transition-all hover:border-emerald-500/50 sm:rounded-2xl sm:p-4"
           >
             <div className="flex items-center justify-between gap-1">
               <span className="truncate text-[10px] font-semibold text-emerald-200 sm:text-xs">
                 Yedek Doluluk
               </span>
-              <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 sm:flex">
+              <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 sm:flex">
                 <Users className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-1 flex flex-wrap items-baseline gap-1 sm:mt-3 sm:gap-2">
-              <span className="text-sm font-extrabold tracking-tight text-[#fdf8f5] sm:text-3xl">
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-1 sm:mt-2 sm:gap-2">
+              <span className="text-xs font-extrabold tracking-tight text-[#fdf8f5] sm:text-2xl">
                 {stats.waitlistFilled} Koltuk
               </span>
-              <span className="hidden rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-400 sm:inline-block">
-                %100 Doluluk
-              </span>
             </div>
-            <p className="mt-1.5 hidden text-xs text-stone-400 sm:block">
-              İptal edilen saatlerin otomatik WhatsApp bildirimi ile dolma sayısı
-            </p>
           </motion.div>
 
           <motion.div
             layout
-            className="relative overflow-hidden rounded-xl border border-rose-500/25 bg-gradient-to-br from-rose-950/25 via-[#161412] to-[#12100e] p-2.5 shadow-lg transition-all hover:border-rose-500/50 sm:rounded-2xl sm:p-5"
+            className="relative overflow-hidden rounded-xl border border-rose-500/25 bg-gradient-to-br from-rose-950/25 via-[#161412] to-[#12100e] p-2 shadow-lg transition-all hover:border-rose-500/50 sm:rounded-2xl sm:p-4"
           >
             <div className="flex items-center justify-between gap-1">
               <span className="truncate text-[10px] font-semibold text-rose-200 sm:text-xs">
                 No-Show Kalkanı
               </span>
-              <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400 ring-1 ring-rose-500/30 sm:flex">
+              <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-400 ring-1 ring-rose-500/30 sm:flex">
                 <ShieldAlert className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-1 flex flex-wrap items-baseline gap-1 sm:mt-3 sm:gap-2">
-              <span className="text-sm font-extrabold tracking-tight text-[#fdf8f5] sm:text-3xl">
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-1 sm:mt-2 sm:gap-2">
+              <span className="text-xs font-extrabold tracking-tight text-[#fdf8f5] sm:text-2xl">
                 {stats.preventedNoShows} Engellendi
               </span>
-              <span className="hidden rounded-md border border-rose-500/30 bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-300 sm:inline-block">
-                {currentShop.depositAmount} TL Kapora
-              </span>
             </div>
-            <p className="mt-1.5 hidden text-xs text-stone-400 sm:block">
-              Ortak Kara Liste Ağı ({globalBlacklist.length} numara) ile önlenen gelmeme vakası
-            </p>
           </motion.div>
         </div>
       </section>
 
       {/* ADMIN NAVIGATION TABS (4 MAJOR SECTIONS) */}
-      <div className="mb-4 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#12100e] p-1.5 shadow-lg sm:mb-6 sm:gap-2 sm:p-2 lg:grid-cols-4">
+      <div className="mb-3.5 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#12100e] p-1.5 shadow-lg sm:mb-5 sm:gap-2 sm:p-2 lg:grid-cols-4">
         <button
           type="button"
           onClick={() => setActiveTab("appointments")}
-          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-3 sm:text-sm ${
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm ${
             activeTab === "appointments"
               ? "border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] font-black text-[#120b07] shadow-lg shadow-[#c88a53]/25"
               : "border-transparent font-bold text-stone-300 hover:border-white/15 hover:bg-[#1a1614] hover:text-[#fdf8f5]"
@@ -854,15 +899,14 @@ export default function AdminDashboardPage() {
         >
           <CalendarIcon className="h-3.5 w-3.5 shrink-0 stroke-[2.5] sm:h-4 sm:w-4" />
           <span className="truncate">
-            1. Randevular (
-            {appointments.filter((a) => a.status !== "cancelled").length})
+            1. Randevular ({activeAppointmentsCount})
           </span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("barbers")}
-          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-3 sm:text-sm ${
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm ${
             activeTab === "barbers"
               ? "border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] font-black text-[#120b07] shadow-lg shadow-[#c88a53]/25"
               : "border-transparent font-bold text-stone-300 hover:border-white/15 hover:bg-[#1a1614] hover:text-[#fdf8f5]"
@@ -875,7 +919,7 @@ export default function AdminDashboardPage() {
         <button
           type="button"
           onClick={() => setActiveTab("services")}
-          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-3 sm:text-sm ${
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm ${
             activeTab === "services"
               ? "border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] font-black text-[#120b07] shadow-lg shadow-[#c88a53]/25"
               : "border-transparent font-bold text-stone-300 hover:border-white/15 hover:bg-[#1a1614] hover:text-[#fdf8f5]"
@@ -888,7 +932,7 @@ export default function AdminDashboardPage() {
         <button
           type="button"
           onClick={() => setActiveTab("schedule")}
-          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-3 sm:text-sm ${
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] transition-all sm:gap-2 sm:px-3 sm:py-2.5 sm:text-sm ${
             activeTab === "schedule"
               ? "border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] font-black text-[#120b07] shadow-lg shadow-[#c88a53]/25"
               : "border-transparent font-bold text-stone-300 hover:border-white/15 hover:bg-[#1a1614] hover:text-[#fdf8f5]"
@@ -899,119 +943,184 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
-      {/* TAB 1: GÜNLÜK RANDEVU AKIŞI */}
+      {/* TAB 1: GÜNLÜK RANDEVU AKIŞI (SEKMELİ & KOMPAKT ACCORDION KARTLAR) */}
       {activeTab === "appointments" && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-4 lg:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#161311] p-4 transition-all">
-              <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-sky-400" />
-                  <h2 className="text-base font-bold text-[#fdf8f5]">
-                    {currentShop.name} • Günlük Randevu Akışı (
-                    {filteredAppointments.length})
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:gap-6">
+          <div className="space-y-3 lg:col-span-2">
+            {/* İKİ SEKMELİ YAPI: "⏳ Bekleyenler (Aktif)" ve "✅ Tamamlanan / İptal" */}
+            <div className="rounded-2xl border border-white/10 bg-[#161311] p-2.5 sm:p-3.5">
+              <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-[#c88a53] sm:h-4 sm:w-4" />
+                  <h2 className="text-xs font-extrabold text-[#fdf8f5] sm:text-sm">
+                    Randevu Listesi • Dokunarak Detay Açın
                   </h2>
                 </div>
-
-                {/* + HIZLI RANDEVU / SAAT KAPAT — Parlak Bronz/Karamel CTA */}
-                <button
-                  type="button"
-                  onClick={() => setIsQuickModalOpen(true)}
-                  className="relative inline-flex items-center gap-2 rounded-xl border border-[#e6ccb2]/60 bg-gradient-to-r from-[#b47b48] via-[#d9a36a] to-[#9a6334] px-4 py-2.5 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/40 ring-2 ring-[#c88a53]/25 transition hover:scale-[1.02] hover:brightness-110 active:scale-[0.99] sm:text-sm"
-                >
-                  <span className="absolute -right-1 -top-1 flex h-3 w-3">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
-                  </span>
-                  <Plus className="h-4 w-4 stroke-[3]" />
-                  <span>Hızlı Randevu / Saat Kapat</span>
-                </button>
+                <span className="text-[10px] font-semibold text-stone-400 sm:text-xs">
+                  Toplam {filteredAppointments.length} Kayıt
+                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Filter className="mr-1 h-3.5 w-3.5 text-sky-400" />
-                {[
-                  { id: "all", label: "Tümü" },
-                  { id: "upcoming", label: "Bekleyen" },
-                  { id: "completed", label: "Geldi (Tamamlanan)" },
-                  { id: "no_show", label: "Gelmedi (No-Show)" },
-                  { id: "cancelled", label: "İptal Edilenler" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setFilterStatus(tab.id)}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
-                      filterStatus === tab.id
-                        ? "border-sky-400/50 bg-sky-500/20 font-extrabold text-sky-200 shadow-sm"
-                        : "border-white/5 bg-[#110f0d] text-stone-400 hover:border-white/15 hover:text-[#fdf8f5]"
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-[#110f0d] p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppointmentListTab("active");
+                    setExpandedAptId(null);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-extrabold transition-all sm:py-2.5 sm:text-sm ${
+                    appointmentListTab === "active"
+                      ? "border-[#e6ccb2]/60 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md shadow-[#c88a53]/25"
+                      : "border-transparent text-stone-400 hover:text-[#fdf8f5]"
+                  }`}
+                >
+                  <span>⏳ Bekleyenler (Aktif)</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                      appointmentListTab === "active"
+                        ? "bg-[#1a110b]/20 text-[#1a110b]"
+                        : "bg-white/10 text-stone-300"
                     }`}
                   >
-                    {tab.label}
-                  </button>
-                ))}
+                    {activeAppointmentsCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppointmentListTab("history");
+                    setExpandedAptId(null);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-extrabold transition-all sm:py-2.5 sm:text-sm ${
+                    appointmentListTab === "history"
+                      ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-200 shadow-md"
+                      : "border-transparent text-stone-400 hover:text-[#fdf8f5]"
+                  }`}
+                >
+                  <span>✅ Tamamlanan / İptal</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                      appointmentListTab === "history"
+                        ? "bg-emerald-400/25 text-emerald-200"
+                        : "bg-white/10 text-stone-300"
+                    }`}
+                  >
+                    {completedOrCancelledCount}
+                  </span>
+                </button>
               </div>
             </div>
 
             {filteredAppointments.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-[#161311] p-8 text-center">
-                <CalendarIcon className="mx-auto h-8 w-8 text-sky-400" />
-                <h3 className="mt-2 text-base font-bold text-[#fdf8f5]">
-                  Bu Filtrede Randevu Bulunmuyor
+              <div className="rounded-2xl border border-white/10 bg-[#161311] p-6 text-center sm:p-8">
+                <CalendarIcon className="mx-auto h-7 w-7 text-[#c88a53]" />
+                <h3 className="mt-2 text-sm font-bold text-[#fdf8f5] sm:text-base">
+                  {appointmentListTab === "active"
+                    ? "Şu Anda Bekleyen Aktif Randevu Yok"
+                    : "Tamamlanan veya İptal Edilen Randevu Bulunmuyor"}
                 </h3>
                 <p className="mt-1 text-xs text-stone-400">
-                  Müşteri vitrininden (`/?shop={currentShop.slug}`) yeni randevu
-                  oluşturarak test edebilirsiniz.
+                  {appointmentListTab === "active"
+                    ? "Yukarıdaki '➕ Hızlı Randevu Ekle' butonundan veya müşteri vitrininden yeni randevu ekleyebilirsiniz."
+                    : "Bekleyen randevuları 'Geldi', 'Gelmedi' veya 'İptal' olarak işaretlediğinizde buraya düşer."}
                 </p>
               </div>
             ) : (
-              <div className="space-y-3.5">
+              <div className="space-y-2">
                 {filteredAppointments.map((apt) => {
-                  // KİLİTLİ SAAT (Usta Saati Kapatıldı) KARTI
+                  const isExpanded = expandedAptId === apt.id;
+                  const shortDate = apt.dateLabel
+                    ? apt.dateLabel.split(" ")[0]
+                    : "Bugün";
+
+                  // KİLİTLİ SAAT (Usta Saati Kapatıldı) KOMPAKT ACCORDION KARTI
                   if (apt.isBlockedSlot) {
                     return (
                       <motion.div
                         key={apt.id}
                         layout
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex flex-col justify-between gap-3 rounded-2xl border border-dashed border-amber-500/40 bg-[repeating-linear-gradient(135deg,#181412,#181412_10px,#14100e_10px,#14100e_20px)] p-4 sm:flex-row sm:items-center"
+                        className="overflow-hidden rounded-xl border border-dashed border-amber-500/45 bg-[#171310]"
                       >
-                        <div className="flex items-center gap-3.5">
-                          <div className="flex min-w-[74px] flex-col items-center justify-center rounded-xl border border-amber-500/40 bg-[#12100e] px-2.5 py-2 text-center text-amber-300">
-                            <Lock className="mb-0.5 h-3.5 w-3.5 text-amber-400" />
-                            <span className="text-sm font-extrabold leading-none">{apt.time}</span>
-                            <span className="mt-1 text-[10px] opacity-80">{apt.endTime}</span>
-                          </div>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-300">
-                                Saat Kapatıldı
-                              </span>
-                              <h3 className="text-sm font-extrabold text-[#fdf8f5]">
-                                {apt.blockReason}
-                              </h3>
-                            </div>
-                            <p className="mt-1 text-xs text-stone-400">
-                              {apt.barberName} ({apt.chairLabel}) • {apt.dateLabel}
-                            </p>
-                          </div>
-                        </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            removeAppointmentOrBlock(apt.id);
-                            triggerToast(
-                              "Saat Kilidi Açıldı",
-                              `${apt.time} - ${apt.endTime} arası tekrar randevuya açıldı.`,
-                              "success"
-                            );
-                          }}
-                          className="inline-flex items-center gap-1.5 self-end rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/20 sm:self-center"
+                          onClick={() =>
+                            setExpandedAptId(isExpanded ? null : apt.id)
+                          }
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition hover:bg-white/[0.02] sm:px-4 sm:py-3"
                         >
-                          <Unlock className="h-3.5 w-3.5" />
-                          <span>Kilidi Aç</span>
+                          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                            {/* 1. Saat & Tarih */}
+                            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-300">
+                              <Lock className="h-3 w-3 shrink-0 text-amber-400" />
+                              <span className="text-xs font-black sm:text-sm">
+                                {apt.time}
+                              </span>
+                              <span className="text-[10px] font-semibold opacity-80">
+                                • {shortDate}
+                              </span>
+                            </div>
+
+                            {/* 2. Müşteri Adı / Kilit Başlığı */}
+                            <span className="truncate text-xs font-extrabold text-amber-200 sm:text-sm">
+                              Saat Kapatıldı ({apt.barberName.split(" ")[0]})
+                            </span>
+                          </div>
+
+                          {/* 3. Hizmet / Neden + Aşağı Ok ▼ */}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="max-w-[110px] truncate rounded-md border border-amber-500/30 bg-[#110f0d] px-2 py-0.5 text-[11px] font-semibold text-amber-300 sm:max-w-[180px]">
+                              {apt.blockReason}
+                            </span>
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 text-amber-400 transition-transform duration-200 ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          </div>
                         </button>
+
+                        <AnimatePresence initial={false}>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2, ease: "easeInOut" }}
+                              className="overflow-hidden border-t border-amber-500/20 bg-[#120f0d] px-3 py-3 sm:px-4"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-300">
+                                <div>
+                                  <p className="font-bold text-[#fdf8f5]">
+                                    {apt.barberName} ({apt.chairLabel})
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-stone-400">
+                                    Kilitli Aralık: {apt.dateLabel} • {apt.time} -{" "}
+                                    {apt.endTime} ({apt.blockReason})
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    removeAppointmentOrBlock(apt.id);
+                                    setExpandedAptId(null);
+                                    triggerToast(
+                                      "Saat Kilidi Açıldı",
+                                      `${apt.time} - ${apt.endTime} arası tekrar randevuya açıldı.`,
+                                      "success"
+                                    );
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25"
+                                >
+                                  <Unlock className="h-3.5 w-3.5" />
+                                  <span>Kilidi Aç</span>
+                                </button>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </motion.div>
                     );
                   }
@@ -1019,191 +1128,250 @@ export default function AdminDashboardPage() {
                   const isCompleted = apt.status === "completed";
                   const isNoShow = apt.status === "no_show";
                   const isCancelled = apt.status === "cancelled";
+                  const servicesSummary = apt.services
+                    .map((s) => s.name)
+                    .join(" + ");
 
                   return (
                     <motion.div
                       key={apt.id}
                       layout
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`rounded-2xl border p-4 transition-all sm:p-5 ${
-                        isCompleted
+                      className={`overflow-hidden rounded-xl border transition-all ${
+                        isExpanded
+                          ? "border-[#c88a53]/60 bg-[#1a1512] shadow-lg shadow-black/50"
+                          : isCompleted
                           ? "border-emerald-500/30 bg-[#131715]"
                           : isNoShow || isCancelled
-                          ? "border-rose-500/40 bg-rose-950/15"
-                          : "border-white/10 bg-[#161311] hover:border-white/25"
+                          ? "border-rose-500/35 bg-rose-950/15"
+                          : "border-white/10 bg-[#161311] hover:border-[#c88a53]/40"
                       }`}
                     >
-                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                        <div className="flex items-start gap-3.5">
+                      {/* KAPALI (VARSAYILAN) KOMPAKT TEK SATIR: 1) Saat & Tarih, 2) Müşteri Adı, 3) Hizmet Türü + ▼ */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedAptId(isExpanded ? null : apt.id)
+                        }
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition hover:bg-white/[0.02] sm:px-4 sm:py-3"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                          {/* 1. Randevu Saati (ve Tarihi) */}
                           <div
-                            className={`flex min-w-[74px] flex-col items-center justify-center rounded-xl border px-2.5 py-2 text-center ${
+                            className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-center ${
                               isCompleted
-                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
                                 : isNoShow || isCancelled
-                                ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
-                                : "border-sky-500/35 bg-sky-500/10 text-sky-300"
+                                ? "border-rose-500/35 bg-rose-500/10 text-rose-300"
+                                : "border-[#c88a53]/40 bg-[#c88a53]/15 text-[#e6ccb2]"
                             }`}
                           >
-                            <span className="text-base font-extrabold leading-none">
+                            <span className="text-xs font-black leading-none sm:text-sm">
                               {apt.time}
                             </span>
-                            <span className="mt-1 text-[10px] font-medium opacity-80">
-                              {apt.endTime}
+                            <span className="text-[10px] font-semibold opacity-80">
+                              • {shortDate}
                             </span>
                           </div>
 
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded border border-white/15 bg-[#110f0d] px-2 py-0.5 font-mono text-xs font-bold text-sky-300">
-                                {apt.appointmentCode}
-                              </span>
-                              <h3 className="text-base font-extrabold text-[#fdf8f5]">
-                                {apt.customerName}
-                              </h3>
-                              {renderTrustBadge(
-                                apt.trustBadge,
-                                apt.trustDetail
-                              )}
-                              {apt.bookingSource === "phone" && (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-purple-400/40 bg-purple-500/15 px-2.5 py-0.5 text-[11px] font-bold text-purple-200">
-                                  <PhoneCall className="h-3 w-3 text-purple-300" />
-                                  Telefon Randevusu
-                                </span>
-                              )}
-
-                              {isCompleted && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
-                                  <Check className="h-3 w-3 stroke-[3]" />
-                                  Geldi • Tamamlandı
-                                </span>
-                              )}
-                              {isNoShow && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[11px] font-bold text-rose-300">
-                                  <Ban className="h-3 w-3" />
-                                  No-Show • Ortak Kara Listede
-                                </span>
-                              )}
-                              {isCancelled && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[11px] font-bold text-rose-300">
-                                  İptal Edildi
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-stone-400">
-                              <span className="inline-flex items-center gap-1 font-medium text-[#fdf8f5]">
-                                <Phone className="h-3 w-3 text-emerald-400" />
-                                {apt.customerPhone}
-                              </span>
-                              <span className="text-stone-600">•</span>
-                              <span className="inline-flex items-center gap-1 text-stone-300">
-                                <Scissors className="h-3 w-3 text-sky-400" />
-                                {apt.barberName} ({apt.chairLabel})
-                              </span>
-                            </div>
-
-                            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                              {apt.services.map((srv, idx) => (
-                                <span
-                                  key={idx}
-                                  className="rounded-lg border border-white/10 bg-[#110f0d] px-2.5 py-1 text-xs font-medium text-stone-200"
-                                >
-                                  {srv.name}{" "}
-                                  <span className="font-bold text-[#c88a53]">
-                                    ({srv.price} TL)
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-row items-center justify-between border-t border-white/10 pt-2.5 sm:flex-col sm:items-end sm:border-0 sm:pt-0">
-                          <div className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-lg font-extrabold text-transparent">
-                            {apt.totalPrice} TL
-                          </div>
-                          <div className="text-xs font-medium text-sky-400">
-                            {apt.totalDuration} dk
-                          </div>
-                          {apt.depositAmount && (
-                            <span className="mt-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                              {apt.depositAmount} TL Kapora Alındı
+                          {/* 2. Müşteri Adı */}
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-xs font-extrabold text-[#fdf8f5] sm:text-sm">
+                              {apt.customerName}
                             </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {!isCancelled && (
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={isCompleted}
-                              onClick={() => handleComplete(apt)}
-                              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                                isCompleted
-                                  ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-60"
-                                  : "bg-emerald-500 text-[#091510] shadow-sm hover:bg-emerald-400"
-                              }`}
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
-                              <span>Geldi (Tamamla)</span>
-                            </button>
-
-                            {isPhoneBlacklisted(apt.customerPhone) ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenRemoveBlacklistModal(
-                                    apt.customerPhone,
-                                    apt.customerName
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                <span>Kara Listeden Çıkar (Affet)</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={isNoShow}
-                                onClick={() => handleOpenNoShowModal(apt)}
-                                className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition ${
-                                  isNoShow
-                                    ? "cursor-default border-rose-500/30 bg-rose-500/20 text-rose-300 opacity-60"
-                                    : "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
-                                }`}
-                              >
-                                <XCircle className="h-3.5 w-3.5" />
-                                <span>
-                                  Gelmedi (Ortak Kara Listeye Al - No-Show)
-                                </span>
-                              </button>
+                            {isCompleted && (
+                              <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                                Geldi
+                              </span>
+                            )}
+                            {isNoShow && (
+                              <span className="shrink-0 rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-300">
+                                Gelmedi
+                              </span>
+                            )}
+                            {isCancelled && (
+                              <span className="shrink-0 rounded bg-stone-500/20 px-1.5 py-0.5 text-[9px] font-bold text-stone-300">
+                                İptal
+                              </span>
                             )}
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleSendReminder(apt)}
-                            className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition ${
-                              apt.reminderSent
-                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                                : "border-sky-500/35 bg-sky-500/10 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
-                            }`}
-                          >
-                            <Send className="h-3.5 w-3.5" />
-                            <span>
-                              {apt.reminderSent
-                                ? `WhatsApp Hatırlatma Gönderildi (${
-                                    apt.reminderSentAt || "✓"
-                                  })`
-                                : "WhatsApp Hatırlatma Gönder"}
-                            </span>
-                          </button>
                         </div>
-                      )}
+
+                        {/* 3. Randevu / Hizmet Türü + Aşağı Ok ▼ */}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="max-w-[110px] truncate rounded-md border border-white/10 bg-[#110f0d] px-2 py-0.5 text-[11px] font-semibold text-[#e6ccb2] sm:max-w-[210px] sm:text-xs">
+                            {servicesSummary}
+                          </span>
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-[#c88a53] transition-transform duration-200 ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </div>
+                      </button>
+
+                      {/* AÇILIR KUTU (ACCORDION) DETAYLAR & AKSİYON BUTONLARI */}
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.22, ease: "easeInOut" }}
+                            className="overflow-hidden border-t border-white/10 bg-[#120f0d]"
+                          >
+                            <div className="space-y-3 p-3 sm:p-4">
+                              {/* Üst Detay Satırı: Telefon, Usta/Koltuk, Kod, Fiyat & Süre */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#181411] p-2.5 text-xs">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  <a
+                                    href={`tel:${apt.customerPhone}`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-bold text-emerald-300 hover:bg-emerald-500/20"
+                                  >
+                                    <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span>{apt.customerPhone}</span>
+                                  </a>
+                                  <span className="inline-flex items-center gap-1 text-stone-300">
+                                    <Scissors className="h-3.5 w-3.5 text-sky-400" />
+                                    <strong>{apt.barberName}</strong> (
+                                    {apt.chairLabel})
+                                  </span>
+                                  <span className="rounded border border-white/15 bg-[#110f0d] px-2 py-0.5 font-mono text-[11px] font-bold text-sky-300">
+                                    {apt.appointmentCode}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="rounded bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+                                    {apt.time} - {apt.endTime} ({apt.totalDuration} dk)
+                                  </span>
+                                  <span className="bg-gradient-to-r from-[#fdf8f5] to-[#c88a53] bg-clip-text text-sm font-black text-transparent sm:text-base">
+                                    {apt.totalPrice} TL
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Hizmet Kalemleri, Notlar & Güven Rozeti */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {apt.services.map((srv, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="rounded-lg border border-white/10 bg-[#161311] px-2 py-0.5 text-[11px] font-medium text-stone-200"
+                                    >
+                                      {srv.name}{" "}
+                                      <span className="font-bold text-[#c88a53]">
+                                        ({srv.price} TL)
+                                      </span>
+                                    </span>
+                                  ))}
+                                  {renderTrustBadge(
+                                    apt.trustBadge,
+                                    apt.trustDetail
+                                  )}
+                                  {apt.depositAmount && (
+                                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                      {apt.depositAmount} TL Kapora Alındı
+                                    </span>
+                                  )}
+                                </div>
+
+                                {(apt.notes || apt.trustDetail) && (
+                                  <div className="flex items-center gap-1 text-[11px] text-stone-400">
+                                    <FileText className="h-3 w-3 shrink-0 text-[#c88a53]" />
+                                    <span>
+                                      Not: {apt.notes || apt.trustDetail}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Aksiyon Butonları: Müşteri Geldi, Gelmedi / İptal, Kara Listeye Al, WhatsApp */}
+                              <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-2.5 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+                                <div className="col-span-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={isCompleted}
+                                    onClick={() => handleComplete(apt)}
+                                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-extrabold transition ${
+                                      isCompleted
+                                        ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-60"
+                                        : "bg-emerald-500 text-[#091510] shadow-sm hover:bg-emerald-400"
+                                    }`}
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                                    <span>Müşteri Geldi</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={isCancelled}
+                                    onClick={() => handleCancelByAdmin(apt)}
+                                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                                      isCancelled
+                                        ? "cursor-default border-stone-500/30 bg-stone-500/20 text-stone-400 opacity-60"
+                                        : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                                    }`}
+                                  >
+                                    <XCircle className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Gelmedi / İptal</span>
+                                  </button>
+
+                                  {isPhoneBlacklisted(apt.customerPhone) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleOpenRemoveBlacklistModal(
+                                          apt.customerPhone,
+                                          apt.customerName
+                                        )
+                                      }
+                                      className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 sm:col-span-1"
+                                    >
+                                      <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Kara Listeden Çıkar</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={isNoShow}
+                                      onClick={() => handleOpenNoShowModal(apt)}
+                                      className={`col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition sm:col-span-1 ${
+                                        isNoShow
+                                          ? "cursor-default border-rose-500/30 bg-rose-500/20 text-rose-300 opacity-60"
+                                          : "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                                      }`}
+                                    >
+                                      <Ban className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Kara Listeye Al</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendReminder(apt)}
+                                  className={`col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition sm:col-span-1 ${
+                                    apt.reminderSent
+                                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                                      : "border-sky-500/35 bg-sky-500/10 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
+                                  }`}
+                                >
+                                  <Send className="h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    {apt.reminderSent
+                                      ? `WhatsApp Gönderildi (${
+                                          apt.reminderSentAt || "✓"
+                                        })`
+                                      : "WhatsApp Hatırlatma"}
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   );
                 })}
