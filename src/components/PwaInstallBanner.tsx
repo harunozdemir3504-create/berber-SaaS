@@ -22,7 +22,14 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
-export default function PwaInstallBanner() {
+interface PwaInstallBannerProps {
+  mode?: "customer" | "admin";
+}
+
+export default function PwaInstallBanner({
+  mode = "admin",
+}: PwaInstallBannerProps) {
+  const isCustomer = mode === "customer";
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] =
@@ -119,37 +126,39 @@ export default function PwaInstallBanner() {
   return (
     <>
       {/* TOP COMPACT PWA INSTALL BAR */}
-      <div className="mb-3.5 overflow-hidden rounded-2xl border border-[#e6ccb2]/45 bg-gradient-to-r from-[#241b16] via-[#181310] to-[#120e0b] p-3 shadow-lg shadow-black/50 sm:mb-5 sm:p-4">
-        <div className="flex flex-col justify-between gap-2.5 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#140d08] shadow-md shadow-[#c88a53]/25 sm:h-10 sm:w-10">
-              <Smartphone className="h-4 w-4 stroke-[2.4] sm:h-5 sm:w-5" />
+      <div className="mb-3 overflow-hidden rounded-2xl border border-[#e6ccb2]/45 bg-gradient-to-r from-[#241b16] via-[#181310] to-[#120e0b] p-2.5 shadow-lg shadow-black/50 sm:mb-4 sm:p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#140d08] shadow-md shadow-[#c88a53]/25 sm:h-9 sm:w-9">
+              <Smartphone className="h-4 w-4 stroke-[2.4]" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="rounded-full border border-[#e6ccb2]/40 bg-[#c88a53]/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#e6ccb2] sm:text-[10px]">
-                  MOBİL UYGULAMA DENEYİMİ
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs font-extrabold text-[#fdf8f5] sm:text-sm">
-                Berber Panelini telefonunuza indirin, şifresiz tek tıkla açın!
+              <p className="truncate text-xs font-extrabold text-[#fdf8f5] sm:text-sm">
+                {isCustomer
+                  ? "Hızlı Randevu İçin Ana Ekrana Ekleyin"
+                  : "Berber Panelini Telefonunuza Yükleyin"}
+              </p>
+              <p className="hidden truncate text-[11px] text-stone-400 sm:block">
+                {isCustomer
+                  ? "Uygulama indirmeden tek dokunuşla randevu alın"
+                  : "Şifresiz ve tam ekran yönetim deneyimi"}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-center">
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={handleInstallClick}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e6ccb2]/60 bg-gradient-to-r from-[#b47b48] via-[#d49a62] to-[#9a6334] px-3.5 py-2 text-xs font-black text-[#140d08] shadow-md shadow-[#c88a53]/30 transition hover:brightness-110 active:scale-[0.98] sm:px-4 sm:py-2.5"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e6ccb2]/60 bg-gradient-to-r from-[#b47b48] via-[#d49a62] to-[#9a6334] px-3 py-2 text-[11px] font-black text-[#140d08] shadow-md shadow-[#c88a53]/30 transition hover:brightness-110 active:scale-[0.98] sm:px-3.5 sm:py-2 sm:text-xs"
             >
-              <span>📲 Uygulamayı Telefonuna Yükle</span>
+              <span>📱 Uygulamayı Ana Ekrana Yükle</span>
             </button>
             <button
               type="button"
               onClick={() => setDismissed(true)}
               title="Gizle"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-[#14100d] text-stone-400 transition hover:border-white/25 hover:text-white"
+              className="flex h-7 w-7 items-center justify-center rounded-xl border border-white/10 bg-[#14100d] text-stone-400 transition hover:border-white/25 hover:text-white sm:h-8 sm:w-8"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -183,10 +192,10 @@ export default function PwaInstallBanner() {
                 <div>
                   <span className="inline-flex items-center gap-1 rounded-full border border-[#e6ccb2]/40 bg-[#c88a53]/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#e6ccb2]">
                     <Sparkles className="h-3 w-3 text-[#c88a53]" />
-                    VIP BERBER YÖNETİM
+                    {isCustomer ? "HIZLI ONLINE RANDEVU" : "VIP BERBER YÖNETİM"}
                   </span>
                   <h3 className="mt-1 text-base font-extrabold text-[#fdf8f5] sm:text-lg">
-                    Uygulamayı Ana Ekrana Ekle
+                    📱 Uygulamayı Ana Ekrana Yükle
                   </h3>
                 </div>
               </div>
@@ -278,9 +287,8 @@ export default function PwaInstallBanner() {
                       </span>{" "}
                       <span className="text-stone-200">
                         Sağ üstteki <strong className="text-white">Ekle</strong>{" "}
-                        butonuna basın. Artık telefonunuzda{" "}
-                        <strong className="text-[#e6ccb2]">Berber Panel</strong>{" "}
-                        ikonu hazır!
+                        butonuna basın. Artık ana ekranınızdan tek dokunuşla
+                        açabilirsiniz!
                       </span>
                     </div>
                   </div>

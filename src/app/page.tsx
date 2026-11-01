@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Scissors,
@@ -11,9 +10,7 @@ import {
   Check,
   ChevronRight,
   ChevronLeft,
-  Calendar as CalendarIcon,
   ShieldAlert,
-  ShieldCheck,
   CreditCard,
   MessageSquare,
   BellRing,
@@ -23,21 +20,16 @@ import {
   Lock,
   CheckCircle2,
   ArrowRight,
-  Zap,
   MapPin,
-  Info,
   Search,
   X,
   CalendarX2,
   RefreshCw,
-  Coffee,
   Copy,
-  Hash,
-  AlertTriangle,
   Ban,
   ChevronDown,
-  Building2,
 } from "lucide-react";
+import PwaInstallBanner from "@/components/PwaInstallBanner";
 import {
   DAYS_METADATA,
   Barber,
@@ -63,34 +55,26 @@ type VerificationStage =
 
 export default function CustomerBookingPage() {
   const {
-    shops,
     currentShop,
     currentShopSlug,
-    setCurrentShopSlug,
     currentShopExists,
     hydrated,
     barbers,
     services,
     shopSettings,
-    appointments,
     addAppointment,
     addWaitlistEntry,
     isPhoneBlacklisted,
     getSlotsForDay,
     getServicePriceForBarber,
-    findCustomerAppointments,
-    cancelAppointmentByCustomer,
-    rescheduleAppointmentByCustomer,
   } = useBarber();
 
   // Wizard Step (1 to 4)
   const [step, setStep] = useState<number>(1);
 
   // Compact Mobile UX Accordion States
-  const [isShopSelectorOpen, setIsShopSelectorOpen] = useState<boolean>(false);
   const [expandedBarberId, setExpandedBarberId] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
-  const [showTestNumbers, setShowTestNumbers] = useState<boolean>(false);
 
   // Step 1: Barber Selection
   const [selectedBarberId, setSelectedBarberId] = useState<string>("any");
@@ -154,7 +138,7 @@ export default function CustomerBookingPage() {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isWaitlistMode, setIsWaitlistMode] = useState<boolean>(false);
 
-  // Step 4: Customer Info & Trust Simulation
+  // Step 4: Customer Info & Confirmation
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
   const [stage, setStage] = useState<VerificationStage>("idle");
@@ -164,26 +148,6 @@ export default function CustomerBookingPage() {
   const [confirmedAppointment, setConfirmedAppointment] =
     useState<Appointment | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
-
-  // Customer Self-Service Modal ("Randevumu Sorgula / İptal Et")
-  const [isLookupOpen, setIsLookupOpen] = useState<boolean>(false);
-  const [lookupQuery, setLookupQuery] = useState<string>("");
-  const [lookupResults, setLookupResults] = useState<Appointment[]>([]);
-  const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [cancelFeedback, setCancelFeedback] = useState<{
-    code: string;
-    time: string;
-    notifiedCount: number;
-    message: string;
-  } | null>(null);
-  const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(
-    null
-  );
-  const [rescheduleDay, setRescheduleDay] = useState<DayMetadata>(
-    DAYS_METADATA[0]
-  );
-  const [rescheduleTime, setRescheduleTime] = useState<string>("");
-  const [rescheduleSuccessMsg, setRescheduleSuccessMsg] = useState<string>("");
 
   const currentDaySlots = useMemo(
     () => getSlotsForDay(selectedDay.id),
@@ -390,59 +354,6 @@ export default function CustomerBookingPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const handleRunLookup = (customQuery?: string) => {
-    const q = customQuery !== undefined ? customQuery : lookupQuery;
-    if (customQuery !== undefined) setLookupQuery(customQuery);
-    setCancelFeedback(null);
-    setRescheduleSuccessMsg("");
-    setRescheduleTargetId(null);
-
-    const found = findCustomerAppointments(q);
-    setLookupResults(found);
-    setHasSearched(true);
-  };
-
-  useEffect(() => {
-    if (hasSearched && lookupQuery.trim()) {
-      setLookupResults(findCustomerAppointments(lookupQuery));
-    }
-  }, [appointments, hasSearched, lookupQuery, findCustomerAppointments]);
-
-  const handleCancelFromModal = (apt: Appointment) => {
-    const res = cancelAppointmentByCustomer(apt.id);
-    setCancelFeedback({
-      code: apt.appointmentCode,
-      time: apt.time,
-      notifiedCount: res.notifiedCount,
-      message: res.alertText,
-    });
-    if (selectedSlot?.time === apt.time) {
-      setSelectedSlot(null);
-    }
-  };
-
-  const handleConfirmReschedule = (apt: Appointment) => {
-    if (!rescheduleTime) return;
-    const updated = rescheduleAppointmentByCustomer(
-      apt.id,
-      rescheduleDay.id,
-      `${rescheduleDay.label} (${rescheduleDay.dateStr})`,
-      rescheduleTime
-    );
-    if (updated) {
-      setRescheduleSuccessMsg(
-        `Randevunuz ${updated.dateLabel} saat ${updated.time} olarak başarıyla güncellendi!`
-      );
-      setRescheduleTargetId(null);
-      setRescheduleTime("");
-    }
-  };
-
-  const activeAppointmentsForQuickTest = useMemo(
-    () => appointments.filter((a) => a.status === "upcoming"),
-    [appointments]
-  );
-
   // DELETED / UNKNOWN SHOP GUARD SCREEN
   if (hydrated && !currentShopExists) {
     return (
@@ -577,34 +488,21 @@ export default function CustomerBookingPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-2.5 pb-24 pt-2 sm:px-6 sm:pb-32 sm:pt-6">
-      {/* Compact VIP Salon Hero Header & Quick Shop Switcher */}
+      {/* PWA "📱 Uygulamayı Ana Ekrana Yükle" Banner (Customer Mode) */}
+      <PwaInstallBanner mode="customer" />
+
+      {/* Isolated Customer Salon Info Header */}
       <div className="relative mb-2.5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1e1916] via-[#161311] to-[#110f0d] p-2.5 shadow-xl shadow-black/50 sm:mb-4 sm:p-4">
         <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#c88a53]/15 blur-3xl" />
 
-        <div className="relative flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            {shops.length > 1 ? (
-              <button
-                type="button"
-                onClick={() => setIsShopSelectorOpen((prev) => !prev)}
-                className="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-[#c88a53]/45 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-extrabold text-[#e6ccb2] transition hover:border-[#e6ccb2]/60 hover:bg-[#c88a53]/25 sm:text-xs"
-              >
-                <Crown className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
-                <span className="truncate">{currentShop.name}</span>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 shrink-0 text-[#c88a53] transition-transform duration-200 ${
-                    isShopSelectorOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-            ) : (
-              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-extrabold text-[#e6ccb2] sm:text-xs">
-                <Crown className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
-                <span className="truncate">{currentShop.name}</span>
-              </span>
-            )}
+        <div className="relative flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-extrabold text-[#e6ccb2] sm:text-xs">
+              <Crown className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
+              <span className="truncate">{currentShop.name}</span>
+            </span>
 
-            <span className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[11px] text-stone-300 sm:inline-flex">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-stone-300 sm:text-[11px]">
               <MapPin className="h-3 w-3 text-sky-400" />
               <span className="truncate">{currentShop.district}</span>
               <span className="text-stone-600">•</span>
@@ -614,74 +512,12 @@ export default function CustomerBookingPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-1.5 py-1 text-[10px] font-bold text-[#fdf8f5] sm:px-2 sm:text-xs">
+            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-[#fdf8f5] sm:text-xs">
               <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
               4.98
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                setIsLookupOpen(true);
-                setCancelFeedback(null);
-                setRescheduleSuccessMsg("");
-              }}
-              className="inline-flex items-center gap-1 rounded-xl border border-sky-400/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-extrabold text-sky-200 shadow-sm transition hover:border-sky-300 hover:bg-sky-500 hover:text-slate-950 sm:px-3 sm:py-1.5 sm:text-xs"
-            >
-              <Search className="h-3 w-3 text-sky-300 sm:h-3.5 sm:w-3.5" />
-              <span>Randevu Sorgula</span>
-            </button>
           </div>
         </div>
-
-        {/* Collapsible Compact Shop Selector (Accordion) */}
-        <AnimatePresence initial={false}>
-          {isShopSelectorOpen && shops.length > 1 && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="mt-2 rounded-xl border border-[#c88a53]/30 bg-[#110f0d]/95 p-2">
-                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                  <Building2 className="h-3 w-3 text-[#c88a53]" />
-                  Dükkan / Şube Seçin:
-                </p>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  {shops.map((s) => {
-                    const isCurrent = s.slug === currentShop.slug;
-                    return (
-                      <button
-                        key={s.slug}
-                        type="button"
-                        onClick={() => {
-                          setCurrentShopSlug(s.slug);
-                          setIsShopSelectorOpen(false);
-                        }}
-                        className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
-                          isCurrent
-                            ? "border-[#e6ccb2]/55 bg-[#c88a53]/20 font-bold text-[#fdf8f5]"
-                            : "border-white/10 bg-[#161311] text-stone-300 hover:border-white/25 hover:text-white"
-                        }`}
-                      >
-                        <div className="min-w-0 truncate">
-                          <span className="truncate">{s.name}</span>
-                          <span className="ml-1.5 text-[10px] text-stone-400">
-                            ({s.district})
-                          </span>
-                        </div>
-                        {isCurrent && (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Compact 4-Step Stepper Bar */}
         <div className="relative mt-2 grid grid-cols-4 gap-1 sm:mt-3 sm:gap-2">
@@ -1312,7 +1148,7 @@ export default function CustomerBookingPage() {
           </motion.section>
         )}
 
-        {/* STEP 4: CUSTOMER INFO & GLOBAL NO-SHOW SHIELD SIMULATION */}
+        {/* STEP 4: CUSTOMER INFO & CONFIRMATION */}
         {step === 4 && (
           <motion.section
             key="step-4"
@@ -1336,7 +1172,7 @@ export default function CustomerBookingPage() {
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <h2 className="text-sm font-extrabold text-[#fdf8f5] sm:text-base">
-                    4. Bilgileriniz ve Hızlı Onay
+                    4. Müşteri Bilgileriniz ve Onay
                   </h2>
                 </div>
                 <span className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300">
@@ -1387,40 +1223,16 @@ export default function CustomerBookingPage() {
                       required
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Örn: Kerem Alkan"
+                      placeholder="Adınız ve Soyadınız"
                       className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-2.5 pl-9 pr-3 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-sky-400"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-300">
-                      Cep Telefonu Numaranız
-                    </label>
-                    {customerPhone.length >= 10 && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                          isNoShowPhone
-                            ? "border-rose-500/30 bg-rose-500/20 text-rose-400"
-                            : "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
-                        }`}
-                      >
-                        {isNoShowPhone ? (
-                          <>
-                            <ShieldAlert className="h-3 w-3" />
-                            Kara Listede (No-Show)
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="h-3 w-3" />
-                            Güven Skoru: Yüksek
-                          </>
-                        )}
-                      </span>
-                    )}
-                  </div>
-
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-stone-300">
+                    Cep Telefonu Numaranız
+                  </label>
                   <div className="relative">
                     <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400" />
                     <input
@@ -1428,87 +1240,11 @@ export default function CustomerBookingPage() {
                       required
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="0555 000 00 00"
+                      placeholder="05XX XXX XX XX"
                       className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-2.5 pl-9 pr-3 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
                     />
                   </div>
-
-                  {/* Açılır-Kapanır Demo Test Numaraları (Accordion) */}
-                  <div className="mt-2 rounded-xl border border-white/10 bg-[#110f0d] px-2.5 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowTestNumbers((prev) => !prev)}
-                      className="flex w-full items-center justify-between text-left text-[11px] font-semibold text-stone-400 hover:text-stone-200"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-sky-400" />
-                        Demo Test Numaraları (Tek Tıkla Doldur)
-                      </span>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 transition-transform ${
-                          showTestNumbers ? "rotate-180 text-[#e6ccb2]" : ""
-                        }`}
-                      />
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {showTestNumbers && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/10 pt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!customerName) setCustomerName("Murat Demir (Test)");
-                                setCustomerPhone("05550000000");
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-300"
-                            >
-                              <ShieldAlert className="h-3 w-3 text-rose-400" />
-                              <span>Kara Liste (05550000000)</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!customerName) setCustomerName("Ahmet Yılmaz");
-                                setCustomerPhone("05324567890");
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-300"
-                            >
-                              <ShieldCheck className="h-3 w-3 text-emerald-400" />
-                              <span>Normal Müşteri (05324567890)</span>
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
                 </div>
-
-                <AnimatePresence>
-                  {isNoShowPhone && blacklistRecord && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      className="rounded-xl border border-rose-500/50 bg-rose-950/30 p-3 text-xs text-[#fdf8f5]"
-                    >
-                      <div className="flex items-start gap-2">
-                        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                        <div>
-                          <strong className="text-rose-300">No-Show Uyarısı:</strong> Bu numara{" "}
-                          <strong className="text-[#e6ccb2]">
-                            {blacklistRecord.reportedByShopName}
-                          </strong>{" "}
-                          salonunda randevusuna gelmediği için işaretlenmiştir.
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
 
                 {formError && (
                   <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-400">
@@ -1524,11 +1260,11 @@ export default function CustomerBookingPage() {
                   {stage === "checking_trust" ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#1a110b] border-t-transparent" />
-                      <span>Sorgulanıyor...</span>
+                      <span>Randevu Hazırlanıyor...</span>
                     </>
                   ) : (
                     <>
-                      <span>Randevuyu Doğrula ve Devam Et</span>
+                      <span>Randevuyu Onayla ve Devam Et</span>
                       <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                     </>
                   )}
@@ -1536,43 +1272,35 @@ export default function CustomerBookingPage() {
               </form>
             ) : null}
 
-            {/* CASE A: GLOBAL BLACKLIST DETECTED -> DEPOSIT OR BLOCK SCREEN */}
+            {/* CASE A: DEPOSIT REQUIRED OR BLOCKED BY SHOP POLICY */}
             {stage === "deposit_required" || stage === "processing_deposit" ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="overflow-hidden rounded-3xl border-2 border-[#c88a53]/80 bg-gradient-to-b from-[#241b16] via-[#1c1613] to-[#14100d] p-6 shadow-bronze-glow-lg"
+                className="overflow-hidden rounded-3xl border-2 border-[#c88a53]/80 bg-gradient-to-b from-[#241b16] via-[#1c1613] to-[#14100d] p-5 shadow-bronze-glow-lg sm:p-6"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/40">
-                    <ShieldAlert className="h-6 w-6" />
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/40">
+                    <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/20 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-rose-300">
-                      ORTAK KARA LİSTE AĞI TESPİTİ •{" "}
-                      {blacklistRecord?.reportedByShopName || "ÜYE SALON BİLDİRİMİ"}
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                      ÖN KAPORA GÜVENCESİ
                     </span>
-                    <h3 className="mt-2 text-lg font-extrabold text-[#fdf8f5] sm:text-xl">
-                      Bu telefon numarası sistemimize üye başka bir salonda geçmiş randevusuna katılmadığı için Ortak Güvenlik Ağı tarafından işaretlenmiştir.
+                    <h3 className="mt-1.5 text-base font-extrabold text-[#fdf8f5] sm:text-lg">
+                      {isBlockedByShopPolicy
+                        ? "Online Randevu Oluşturulamadı"
+                        : "Randevu Onayı İçin Ön Kapora Gerekmektedir"}
                     </h3>
-                    <p className="mt-2 text-xs leading-relaxed text-[#e6ccb2]/85">
-                      Sistem kaydı: <strong>{customerPhone}</strong> numarası{" "}
-                      <span className="font-bold text-[#e6ccb2]">
-                        {blacklistRecord?.reportedByShopName || "Atelier Noir VIP"}
-                      </span>{" "}
-                      salonundaki{" "}
-                      <span className="text-[#e6ccb2]">
-                        {blacklistRecord?.missedDate || "14 Ekim 2026"}
-                      </span>{" "}
-                      randevusuna katılmamıştır (No-Show).{" "}
+                    <p className="mt-1 text-xs leading-relaxed text-[#e6ccb2]/85">
                       {isBlockedByShopPolicy ? (
                         <strong className="text-rose-300">
-                          {currentShop.name} salon politikası gereği kara listedeki numaralara online randevu kapalıdır.
+                          {currentShop.name} salon politikası gereği bu numara ile online randevu oluşturulamamaktadır. Lütfen doğrudan salon ile iletişime geçiniz.
                         </strong>
                       ) : (
                         <>
                           <strong>{currentShop.name}</strong> randevunuzu
-                          onaylamak için{" "}
+                          garantilemek için{" "}
                           <strong className="text-[#e6ccb2] underline">
                             {requiredDepositAmount} TL ön kapora
                           </strong>{" "}
@@ -1584,36 +1312,29 @@ export default function CustomerBookingPage() {
                 </div>
 
                 {isBlockedByShopPolicy ? (
-                  <div className="mt-6 rounded-2xl border border-rose-500/40 bg-rose-950/20 p-4 text-center">
-                    <p className="text-xs font-bold text-rose-300">
-                      Bu salon No-Show kaydı bulunan müşteriler için online randevuyu tamamen kapatmıştır.
-                    </p>
+                  <div className="mt-5 rounded-2xl border border-rose-500/40 bg-rose-950/20 p-4 text-center">
                     <button
                       type="button"
                       onClick={() => setStage("idle")}
-                      className="mt-3 rounded-xl border border-[#c88a53]/40 bg-[#14100d] px-5 py-2.5 text-xs font-bold text-[#e6ccb2]"
+                      className="rounded-xl border border-[#c88a53]/40 bg-[#14100d] px-5 py-2.5 text-xs font-bold text-[#e6ccb2]"
                     >
-                      Farklı Bir Numara İle Dene
+                      Geri Dön
                     </button>
                   </div>
                 ) : (
                   <>
-                    <div className="mt-5 space-y-2.5 rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-4 text-xs">
+                    <div className="mt-4 space-y-2 rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-3.5 text-xs">
                       <div className="flex justify-between text-[#e6ccb2]/75">
-                        <span>
-                          Toplam Hizmet Tutarı ({selectedBarber?.name}):
-                        </span>
+                        <span>Toplam Hizmet Tutarı:</span>
                         <span className="font-semibold text-[#fdf8f5]">
                           {totalPrice} TL
                         </span>
                       </div>
                       <div className="flex justify-between font-semibold text-[#c88a53]">
-                        <span>
-                          Şimdi Ödenecek No-Show Güvence Kaporası ({currentShop.name}):
-                        </span>
+                        <span>Şimdi Ödenecek Ön Kapora:</span>
                         <span>{requiredDepositAmount} TL</span>
                       </div>
-                      <div className="flex justify-between border-t border-[#c88a53]/20 pt-2.5 text-sm font-bold text-emerald-400">
+                      <div className="flex justify-between border-t border-[#c88a53]/20 pt-2 text-sm font-bold text-emerald-400">
                         <span>Salonda Ödenecek Kalan Tutar:</span>
                         <span>
                           {Math.max(0, totalPrice - requiredDepositAmount)} TL
@@ -1621,65 +1342,64 @@ export default function CustomerBookingPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 rounded-2xl border border-[#c88a53]/25 bg-[#1c1613] p-4">
-                      <div className="mb-2.5 flex items-center justify-between text-xs">
+                    <div className="mt-3.5 rounded-2xl border border-[#c88a53]/25 bg-[#1c1613] p-3.5">
+                      <div className="mb-2 flex items-center justify-between text-xs">
                         <span className="flex items-center gap-1.5 font-semibold text-[#fdf8f5]">
                           <CreditCard className="h-4 w-4 text-[#c88a53]" />
-                          Hızlı 3D Secure Kapora Ödemesi (Simülasyon)
+                          3D Secure Kapora Ödemesi
                         </span>
                         <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                           <Lock className="h-3 w-3" /> 256-Bit SSL
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         <input
                           type="text"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
-                          className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2.5 font-mono text-xs text-[#fdf8f5] sm:col-span-2"
+                          className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2 font-mono text-xs text-[#fdf8f5] sm:col-span-2"
                         />
                         <div className="grid grid-cols-2 gap-2">
                           <input
                             type="text"
                             defaultValue="10/29"
-                            className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2.5 text-center font-mono text-xs text-[#fdf8f5]"
+                            className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2 text-center font-mono text-xs text-[#fdf8f5]"
                           />
                           <input
                             type="text"
                             defaultValue="842"
-                            className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2.5 text-center font-mono text-xs text-[#fdf8f5]"
+                            className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-3 py-2 text-center font-mono text-xs text-[#fdf8f5]"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                       <button
                         type="button"
                         onClick={() => setStage("idle")}
-                        className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-4 py-3.5 text-xs font-semibold text-[#e6ccb2] transition hover:bg-[#221a15]"
+                        className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-4 py-3 text-xs font-semibold text-[#e6ccb2] transition hover:bg-[#221a15]"
                       >
-                        Numarayı Değiştir
+                        Geri Dön
                       </button>
                       <button
                         type="button"
                         disabled={stage === "processing_deposit"}
                         onClick={handleCompleteDepositBooking}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3.5 text-sm font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-60"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-60 sm:text-sm"
                       >
                         {stage === "processing_deposit" ? (
                           <>
                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#1a110b] border-t-transparent" />
                             <span>
-                              {requiredDepositAmount} TL Kapora Tahsil Ediliyor...
+                              {requiredDepositAmount} TL Tahsil Ediliyor...
                             </span>
                           </>
                         ) : (
                           <>
                             <CreditCard className="h-4 w-4" />
                             <span>
-                              {requiredDepositAmount} TL Kapora Öde ve Randevuyu
-                              Onayla
+                              {requiredDepositAmount} TL Kapora Öde ve Onayla
                             </span>
                           </>
                         )}
@@ -1690,40 +1410,36 @@ export default function CustomerBookingPage() {
               </motion.div>
             ) : null}
 
-            {/* CASE B: TRUSTED / NORMAL PHONE -> WHATSAPP VERIFICATION SIMULATION */}
+            {/* CASE B: WHATSAPP VERIFICATION */}
             {stage === "whatsapp_otp" && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="rounded-3xl border border-emerald-500/50 bg-gradient-to-b from-[#1c1613] via-[#131a15] to-[#14100d] p-6 shadow-xl"
+                className="rounded-3xl border border-emerald-500/50 bg-gradient-to-b from-[#1c1613] via-[#131a15] to-[#14100d] p-5 shadow-xl sm:p-6"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40">
-                    <MessageSquare className="h-6 w-6" />
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40">
+                    <MessageSquare className="h-5 w-5" />
                   </div>
                   <div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Ortak Güvenlik Ağı: Temiz • Kapora Gerektirmez
-                    </span>
-                    <h3 className="mt-2 text-lg font-extrabold text-[#fdf8f5]">
-                      WhatsApp Hızlı Doğrulama Simülasyonu
+                    <h3 className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
+                      WhatsApp Hızlı Onay Kodu
                     </h3>
-                    <p className="mt-1 text-xs text-[#e6ccb2]/80">
-                      <strong>{customerPhone}</strong> numaralı WhatsApp
-                      hattınıza 4 haneli onay kodunuz gönderildi.
+                    <p className="mt-0.5 text-xs text-[#e6ccb2]/80">
+                      <strong>{customerPhone}</strong> numaralı hattınıza 4
+                      haneli onay kodunuz iletildi.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-[#14100d] p-4">
+                <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-[#14100d] p-3.5">
                   <div className="flex items-center justify-between text-[11px] text-emerald-400">
                     <span className="font-bold">
                       WhatsApp • {currentShop.name}
                     </span>
                     <span>Şimdi</span>
                   </div>
-                  <p className="mt-1.5 text-xs text-[#fdf8f5]">
+                  <p className="mt-1 text-xs text-[#fdf8f5]">
                     Sayın <strong>{customerName}</strong>,{" "}
                     {selectedDay.fullDate} saat{" "}
                     <strong>{selectedSlot?.time}</strong> randevunuz için onay
@@ -1734,68 +1450,63 @@ export default function CustomerBookingPage() {
                   </p>
                 </div>
 
-                <div className="mt-4">
-                  <label className="mb-1.5 block text-xs font-semibold text-[#e6ccb2]/75">
-                    WhatsApp Doğrulama Kodu (Otomatik Dolduruldu)
-                  </label>
+                <div className="mt-3.5">
                   <input
                     type="text"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full rounded-xl border border-emerald-500/50 bg-[#14100d] py-3 text-center font-mono text-lg font-extrabold tracking-[0.4em] text-emerald-400 outline-none"
+                    className="w-full rounded-xl border border-emerald-500/50 bg-[#14100d] py-2.5 text-center font-mono text-lg font-extrabold tracking-[0.4em] text-emerald-400 outline-none"
                   />
                 </div>
 
-                <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => setStage("idle")}
-                    className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-4 py-3.5 text-xs font-semibold text-[#e6ccb2] hover:bg-[#221a15]"
+                    className="rounded-xl border border-[#c88a53]/30 bg-[#14100d] px-4 py-3 text-xs font-semibold text-[#e6ccb2] hover:bg-[#221a15]"
                   >
                     Geri Dön
                   </button>
                   <button
                     type="button"
                     onClick={handleCompleteWhatsAppBooking}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-extrabold text-[#1a110b] shadow-lg transition hover:bg-emerald-400"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-xs font-extrabold text-[#1a110b] shadow-lg transition hover:bg-emerald-400 sm:text-sm"
                   >
                     <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                    <span>WhatsApp ile Doğrula ve Randevuyu Onayla</span>
+                    <span>Randevuyu Onayla</span>
                   </button>
                 </div>
               </motion.div>
             )}
 
-            {/* CONFIRMED DIGITAL VIP PASS + RANDEVU KODU */}
+            {/* CONFIRMED DIGITAL VIP PASS */}
             {stage === "confirmed" && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="overflow-hidden rounded-3xl border border-[#c88a53]/60 bg-gradient-to-b from-[#241b16] via-[#1c1613] to-[#14100d] p-6 text-center shadow-bronze-glow-lg"
+                className="overflow-hidden rounded-3xl border border-[#c88a53]/60 bg-gradient-to-b from-[#241b16] via-[#1c1613] to-[#14100d] p-5 text-center shadow-bronze-glow-lg sm:p-6"
               >
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/30">
-                  <CheckCircle2 className="h-9 w-9 stroke-[2.5]" />
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/30">
+                  <CheckCircle2 className="h-8 w-8 stroke-[2.5]" />
                 </div>
 
-                <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#c88a53]/40 bg-[#c88a53]/15 px-3 py-1 text-xs font-bold text-[#e6ccb2]">
+                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#c88a53]/40 bg-[#c88a53]/15 px-3 py-1 text-xs font-bold text-[#e6ccb2]">
                   {isWaitlistMode
-                    ? "AKILLI YEDEK LİSTE KAYDINIZ ALINDI"
-                    : isNoShowPhone
-                    ? `${requiredDepositAmount} TL KAPORA ALINDI • RANDEVU GARANTİLENDİ`
-                    : "WHATSAPP DOĞRULANDI • RANDEVU ONAYLANDI"}
+                    ? "YEDEK LİSTE KAYDINIZ ALINDI"
+                    : "RANDEVUNUZ ONAYLANDI"}
                 </span>
 
-                <h3 className="mt-3 text-2xl font-extrabold text-[#fdf8f5]">
+                <h3 className="mt-2.5 text-xl font-extrabold text-[#fdf8f5] sm:text-2xl">
                   Teşekkürler, {customerName}!
                 </h3>
 
                 {confirmedAppointment && (
-                  <div className="mx-auto mt-4 max-w-sm rounded-2xl border border-[#c88a53]/50 bg-[#c88a53]/15 p-4 shadow-md shadow-[#c88a53]/15">
-                    <span className="block text-[11px] font-bold uppercase tracking-widest text-[#e6ccb2]">
-                      Randevu Kodunuz (Sorgulama & İptal İçin)
+                  <div className="mx-auto mt-3.5 max-w-sm rounded-2xl border border-[#c88a53]/50 bg-[#c88a53]/15 p-3.5 shadow-md shadow-[#c88a53]/15">
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-[#e6ccb2]">
+                      Randevu Kodunuz
                     </span>
-                    <div className="mt-1.5 flex items-center justify-center gap-3">
-                      <span className="font-mono text-2xl font-black tracking-wider text-[#e6ccb2]">
+                    <div className="mt-1 flex items-center justify-center gap-3">
+                      <span className="font-mono text-xl font-black tracking-wider text-[#e6ccb2]">
                         {confirmedAppointment.appointmentCode}
                       </span>
                       <button
@@ -1803,7 +1514,7 @@ export default function CustomerBookingPage() {
                         onClick={() =>
                           handleCopyCode(confirmedAppointment.appointmentCode)
                         }
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#c88a53]/40 bg-[#14100d] px-2.5 py-1 text-xs font-semibold text-[#e6ccb2] hover:bg-gradient-to-r hover:from-[#b47b48] hover:via-[#c88a53] hover:to-[#9a6334] hover:text-[#1a110b]"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#c88a53]/40 bg-[#14100d] px-2.5 py-1 text-xs font-semibold text-[#e6ccb2] hover:bg-[#c88a53] hover:text-[#1a110b]"
                       >
                         <Copy className="h-3.5 w-3.5" />
                         <span>{copiedCode ? "Kopyalandı!" : "Kopyala"}</span>
@@ -1812,26 +1523,26 @@ export default function CustomerBookingPage() {
                   </div>
                 )}
 
-                <div className="mt-5 space-y-2.5 rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-4 text-left text-xs">
-                  <div className="flex items-center justify-between border-b border-[#c88a53]/20 pb-2.5">
+                <div className="mt-4 space-y-2 rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-4 text-left text-xs">
+                  <div className="flex items-center justify-between border-b border-[#c88a53]/20 pb-2">
                     <span className="font-bold uppercase tracking-wider text-[#c88a53]">
-                      {currentShop.name} • Randevu Özeti Kartı
+                      {currentShop.name} • Randevu Özeti
                     </span>
                     <span className="text-[#e6ccb2]/75">{customerPhone}</span>
                   </div>
-                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-2">
+                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-1.5">
                     <span className="text-[#e6ccb2]/70">Usta / Koltuk:</span>
                     <span className="font-bold text-[#fdf8f5]">
                       {selectedBarber?.name} ({selectedBarber?.chairName})
                     </span>
                   </div>
-                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-2">
+                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-1.5">
                     <span className="text-[#e6ccb2]/70">Tarih & Saat:</span>
                     <span className="font-bold text-[#e6ccb2]">
                       {selectedDay.fullDate} • {selectedSlot?.time}
                     </span>
                   </div>
-                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-2">
+                  <div className="flex justify-between border-b border-[#c88a53]/15 pb-1.5">
                     <span className="text-[#e6ccb2]/70">
                       İşlemler ({totalDuration} dk):
                     </span>
@@ -1844,36 +1555,19 @@ export default function CustomerBookingPage() {
                       Toplam Tutar:
                     </span>
                     <span className="font-extrabold text-[#c88a53]">
-                      {totalPrice} TL{" "}
-                      {isNoShowPhone && !isWaitlistMode && (
-                        <span className="text-xs font-normal text-emerald-400">
-                          ({requiredDepositAmount} TL Kapora Ödendi)
-                        </span>
-                      )}
+                      {totalPrice} TL
                     </span>
                   </div>
                 </div>
 
-                <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
+                <div className="mt-5">
                   <button
                     type="button"
                     onClick={handleResetWizard}
-                    className="flex-1 rounded-xl border border-[#c88a53]/30 bg-[#14100d] py-3.5 text-xs font-bold text-[#e6ccb2] transition hover:border-[#c88a53]/60"
+                    className="w-full rounded-xl border border-[#c88a53]/40 bg-[#14100d] py-3 text-xs font-bold text-[#e6ccb2] transition hover:border-[#c88a53]"
                   >
                     Yeni Randevu Oluştur
                   </button>
-                  {confirmedAppointment && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsLookupOpen(true);
-                        handleRunLookup(confirmedAppointment.appointmentCode);
-                      }}
-                      className="flex-1 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3.5 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110"
-                    >
-                      Randevumu Sorgula / Yönet
-                    </button>
-                  )}
                 </div>
               </motion.div>
             )}
@@ -1888,7 +1582,7 @@ export default function CustomerBookingPage() {
             initial={{ y: 90, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 90, opacity: 0 }}
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0a09]/95 p-4 backdrop-blur-xl"
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0a09]/95 p-3.5 backdrop-blur-xl sm:p-4"
           >
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
               <div>
@@ -1903,7 +1597,7 @@ export default function CustomerBookingPage() {
                     {totalDuration} dk
                   </span>
                 </div>
-                <div className="text-xl font-extrabold text-[#fdf8f5]">
+                <div className="text-lg font-extrabold text-[#fdf8f5] sm:text-xl">
                   {totalPrice}{" "}
                   <span className="text-sm font-bold text-[#c88a53]">TL</span>
                 </div>
@@ -1913,316 +1607,12 @@ export default function CustomerBookingPage() {
                 type="button"
                 disabled={selectedServices.length === 0}
                 onClick={() => setStep(3)}
-                className="flex items-center gap-2 rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-6 py-3.5 text-sm font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-40"
+                className="flex items-center gap-2 rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-5 py-3 text-xs font-black text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 disabled:opacity-40 sm:px-6 sm:py-3.5 sm:text-sm"
               >
                 <span>Tarih & Saat Seç</span>
                 <ChevronRight className="h-4 w-4 stroke-[2.5]" />
               </button>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* MODAL: MÜŞTERİ RANDEVU SORGULAMA / İPTAL / SAAT DEĞİŞTİRME EKRANI */}
-      <AnimatePresence>
-        {isLookupOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsLookupOpen(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 12 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 12 }}
-              onClick={(e) => e.stopPropagation()}
-              className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-white/15 bg-[#161311] p-5 shadow-2xl shadow-black/80 sm:p-6"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/30">
-                    <Search className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
-                      {currentShop.name} • Randevumu Sorgula
-                    </h3>
-                    <p className="text-xs text-stone-400">
-                      Telefon numaranız veya Randevu Kodunuz ile yönetin
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsLookupOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-[#110f0d] text-stone-300 hover:border-white/30 hover:text-[#fdf8f5]"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleRunLookup();
-                }}
-                className="mt-4 flex gap-2"
-              >
-                <div className="relative flex-1">
-                  <Hash className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-400" />
-                  <input
-                    type="text"
-                    value={lookupQuery}
-                    onChange={(e) => setLookupQuery(e.target.value)}
-                    placeholder="Örn: #BRB-4829 veya 0535 209 44 19"
-                    className="w-full rounded-xl border border-white/15 bg-[#110f0d] py-3 pl-10 pr-4 text-sm text-[#fdf8f5] placeholder-stone-500 outline-none focus:border-sky-400"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="rounded-xl border border-sky-400/50 bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3 text-xs font-black text-slate-950 shadow-lg shadow-sky-500/20 transition hover:brightness-110"
-                >
-                  Sorgula
-                </button>
-              </form>
-
-              {activeAppointmentsForQuickTest.length > 0 && (
-                <div className="mt-3 rounded-xl border border-white/10 bg-[#110f0d] p-3">
-                  <span className="block text-[11px] font-semibold text-stone-400">
-                    Bu Salondaki Aktif Randevular (Tek Tıkla Sorgula):
-                  </span>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {activeAppointmentsForQuickTest.map((apt) => (
-                      <button
-                        key={apt.id}
-                        type="button"
-                        onClick={() => handleRunLookup(apt.appointmentCode)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#181513] px-2.5 py-1 text-xs font-medium text-[#fdf8f5] transition hover:border-sky-400/50 hover:text-sky-200"
-                      >
-                        <span className="font-mono font-bold text-sky-400">
-                          {apt.appointmentCode}
-                        </span>
-                        <span>• {apt.time}</span>
-                        <span className="text-stone-400">
-                          ({apt.customerName})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <AnimatePresence>
-                {cancelFeedback && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="mt-4 rounded-2xl border border-[#c88a53]/60 bg-gradient-to-br from-[#c88a53]/20 via-[#1c1613] to-[#14100d] p-4 shadow-lg shadow-[#c88a53]/15"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]">
-                        <BellRing className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-extrabold text-[#e6ccb2]">
-                          Randevu İptal Edildi & Saat Tekrar Boşa Çıktı!
-                        </h4>
-                        <p className="mt-1 text-xs leading-relaxed text-[#fdf8f5]">
-                          {cancelFeedback.message}
-                        </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsLookupOpen(false);
-                              setStep(3);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-3 py-1.5 text-xs font-black text-[#1a110b] shadow-md"
-                          >
-                            <span>
-                              Takvimde Boşalan {cancelFeedback.time} Saatini Gör
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {rescheduleSuccessMsg && (
-                <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/15 p-3.5 text-xs font-semibold text-emerald-300">
-                  {rescheduleSuccessMsg}
-                </div>
-              )}
-
-              <div className="mt-4 space-y-3">
-                {hasSearched &&
-                  lookupResults.length === 0 &&
-                  !cancelFeedback && (
-                    <div className="rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-6 text-center">
-                      <AlertTriangle className="mx-auto h-7 w-7 text-[#c88a53]" />
-                      <p className="mt-2 text-sm font-bold text-[#fdf8f5]">
-                        Bu Salonda Aktif Randevu Bulunamadı
-                      </p>
-                      <p className="mt-1 text-xs text-[#e6ccb2]/70">
-                        Girdiğiniz telefon numarası veya randevu koduna ait{" "}
-                        {currentShop.name} salonunda aktif bir randevu
-                        bulunmuyor.
-                      </p>
-                    </div>
-                  )}
-
-                {lookupResults.map((apt) => {
-                  const isRescheduling = rescheduleTargetId === apt.id;
-                  const rescheduleSlots = getSlotsForDay(
-                    rescheduleDay.id
-                  ).filter((s) => s.state === "available");
-
-                  return (
-                    <div
-                      key={apt.id}
-                      className="rounded-2xl border border-[#c88a53]/25 bg-[#14100d] p-4"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#c88a53]/20 pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-lg bg-[#c88a53]/20 px-2.5 py-1 font-mono text-xs font-black text-[#e6ccb2]">
-                            {apt.appointmentCode}
-                          </span>
-                          <span className="text-sm font-extrabold text-[#fdf8f5]">
-                            {apt.customerName}
-                          </span>
-                        </div>
-                        <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
-                          {apt.dateLabel} • Saat {apt.time}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 space-y-1.5 text-xs text-[#e6ccb2]">
-                        <div className="flex justify-between">
-                          <span className="text-[#e6ccb2]/65">
-                            Usta / Koltuk:
-                          </span>
-                          <span className="font-semibold text-[#fdf8f5]">
-                            {apt.barberName} ({apt.chairLabel})
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-[#e6ccb2]/65">Hizmetler:</span>
-                          <span className="font-semibold text-[#fdf8f5]">
-                            {apt.services.map((s) => s.name).join(" + ")}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-[#e6ccb2]/65">
-                            Toplam Süre & Tutar:
-                          </span>
-                          <span className="font-bold text-[#c88a53]">
-                            {apt.totalDuration} dk • {apt.totalPrice} TL
-                          </span>
-                        </div>
-                      </div>
-
-                      {apt.status === "upcoming" && (
-                        <div className="mt-4 flex flex-wrap gap-2 border-t border-[#c88a53]/20 pt-3.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRescheduleTargetId(
-                                isRescheduling ? null : apt.id
-                              );
-                              setRescheduleTime("");
-                            }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2.5 text-xs font-bold text-[#e6ccb2] transition hover:bg-gradient-to-r hover:from-[#b47b48] hover:via-[#c88a53] hover:to-[#9a6334] hover:text-[#1a110b]"
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            <span>
-                              {isRescheduling ? "Vazgeç" : "Saati Değiştir"}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelFromModal(apt)}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/15 py-2.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500 hover:text-white"
-                          >
-                            <CalendarX2 className="h-3.5 w-3.5" />
-                            <span>Randevuyu İptal Et</span>
-                          </button>
-                        </div>
-                      )}
-
-                      <AnimatePresence>
-                        {isRescheduling && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-4 overflow-hidden rounded-xl border border-[#c88a53]/25 bg-[#1c1613] p-3.5"
-                          >
-                            <p className="text-xs font-bold text-[#e6ccb2]">
-                              Yeni Gün ve Müsait Saat Seçiniz:
-                            </p>
-                            <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto pb-1.5">
-                              {DAYS_METADATA.filter(
-                                (d) =>
-                                  !shopSettings.closedDays.includes(d.dayOfWeek)
-                              ).map((d) => (
-                                <button
-                                  key={d.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setRescheduleDay(d);
-                                    setRescheduleTime("");
-                                  }}
-                                  className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                                    rescheduleDay.id === d.id
-                                      ? "bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
-                                      : "bg-[#14100d] text-[#e6ccb2]/75"
-                                  }`}
-                                >
-                                  {d.label} ({d.dateStr})
-                                </button>
-                              ))}
-                            </div>
-
-                            <div className="mt-2.5 grid grid-cols-4 gap-1.5">
-                              {rescheduleSlots.map((s) => (
-                                <button
-                                  key={s.time}
-                                  type="button"
-                                  onClick={() => setRescheduleTime(s.time)}
-                                  className={`rounded-lg border py-1.5 text-xs font-bold transition ${
-                                    rescheduleTime === s.time
-                                      ? "border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
-                                      : "border-[#c88a53]/20 bg-[#14100d] text-[#fdf8f5] hover:border-[#c88a53]/50"
-                                  }`}
-                                >
-                                  {s.time}
-                                </button>
-                              ))}
-                            </div>
-
-                            <button
-                              type="button"
-                              disabled={!rescheduleTime}
-                              onClick={() => handleConfirmReschedule(apt)}
-                              className="mt-3 w-full rounded-xl bg-emerald-500 py-2.5 text-xs font-extrabold text-[#1a110b] transition hover:bg-emerald-400 disabled:opacity-40"
-                            >
-                              Yeni Saati Onayla ({rescheduleDay.label} •{" "}
-                              {rescheduleTime || "Seçiniz"})
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
