@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -26,6 +26,8 @@ import {
 } from "@/components/AdminPinGate";
 import {
   getLiveDaysMetadata,
+  getTurkeyNow,
+  toIsoDateString,
   Barber,
   Service,
   DayMetadata,
@@ -99,10 +101,56 @@ export default function CustomerBookingPage() {
 
   // Gerçek Zamanlı Canlı Tarih (new Date() - Türkiye Saati, Bugün + Önümüzdeki 7 Gün)
   const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
+  const todayMeta = liveDays[0];
+  const tomorrowMeta = liveDays[1] || liveDays[0];
 
-  // Adım 2: Gün ve Saat Seçimi (Varsayılan her zaman Bugün, geçmiş günler listelenmez)
-  const [selectedDay, setSelectedDay] = useState<DayMetadata>(() => getLiveDaysMetadata(7)[0]);
+  // Slotun geçmiş olup olmadığını kontrol et (Bugün ise: şu anki saatten küçük veya 15 dk'dan az kalmışsa)
+  const isSlotPassedOrImminent = useCallback(
+    (slotTime: string, isTodayDay: boolean): boolean => {
+      if (!isTodayDay) return false;
+      const nowTr = getTurkeyNow();
+      const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
+      const slotMinutes = timeToMinutes(slotTime);
+      return slotMinutes < currentMinutes + 15;
+    },
+    []
+  );
+
+  // Bugün için mesai bitti mi veya alınabilecek geçerli boş saat kaldı mı?
+  const isTodayWorkEnded = useMemo(() => {
+    if (!todayMeta) return false;
+    const isTodayClosed = shopSettings.closedDays.includes(todayMeta.dayOfWeek);
+    if (isTodayClosed) return true;
+    const todaySlots = getSlotsForDay(todayMeta.id);
+    const hasRemainingSlot = todaySlots.some(
+      (s) => s.state === "available" && !isSlotPassedOrImminent(s.time, true)
+    );
+    return !hasRemainingSlot;
+  }, [todayMeta, shopSettings.closedDays, getSlotsForDay, isSlotPassedOrImminent]);
+
+  // Adım 2: Gün ve Saat Seçimi (Mesai bittiyse varsayılan olarak Yarın seçili gelir)
+  const [selectedDay, setSelectedDay] = useState<DayMetadata>(() => {
+    const days = getLiveDaysMetadata(7);
+    const tDay = days[0];
+    const tomDay = days[1] || days[0];
+    const nowTr = getTurkeyNow();
+    const currentMins = nowTr.getHours() * 60 + nowTr.getMinutes();
+    // 20:45 ve sonrasında bugün için randevu kalmamıştır
+    if (currentMins >= 21 * 60 - 15) {
+      return tomDay;
+    }
+    return tDay;
+  });
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+
+  // Akıllı UX: Mesai bittiyse ve bugün hiçbir boş saat kalmadıysa otomatik "Yarın" gününü seçili getir
+  const [hasAutoSwitchedDay, setHasAutoSwitchedDay] = useState<boolean>(false);
+  useEffect(() => {
+    if (!hasAutoSwitchedDay && isTodayWorkEnded && tomorrowMeta) {
+      setSelectedDay(tomorrowMeta);
+      setHasAutoSwitchedDay(true);
+    }
+  }, [isTodayWorkEnded, tomorrowMeta, hasAutoSwitchedDay]);
 
   // Adım 3: İsim, Telefon ve Onay
   const [customerName, setCustomerName] = useState<string>("");
@@ -142,11 +190,40 @@ export default function CustomerBookingPage() {
     [getSlotsForDay, selectedDay.id]
   );
 
+  // Seçili gün bugün mü?
+  const isSelectedDayToday = useMemo(() => {
+    return Boolean(
+      selectedDay.isToday ||
+        selectedDay.isoDate === toIsoDateString(getTurkeyNow())
+    );
+  }, [selectedDay]);
+
   // Sadece boş (müsait) saatler
   const availableDaySlots = useMemo(
     () => currentDaySlots.filter((s) => s.state === "available"),
     [currentDaySlots]
   );
+
+  // Bugün ise geçmiş saatleri eleyerek gerçek alınabilir boş saatleri bul
+  const validAvailableSlots = useMemo(() => {
+    return availableDaySlots.filter((slot) => {
+      if (isSelectedDayToday) {
+        return !isSlotPassedOrImminent(slot.time, true);
+      }
+      return true;
+    });
+  }, [availableDaySlots, isSelectedDayToday, isSlotPassedOrImminent]);
+
+  // Geçmiş bir saat seçilmişse seçimi temizle
+  useEffect(() => {
+    if (
+      selectedSlot &&
+      isSelectedDayToday &&
+      isSlotPassedOrImminent(selectedSlot.time, true)
+    ) {
+      setSelectedSlot(null);
+    }
+  }, [selectedSlot, isSelectedDayToday, isSlotPassedOrImminent]);
 
   const isSelectedDayClosed = useMemo(
     () => shopSettings.closedDays.includes(selectedDay.dayOfWeek),
@@ -582,9 +659,37 @@ export default function CustomerBookingPage() {
                     const isDayClosed = shopSettings.closedDays.includes(
                       day.dayOfWeek
                     );
-                    const freeCount = getSlotsForDay(day.id).filter(
-                      (s) => s.state === "available"
-                    ).length;
+                    const isDayToday = Boolean(
+                      day.isToday || day.isoDate === toIsoDateString(getTurkeyNow())
+                    );
+                    const daySlots = getSlotsForDay(day.id);
+                    const validDaySlots = daySlots.filter((s) => {
+                      if (s.state !== "available") return false;
+                      if (isDayToday && isSlotPassedOrImminent(s.time, true)) {
+                        return false;
+                      }
+                      return true;
+                    });
+                    const freeCount = validDaySlots.length;
+                    const isDayWorkEnded = isDayToday && freeCount === 0;
+
+                    let badgeText = `${freeCount} Boş Saat`;
+                    let badgeClass = "bg-emerald-500/15 text-emerald-400";
+
+                    if (isDayClosed) {
+                      badgeText = "Kapalı";
+                      badgeClass = "bg-rose-500/15 text-rose-400";
+                    } else if (isDayWorkEnded) {
+                      badgeText = "Mesai Bitti";
+                      badgeClass = "bg-amber-500/15 text-amber-400";
+                    } else if (freeCount === 0) {
+                      badgeText = "Dolu";
+                      badgeClass = "bg-stone-500/15 text-stone-400";
+                    }
+
+                    if (isSelected) {
+                      badgeClass = "bg-[#1a110b]/20 text-[#1a110b]";
+                    }
 
                     return (
                       <button
@@ -606,15 +711,9 @@ export default function CustomerBookingPage() {
                           {day.chipLabel}
                         </span>
                         <span
-                          className={`mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                            isSelected
-                              ? "bg-[#1a110b]/20 text-[#1a110b]"
-                              : isDayClosed
-                              ? "bg-rose-500/15 text-rose-400"
-                              : "bg-emerald-500/15 text-emerald-400"
-                          }`}
+                          className={`mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${badgeClass}`}
                         >
-                          {isDayClosed ? "Kapalı" : `${freeCount} Boş Saat`}
+                          {badgeText}
                         </span>
                       </button>
                     );
@@ -639,6 +738,28 @@ export default function CustomerBookingPage() {
                       Lütfen yukarıdan başka bir gün seçiniz.
                     </p>
                   </div>
+                ) : isSelectedDayToday && validAvailableSlots.length === 0 ? (
+                  <div className="rounded-3xl border border-amber-500/40 bg-gradient-to-b from-amber-950/30 via-[#181310] to-[#14110f] p-6 text-center shadow-xl sm:p-8">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      <Clock className="h-7 w-7 stroke-[2.5]" />
+                    </div>
+                    <p className="mt-3 text-base font-black text-[#fdf8f5] sm:text-lg">
+                      Bugün için mesaimiz sona ermiştir.
+                    </p>
+                    <p className="mt-1 text-xs text-[#e6ccb2]/85 sm:text-sm">
+                      Lütfen yarına veya diğer günlere randevu alınız.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDay(tomorrowMeta);
+                        setSelectedSlot(null);
+                      }}
+                      className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-6 py-3.5 text-xs font-black text-[#1a110b] shadow-xl shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-95 sm:text-sm"
+                    >
+                      <span>👉 Yarının Saatlerini Gör</span>
+                    </button>
+                  </div>
                 ) : availableDaySlots.length === 0 ? (
                   <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-6 text-center">
                     <Clock className="mx-auto h-8 w-8 text-amber-400" />
@@ -652,7 +773,30 @@ export default function CustomerBookingPage() {
                 ) : (
                   <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
                     {availableDaySlots.map((slot) => {
+                      const isPast =
+                        isSelectedDayToday &&
+                        isSlotPassedOrImminent(slot.time, true);
                       const isSelected = selectedSlot?.time === slot.time;
+
+                      if (isPast) {
+                        return (
+                          <button
+                            key={slot.time}
+                            type="button"
+                            disabled
+                            aria-disabled="true"
+                            className="flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-[#120f0d]/80 py-4 text-stone-600 opacity-40 cursor-not-allowed select-none"
+                          >
+                            <span className="text-lg font-black line-through sm:text-xl">
+                              {slot.time}
+                            </span>
+                            <span className="mt-0.5 text-[11px] font-extrabold text-rose-400/80">
+                              Geçti
+                            </span>
+                          </button>
+                        );
+                      }
+
                       return (
                         <button
                           key={slot.time}
@@ -683,7 +827,12 @@ export default function CustomerBookingPage() {
 
               <button
                 type="button"
-                disabled={!selectedSlot || isSelectedDayClosed}
+                disabled={
+                  !selectedSlot ||
+                  isSelectedDayClosed ||
+                  (isSelectedDayToday &&
+                    isSlotPassedOrImminent(selectedSlot.time, true))
+                }
                 onClick={() => selectedSlot && setStep(3)}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-4 text-base font-black text-[#1a110b] shadow-xl shadow-[#c88a53]/30 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               >
