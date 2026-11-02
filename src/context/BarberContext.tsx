@@ -150,7 +150,32 @@ const STORAGE_KEYS = {
   SHOPS: "vip_barber_saas_shops_v4",
   GLOBAL_BLACKLIST: "vip_barber_saas_global_blacklist_v4",
   MASTER_PIN: "vip_barber_saas_master_pin_v4",
+  DISMISSED_ALERTS: "vip_barber_dismissed_alerts_v1",
 };
+
+export function getDismissedAlertIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DISMISSED_ALERTS);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function recordDismissedAlertId(id: string) {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    const current = getDismissedAlertIds();
+    current.add(id);
+    localStorage.setItem(
+      STORAGE_KEYS.DISMISSED_ALERTS,
+      JSON.stringify(Array.from(current))
+    );
+  } catch {}
+}
 
 const BarberContext = createContext<BarberContextType | undefined>(undefined);
 
@@ -231,8 +256,11 @@ function deduplicateServices(list: Service[]): Service[] {
 /**
  * Normalizes any legacy/hardcoded dayId ("day-1", etc.) or outdated dateLabel
  * into real-time Türkiye dates (new Date()) and sorts appointments chronologically (09:00 -> 21:00).
+ * Ayrıca daha önce "Tamam" ile kapatılmış (dismissed) uyarıları kalıcı olarak filtreler.
  */
 function sanitizeShopDates(shop: TenantShop): TenantShop {
+  const dismissedSet = getDismissedAlertIds();
+
   const sanitizedAppointments = (shop.appointments || [])
     .map((apt) => {
       const resolved = resolveDayMetadata(apt.dayId);
@@ -258,6 +286,10 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
     };
   });
 
+  const sanitizedAlerts = (shop.adminAlerts || []).filter(
+    (a) => !dismissedSet.has(a.id)
+  );
+
   return {
     ...shop,
     adminPin: shop.adminPin || "1234",
@@ -269,7 +301,67 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
     services: deduplicateServices(shop.services || []),
     appointments: sanitizedAppointments,
     waitlist: sanitizedWaitlist,
+    adminAlerts: sanitizedAlerts,
   };
+}
+
+/**
+ * Uzaktan gelen Supabase verisi ile yerel localStorage verisini akıllıca birleştirir.
+ * Kullanıcının yerelde eklediği hiçbir dükkan veya berber (usta) ASLA kaybolmaz.
+ */
+function mergeShopsSafely(
+  localShops: TenantShop[],
+  remoteShops: TenantShop[]
+): TenantShop[] {
+  if (!Array.isArray(remoteShops) || remoteShops.length === 0) {
+    return localShops;
+  }
+  if (!Array.isArray(localShops) || localShops.length === 0) {
+    return remoteShops;
+  }
+
+  const merged = remoteShops.map(sanitizeShopDates);
+
+  // 1. Yerelde olup remote'da henüz bulunmayan dükkanları koru
+  for (const localShop of localShops) {
+    const existsInRemote = merged.find(
+      (s) => s.slug.toLowerCase() === localShop.slug.toLowerCase()
+    );
+    if (!existsInRemote) {
+      merged.push(sanitizeShopDates(localShop));
+    } else {
+      // 2. Dükkan varsa bile, yereldeki berberleri (ustaları) kontrol et:
+      // Eğer kullanıcının eklediği bir berber/usta remote'da yoksa, o berberi koru!
+      const remoteBarberIds = new Set(
+        (existsInRemote.barbers || []).map((b) => b.id)
+      );
+      const missingBarbers = (localShop.barbers || []).filter(
+        (b) => !remoteBarberIds.has(b.id)
+      );
+      if (missingBarbers.length > 0) {
+        existsInRemote.barbers = [
+          ...(existsInRemote.barbers || []),
+          ...missingBarbers,
+        ];
+      }
+
+      // Aynı şekilde yerelde eklenen randevuları da koru
+      const remoteAptIds = new Set(
+        (existsInRemote.appointments || []).map((a) => a.id)
+      );
+      const missingApts = (localShop.appointments || []).filter(
+        (a) => !remoteAptIds.has(a.id)
+      );
+      if (missingApts.length > 0) {
+        existsInRemote.appointments = [
+          ...(existsInRemote.appointments || []),
+          ...missingApts,
+        ].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+      }
+    }
+  }
+
+  return merged;
 }
 
 // Helper component that syncs URL `?shop=[slug]` with context state
@@ -326,6 +418,48 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Doğrudan hem localStorage'a hem de Supabase'e anında güvenli yazma fonksiyonu
+  const syncDirectlyToCloud = useCallback(
+    (
+      nextShops: TenantShop[],
+      nextBlacklist?: BlacklistEntry[],
+      nextMasterPin?: string
+    ) => {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
+        if (nextBlacklist) {
+          localStorage.setItem(
+            STORAGE_KEYS.GLOBAL_BLACKLIST,
+            JSON.stringify(nextBlacklist)
+          );
+        }
+        if (nextMasterPin) {
+          localStorage.setItem(STORAGE_KEYS.MASTER_PIN, nextMasterPin);
+        }
+      } catch {
+        // ignore
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        supabase
+          .from("app_state")
+          .upsert({
+            key: "global_state",
+            data: {
+              shops: nextShops,
+              globalBlacklist: nextBlacklist || globalBlacklist,
+              masterPin: nextMasterPin || masterPin,
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) console.warn("Supabase direct sync error:", error.message);
+          });
+      }
+    },
+    [globalBlacklist, masterPin]
+  );
+
   // 1. Initial Load: First try Supabase, fallback to localStorage
   useEffect(() => {
     let isMounted = true;
@@ -377,7 +511,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             };
 
             if (isMounted && Array.isArray(remote.shops)) {
-              setShops(remote.shops.map(sanitizeShopDates));
+              setShops((prev) => mergeShopsSafely(prev, remote.shops!));
             }
 
             if (isMounted && Array.isArray(remote.globalBlacklist)) {
@@ -430,7 +564,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             if (nextData) {
               setShops((prevShops) => {
                 if (Array.isArray(nextData.shops)) {
-                  const sanitizedNext = nextData.shops.map(sanitizeShopDates);
+                  const sanitizedNext = mergeShopsSafely(prevShops, nextData.shops);
                   if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
                     return sanitizedNext;
                   }
@@ -684,14 +818,15 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
     setShops((prev) => {
       const exists = prev.some((s) => s.slug === cleanSlug);
-      if (exists) {
-        return prev.map((s) => (s.slug === cleanSlug ? newTenant : s));
-      }
-      return [...prev, newTenant];
+      const nextShops = exists
+        ? prev.map((s) => (s.slug === cleanSlug ? newTenant : s))
+        : [...prev, newTenant];
+      syncDirectlyToCloud(nextShops);
+      return nextShops;
     });
 
     return newTenant;
-  }, []);
+  }, [syncDirectlyToCloud]);
 
   // SUPER ADMIN: Freeze / Activate / Expire Subscription Toggle
   const toggleShopSubscription = useCallback(
@@ -1560,30 +1695,13 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        // Doğrudan ve anında Supabase'e yaz (gecikme veya debounce beklemeden)
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase addBarber direct sync error:", error.message);
-            });
-        }
-
+        syncDirectlyToCloud(nextShops);
         return nextShops;
       });
 
       return created;
     },
-    [currentShop.slug, globalBlacklist, masterPin]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const updateBarber = useCallback(
@@ -1600,27 +1718,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase updateBarber direct sync error:", error.message);
-            });
-        }
-
+        syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
-    [currentShop.slug, globalBlacklist, masterPin]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const deleteBarber = useCallback(
@@ -1635,40 +1737,32 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase deleteBarber direct sync error:", error.message);
-            });
-        }
-
+        syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
-    [currentShop.slug, globalBlacklist, masterPin]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   // SERVICES CRUD (Scoped to Current Shop)
   const updateService = useCallback(
     (id: string, updated: Partial<Service>) => {
-      updateCurrentShop((shop) => ({
-        ...shop,
-        services: shop.services.map((s) =>
-          s.id === id ? { ...s, ...updated } : s
-        ),
-      }));
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                services: shop.services.map((s) =>
+                  s.id === id ? { ...s, ...updated } : s
+                ),
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const addService = useCallback(
@@ -1681,90 +1775,134 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         id: `srv-${Date.now()}`,
       };
 
-      updateCurrentShop((shop) => {
-        const existing = shop.services.find(
-          (s) => s.name.trim().toLocaleLowerCase("tr-TR") === normalizedNewName
-        );
-        if (existing) {
-          resultService = {
-            ...existing,
-            ...serviceData,
-            id: existing.id,
-          };
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+          const existing = shop.services.find(
+            (s) => s.name.trim().toLocaleLowerCase("tr-TR") === normalizedNewName
+          );
+          if (existing) {
+            resultService = {
+              ...existing,
+              ...serviceData,
+              id: existing.id,
+            };
+            return {
+              ...shop,
+              services: shop.services.map((s) =>
+                s.id === existing.id ? resultService : s
+              ),
+            };
+          }
           return {
             ...shop,
-            services: shop.services.map((s) =>
-              s.id === existing.id ? resultService : s
-            ),
+            services: [...shop.services, resultService],
           };
-        }
-        return {
-          ...shop,
-          services: [...shop.services, resultService],
-        };
+        });
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
       });
 
       return resultService;
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const deleteService = useCallback(
     (id: string) => {
-      updateCurrentShop((shop) => ({
-        ...shop,
-        services: shop.services.filter((s) => s.id !== id),
-      }));
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                services: shop.services.filter((s) => s.id !== id),
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   // SHOP SCHEDULE SETTINGS (Scoped to Current Shop)
   const updateShopSettings = useCallback(
     (updated: Partial<ShopSettings>) => {
-      updateCurrentShop((shop) => ({
-        ...shop,
-        shopSettings: { ...shop.shopSettings, ...updated },
-      }));
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                shopSettings: { ...shop.shopSettings, ...updated },
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const toggleClosedDay = useCallback(
     (dayOfWeek: number) => {
-      updateCurrentShop((shop) => {
-        const exists = shop.shopSettings.closedDays.includes(dayOfWeek);
-        return {
-          ...shop,
-          shopSettings: {
-            ...shop.shopSettings,
-            closedDays: exists
-              ? shop.shopSettings.closedDays.filter((d) => d !== dayOfWeek)
-              : [...shop.shopSettings.closedDays, dayOfWeek],
-          },
-        };
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+          const exists = shop.shopSettings.closedDays.includes(dayOfWeek);
+          return {
+            ...shop,
+            shopSettings: {
+              ...shop.shopSettings,
+              closedDays: exists
+                ? shop.shopSettings.closedDays.filter((d) => d !== dayOfWeek)
+                : [...shop.shopSettings.closedDays, dayOfWeek],
+            },
+          };
+        });
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
       });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   // ADMIN ALERTS (Scoped to Current Shop)
   const dismissAdminAlert = useCallback(
     (id: string) => {
-      updateCurrentShop((shop) => ({
-        ...shop,
-        adminAlerts: shop.adminAlerts.filter((a) => a.id !== id),
-      }));
+      recordDismissedAlertId(id);
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                adminAlerts: (shop.adminAlerts || []).filter((a) => a.id !== id),
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   const clearAllAdminAlerts = useCallback(() => {
-    updateCurrentShop((shop) => ({
-      ...shop,
-      adminAlerts: [],
-    }));
-  }, [updateCurrentShop]);
+    (currentShop.adminAlerts || []).forEach((a) => recordDismissedAlertId(a.id));
+    setShops((prevShops) => {
+      const nextShops = prevShops.map((shop) =>
+        shop.slug === currentShop.slug
+          ? {
+              ...shop,
+              adminAlerts: [],
+            }
+          : shop
+      );
+      syncDirectlyToCloud(nextShops);
+      return nextShops;
+    });
+  }, [currentShop.slug, currentShop.adminAlerts, syncDirectlyToCloud]);
 
   // RESET ALL DEMO DATA
   const resetDemoData = useCallback(() => {

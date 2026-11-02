@@ -22,7 +22,6 @@ import {
   CalendarDays,
 } from "lucide-react";
 import {
-  readPersistentSession,
   PWA_INSTALL_ROLE_KEY,
 } from "@/components/AdminPinGate";
 import {
@@ -68,26 +67,9 @@ export default function CustomerBookingPage() {
     getServicePriceForBarber,
   } = useBarber();
 
-  // Akıllı PWA & Oturum Yönlendirmesi (Berber vs Müşteri Ayrımı)
+  // Akıllı PWA Yönlendirmesi (Yalnızca telefon ana ekranına 'Admin' olarak kurulmuş PWA standalone ise)
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("preview") === "1") {
-      return;
-    }
-
-    const savedSession = readPersistentSession();
-    if (savedSession) {
-      const rememberedShop = shops.find(
-        (s) => s.slug.toLowerCase() === savedSession.shopSlug.toLowerCase()
-      );
-      const currentPin = (rememberedShop?.adminPin || "1234").trim();
-      if (rememberedShop && savedSession.pinSnapshot === currentPin) {
-        router.replace(`/admin?shop=${rememberedShop.slug}`);
-        return;
-      }
-    }
 
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
@@ -97,14 +79,16 @@ export default function CustomerBookingPage() {
     if (isStandalone) {
       try {
         const installedRole = localStorage.getItem(PWA_INSTALL_ROLE_KEY);
-        if (installedRole === "admin") {
+        // Sadece URL'de ?shop=... yoksa ve özel admin rolüyle kurulmuşsa admin'e yönlendir
+        const params = new URLSearchParams(window.location.search);
+        if (installedRole === "admin" && !params.get("shop")) {
           router.replace("/admin");
         }
       } catch {
         // ignore storage errors
       }
     }
-  }, [hydrated, shops, router]);
+  }, [hydrated, router]);
 
   // 3 Adımlı Ultra-Sade Randevu Sihirbazı (1: Dükkan & Hizmet, 2: Gün & Saat, 3: İsim, Telefon & Onay)
   const [step, setStep] = useState<number>(1);

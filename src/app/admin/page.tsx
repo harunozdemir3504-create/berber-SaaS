@@ -841,7 +841,15 @@ export default function AdminDashboardPage() {
                   </a>
                   <button
                     type="button"
-                    onClick={() => setLiveBookingBanner(null)}
+                    onClick={() => {
+                      if (liveBookingBanner?.appointmentId) {
+                        const matching = adminAlerts.find(
+                          (a) => a.appointmentId === liveBookingBanner.appointmentId
+                        );
+                        if (matching) dismissAdminAlert(matching.id);
+                      }
+                      setLiveBookingBanner(null);
+                    }}
                     className="rounded-xl border border-emerald-400/40 bg-black/30 px-3 py-2.5 text-xs font-bold text-emerald-200 hover:bg-black/50"
                   >
                     Kapat
@@ -880,8 +888,11 @@ export default function AdminDashboardPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => dismissAdminAlert(alert.id)}
-                    className="shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-bold text-[#e6ccb2]"
+                    onClick={() => {
+                      dismissAdminAlert(alert.id);
+                      setLiveBookingBanner(null);
+                    }}
+                    className="shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-bold text-[#e6ccb2] hover:bg-black/60 transition"
                   >
                     Tamam
                   </button>
@@ -891,7 +902,10 @@ export default function AdminDashboardPage() {
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    onClick={clearAllAdminAlerts}
+                    onClick={() => {
+                      clearAllAdminAlerts();
+                      setLiveBookingBanner(null);
+                    }}
                     className="text-xs font-bold text-[#e6ccb2]/80 underline"
                   >
                     Tüm Uyarıları Temizle
