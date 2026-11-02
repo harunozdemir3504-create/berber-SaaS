@@ -46,7 +46,11 @@ import {
   ChevronDown,
   FileText,
 } from "lucide-react";
-import { useBarber } from "@/context/BarberContext";
+import {
+  useBarber,
+  formatPhoneForWhatsApp,
+  buildWhatsAppUrl,
+} from "@/context/BarberContext";
 import AdminPinGate, { lockAdminSession } from "@/components/AdminPinGate";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
 import QuickBookingModal from "@/components/QuickBookingModal";
@@ -282,11 +286,14 @@ export default function AdminDashboardPage() {
     );
   };
 
-  const handleSendReminder = (apt: Appointment) => {
+  const handleSendReminder = (apt: Appointment, actionType: "reminder" | "approval" = "reminder") => {
     sendWhatsAppReminder(apt.id);
+    const formattedNo = formatPhoneForWhatsApp(apt.customerPhone);
     triggerToast(
-      `WhatsApp Hatırlatma Gönderildi`,
-      `${apt.customerName} (${apt.customerPhone}) numarasına ${currentShop.name} saat ${apt.time} randevusu için onay mesajı iletildi.`,
+      actionType === "approval"
+        ? `WhatsApp Onay Mesajı Hazırlandı`
+        : `WhatsApp Hatırlatma Mesajı Hazırlandı`,
+      `${apt.customerName} (+${formattedNo}) numarasına ${currentShop.name} saat ${apt.time} randevusu için WhatsApp penceresi açıldı.`,
       "whatsapp"
     );
   };
@@ -1132,6 +1139,17 @@ export default function AdminDashboardPage() {
                     .map((s) => s.name)
                     .join(" + ");
 
+                  const reminderText = `Merhaba ${apt.customerName}, ${currentShop.name} randevunuzu hatırlatmak isteriz. 📅 Tarih: ${apt.dateLabel} ⏰ Saat: ${apt.time} ✂️ İşlem: ${servicesSummary}. Sizi bekliyoruz!`;
+                  const approvalText = `Merhaba ${apt.customerName}, ${apt.dateLabel} saat ${apt.time} için ${currentShop.name} randevunuz onaylanmıştır. Görüşmek üzere!`;
+                  const reminderWhatsAppUrl = buildWhatsAppUrl(
+                    apt.customerPhone,
+                    reminderText
+                  );
+                  const approvalWhatsAppUrl = buildWhatsAppUrl(
+                    apt.customerPhone,
+                    approvalText
+                  );
+
                   return (
                     <motion.div
                       key={apt.id}
@@ -1349,24 +1367,39 @@ export default function AdminDashboardPage() {
                                   )}
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendReminder(apt)}
-                                  className={`col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition sm:col-span-1 ${
-                                    apt.reminderSent
-                                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                                      : "border-sky-500/35 bg-sky-500/10 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
-                                  }`}
-                                >
-                                  <Send className="h-3.5 w-3.5 shrink-0" />
-                                  <span>
-                                    {apt.reminderSent
-                                      ? `WhatsApp Gönderildi (${
-                                          apt.reminderSentAt || "✓"
-                                        })`
-                                      : "WhatsApp Hatırlatma"}
-                                  </span>
-                                </button>
+                                {/* Yeşil / Altın Uyumlu Şık İki WhatsApp Aksiyonu */}
+                                <div className="col-span-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+                                  <a
+                                    href={reminderWhatsAppUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() =>
+                                      handleSendReminder(apt, "reminder")
+                                    }
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/50 bg-gradient-to-r from-emerald-950/90 via-emerald-900/55 to-[#1a1512] px-3 py-2 text-xs font-extrabold text-emerald-300 shadow-sm shadow-emerald-950/50 transition hover:border-emerald-400 hover:from-emerald-600 hover:to-emerald-500 hover:text-[#081510]"
+                                    title={`+${formatPhoneForWhatsApp(apt.customerPhone)} numarasına WhatsApp hatırlatma mesajı gönder`}
+                                  >
+                                    <span>💬 WhatsApp Hatırlat</span>
+                                    {apt.reminderSent && (
+                                      <span className="rounded bg-emerald-500/25 px-1 py-0.2 text-[9px] font-black text-emerald-200">
+                                        ✓
+                                      </span>
+                                    )}
+                                  </a>
+
+                                  <a
+                                    href={approvalWhatsAppUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() =>
+                                      handleSendReminder(apt, "approval")
+                                    }
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#c88a53]/60 bg-gradient-to-r from-[#281e18] via-[#1f1914] to-emerald-950/60 px-3 py-2 text-xs font-extrabold text-[#e6ccb2] shadow-sm shadow-[#c88a53]/15 transition hover:border-[#e6ccb2] hover:from-[#b47b48] hover:via-[#c88a53] hover:to-[#9a6334] hover:text-[#1a110b]"
+                                    title={`+${formatPhoneForWhatsApp(apt.customerPhone)} numarasına WhatsApp onay mesajı gönder`}
+                                  >
+                                    <span>✅ Onay Mesajı Gönder</span>
+                                  </a>
+                                </div>
                               </div>
                             </div>
                           </motion.div>

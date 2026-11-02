@@ -46,6 +46,9 @@ import {
 import {
   useBarber,
   normalizePhone,
+  formatPhoneForWhatsApp,
+  buildWhatsAppUrl,
+  DEFAULT_SHOP_WHATSAPP_PHONE,
   minutesToTime,
   timeToMinutes,
 } from "@/context/BarberContext";
@@ -1541,7 +1544,7 @@ export default function CustomerBookingPage() {
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[#c88a53]/40 bg-[#c88a53]/15 px-3 py-1 text-xs font-bold text-[#e6ccb2]">
                   {isWaitlistMode
                     ? "YEDEK LİSTE KAYDINIZ ALINDI"
-                    : "RANDEVUNUZ ONAYLANDI"}
+                    : "RANDEVUNUZ ALINDI • ONAYLANDI"}
                 </span>
 
                 <h3 className="mt-2.5 text-xl font-extrabold text-[#fdf8f5] sm:text-2xl">
@@ -1608,7 +1611,36 @@ export default function CustomerBookingPage() {
                   </div>
                 </div>
 
-                <div className="mt-5">
+                <div className="mt-5 space-y-2.5">
+                  <a
+                    href={buildWhatsAppUrl(
+                      currentShop?.phone,
+                      `Merhaba, ben ${
+                        confirmedAppointment?.customerName || customerName.trim()
+                      }. ${
+                        confirmedAppointment?.dateLabel || selectedDay.fullDate
+                      } saat ${
+                        confirmedAppointment?.time || selectedSlot?.time || ""
+                      } için ${
+                        confirmedAppointment
+                          ? confirmedAppointment.services
+                              .map((s) => s.name)
+                              .join(" + ")
+                          : selectedServices.map((s) => s.name).join(" + ")
+                      } randevusu oluşturdum.`,
+                      DEFAULT_SHOP_WHATSAPP_PHONE
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`+${formatPhoneForWhatsApp(
+                      currentShop?.phone,
+                      DEFAULT_SHOP_WHATSAPP_PHONE
+                    )} numaralı salon hattına WhatsApp mesajı gönder`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/60 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-3.5 text-xs font-black text-[#081510] shadow-lg shadow-emerald-500/25 transition hover:brightness-110 active:scale-[0.99] sm:text-sm"
+                  >
+                    <span>📲 Berbere WhatsApp&apos;tan Bildir</span>
+                  </a>
+
                   <button
                     type="button"
                     onClick={handleResetWizard}

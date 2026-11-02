@@ -27,6 +27,11 @@ import {
   WaitlistEntry,
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+export {
+  formatPhoneForWhatsApp,
+  buildWhatsAppUrl,
+  DEFAULT_SHOP_WHATSAPP_PHONE,
+} from "@/lib/whatsapp";
 
 interface NewShopInput {
   name: string;
