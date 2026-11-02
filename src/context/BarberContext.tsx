@@ -27,6 +27,7 @@ import {
   WaitlistEntry,
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { triggerAutomaticBookingNotification } from "@/lib/notifications";
 export {
   formatPhoneForWhatsApp,
   buildWhatsAppUrl,
@@ -1002,23 +1003,104 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         appointmentCode: generateAppointmentCode(currentShop.slug),
       };
 
-      updateCurrentShop((shop) => ({
-        ...shop,
-        appointments: [...shop.appointments, newApt].sort((a, b) =>
-          a.time.localeCompare(b.time)
-        ),
-        stats: newApt.depositAmount
-          ? {
-              ...shop.stats,
-              savedRevenue: shop.stats.savedRevenue + newApt.totalPrice,
-              preventedNoShows: shop.stats.preventedNoShows + 1,
-            }
-          : shop.stats,
-      }));
+      const servicesSummary = newApt.services.map((s) => s.name).join(" + ");
+      const isOnlineCustomerBooking =
+        !newApt.isBlockedSlot && newApt.bookingSource !== "phone";
+
+      const now = new Date();
+      const timeStampStr = `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes()
+      ).padStart(2, "0")}`;
+
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+
+          const newBookingAlert = isOnlineCustomerBooking
+            ? [
+                {
+                  id: `alert-booking-${newApt.id}`,
+                  title: `🔔 YENİ RANDEVU GELDİ: ${newApt.customerName} - ${newApt.time}`,
+                  message: `${newApt.dateLabel} saat ${newApt.time} • ${servicesSummary} (${newApt.totalPrice} TL) • Tel: ${newApt.customerPhone}`,
+                  timestamp: timeStampStr,
+                  type: "new_booking" as const,
+                  read: false,
+                  appointmentId: newApt.id,
+                  customerName: newApt.customerName,
+                  customerPhone: newApt.customerPhone,
+                  time: newApt.time,
+                  dateLabel: newApt.dateLabel,
+                  servicesSummary,
+                },
+                ...shop.adminAlerts,
+              ]
+            : shop.adminAlerts;
+
+          return {
+            ...shop,
+            appointments: [...shop.appointments, newApt].sort((a, b) =>
+              a.time.localeCompare(b.time)
+            ),
+            adminAlerts: newBookingAlert,
+            stats: newApt.depositAmount
+              ? {
+                  ...shop.stats,
+                  savedRevenue: shop.stats.savedRevenue + newApt.totalPrice,
+                  preventedNoShows: shop.stats.preventedNoShows + 1,
+                }
+              : shop.stats,
+          };
+        });
+
+        try {
+          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
+        } catch {
+          // ignore
+        }
+
+        if (isSupabaseConfigured && supabase) {
+          supabase
+            .from("app_state")
+            .upsert({
+              key: "global_state",
+              data: {
+                shops: nextShops,
+                globalBlacklist,
+                masterPin,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .then(({ error }) => {
+              if (error) {
+                console.warn("Supabase addAppointment sync error:", error.message);
+              }
+            });
+        }
+
+        return nextShops;
+      });
+
+      if (isOnlineCustomerBooking) {
+        triggerAutomaticBookingNotification({
+          appointmentId: newApt.id,
+          appointmentCode: newApt.appointmentCode,
+          shopSlug: currentShop.slug,
+          shopName: currentShop.name,
+          shopPhone: currentShop.phone,
+          customerName: newApt.customerName,
+          customerPhone: newApt.customerPhone,
+          barberName: newApt.barberName,
+          dateLabel: newApt.dateLabel,
+          time: newApt.time,
+          servicesSummary,
+          totalPrice: newApt.totalPrice,
+          createdAtIso: now.toISOString(),
+        });
+      }
 
       return newApt;
     },
-    [currentShop.slug, updateCurrentShop]
+    [currentShop.slug, currentShop.name, currentShop.phone, globalBlacklist, masterPin]
   );
 
   // Add Blocked Time Range (Özel Durum / Saati Kapat)

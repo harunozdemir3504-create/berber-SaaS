@@ -131,8 +131,14 @@ export interface AdminAlert {
   title: string;
   message: string;
   timestamp: string;
-  type: "cancellation_waitlist" | "noshow_waitlist" | "reschedule" | "info";
+  type: "new_booking" | "cancellation_waitlist" | "noshow_waitlist" | "reschedule" | "info";
   read: boolean;
+  appointmentId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  time?: string;
+  dateLabel?: string;
+  servicesSummary?: string;
 }
 
 export interface RevenueStats {
