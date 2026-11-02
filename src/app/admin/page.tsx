@@ -51,7 +51,8 @@ import QrPosterModal from "@/components/QrPosterModal";
 import {
   Appointment,
   Barber,
-  DAYS_METADATA,
+  getLiveDaysMetadata,
+  resolveDayMetadata,
   Service,
   WEEKDAYS_TR,
 } from "@/data/mockData";
@@ -65,6 +66,7 @@ import {
 
 type BottomNavTab = "appointments" | "quick_add" | "other";
 type AppointmentFilterTab = "active" | "history";
+type AdminDayViewMode = "today" | "tomorrow" | "calendar" | "all";
 type OtherSubTab = "stats_blacklist" | "barbers" | "services" | "schedule";
 
 export default function AdminDashboardPage() {
@@ -103,10 +105,20 @@ export default function AdminDashboardPage() {
     removeAppointmentOrBlock,
   } = useBarber();
 
+  // Gerçek Zamanlı Canlı Tarih (new Date() - Türkiye Saati, Bugün + Önümüzdeki 7 Gün)
+  const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
+  const todayDay = liveDays[0];
+  const tomorrowDay = liveDays[1];
+
   // Alt Navigasyon (3 Temiz Sekme: 📅 Randevular | ➕ Hızlı Ekle | ⚙️ Diğer)
   const [bottomTab, setBottomTab] = useState<BottomNavTab>("appointments");
   const [appointmentFilter, setAppointmentFilter] =
     useState<AppointmentFilterTab>("active");
+  // Gün Seçici Şerit: Varsayılan olarak her zaman "Bugün" ("today") seçili gelir
+  const [adminDayMode, setAdminDayMode] = useState<AdminDayViewMode>("today");
+  const [selectedCalendarDayId, setSelectedCalendarDayId] = useState<string>(
+    () => getLiveDaysMetadata(7)[2]?.id || getLiveDaysMetadata(7)[0].id
+  );
   const [otherSubTab, setOtherSubTab] =
     useState<OtherSubTab>("stats_blacklist");
 
@@ -132,7 +144,9 @@ export default function AdminDashboardPage() {
   );
   const [quickName, setQuickName] = useState<string>("");
   const [quickPhone, setQuickPhone] = useState<string>("");
-  const [quickDayId, setQuickDayId] = useState<string>(DAYS_METADATA[0].id);
+  const [quickDayId, setQuickDayId] = useState<string>(
+    () => getLiveDaysMetadata(7)[0].id
+  );
   const [quickTime, setQuickTime] = useState<string>("");
   const [quickServiceIds, setQuickServiceIds] = useState<string[]>([]);
   const [quickBarberId, setQuickBarberId] = useState<string>("");
@@ -390,8 +404,12 @@ export default function AdminDashboardPage() {
   };
 
   // ➕ HIZLI EKLE KAYDETME FONKSİYONU (3 Kutu: İsim, Saat, Hizmet)
-  const quickSelectedDay =
-    DAYS_METADATA.find((d) => d.id === quickDayId) || DAYS_METADATA[0];
+  const quickSelectedDay = useMemo(
+    () =>
+      liveDays.find((d) => d.id === quickDayId) ||
+      resolveDayMetadata(quickDayId),
+    [liveDays, quickDayId]
+  );
   const quickSelectedBarber =
     realBarbers.find((b) => b.id === quickBarberId) ||
     realBarbers[0] ||
@@ -442,7 +460,7 @@ export default function AdminDashboardPage() {
 
     const created = addAppointment({
       dayId: quickSelectedDay.id,
-      dateLabel: `${quickSelectedDay.label} (${quickSelectedDay.dateStr})`,
+      dateLabel: quickSelectedDay.chipLabel,
       time: quickTime,
       endTime: minutesToTime(
         timeToMinutes(quickTime) + (quickTotalDuration || 30)
@@ -470,10 +488,18 @@ export default function AdminDashboardPage() {
     setQuickPhone("");
     setQuickTime("");
     setAppointmentFilter("active");
+    if (quickSelectedDay.id === todayDay.id) {
+      setAdminDayMode("today");
+    } else if (quickSelectedDay.id === tomorrowDay.id) {
+      setAdminDayMode("tomorrow");
+    } else {
+      setSelectedCalendarDayId(quickSelectedDay.id);
+      setAdminDayMode("calendar");
+    }
     setBottomTab("appointments");
     triggerToast(
       `Randevu Eklendi: ${created.customerName} (${created.time})`,
-      `${quickSelectedDay.label} saat ${created.time} vitrinde dolu olarak kapatıldı.`,
+      `${quickSelectedDay.chipLabel} saat ${created.time} vitrinde dolu olarak kapatıldı.`,
       "success"
     );
   };
@@ -649,22 +675,116 @@ export default function AdminDashboardPage() {
     triggerToast("Yeni Hizmet Eklendi", `${newServiceName} eklendi.`, "success");
   };
 
-  // Randevu Listesi Hesaplamaları
-  const activeAppointments = appointments.filter(
-    (apt) => apt.status === "upcoming"
+  // Randevu Listesi ve Gün Gün Ayrım Hesaplamaları (09:00 -> 21:00 Kronolojik Sıralama)
+  const sortChronologically = useCallback((list: Appointment[]) => {
+    return [...list].sort((a, b) => {
+      const dayA = resolveDayMetadata(a.dayId).id;
+      const dayB = resolveDayMetadata(b.dayId).id;
+      if (dayA !== dayB) {
+        return dayA.localeCompare(dayB);
+      }
+      return timeToMinutes(a.time) - timeToMinutes(b.time);
+    });
+  }, []);
+
+  const activeAppointments = useMemo(
+    () =>
+      sortChronologically(
+        appointments.filter((apt) => apt.status === "upcoming")
+      ),
+    [appointments, sortChronologically]
   );
-  const historyAppointments = appointments.filter(
-    (apt) =>
-      apt.status === "completed" ||
-      apt.status === "no_show" ||
-      apt.status === "cancelled"
+
+  const historyAppointments = useMemo(
+    () =>
+      sortChronologically(
+        appointments.filter(
+          (apt) =>
+            apt.status === "completed" ||
+            apt.status === "no_show" ||
+            apt.status === "cancelled"
+        )
+      ),
+    [appointments, sortChronologically]
   );
-  const completedRevenue = appointments
-    .filter((apt) => apt.status === "completed")
-    .reduce((sum, apt) => sum + apt.totalPrice, 0);
+
+  const completedRevenue = useMemo(
+    () =>
+      appointments
+        .filter((apt) => apt.status === "completed")
+        .reduce((sum, apt) => sum + apt.totalPrice, 0),
+    [appointments]
+  );
+
+  // Her Gün İçin Bekleyen Randevu Sayısı Rozeti (Badge) Hesaplayıcı
+  const getPendingCountForDay = useCallback(
+    (targetDayId: string) => {
+      const normalizedTarget = resolveDayMetadata(targetDayId).id;
+      return activeAppointments.filter(
+        (apt) =>
+          !apt.isBlockedSlot &&
+          resolveDayMetadata(apt.dayId).id === normalizedTarget
+      ).length;
+    },
+    [activeAppointments]
+  );
+
+  const todayPendingCount = useMemo(
+    () => getPendingCountForDay(todayDay.id),
+    [getPendingCountForDay, todayDay.id]
+  );
+
+  const tomorrowPendingCount = useMemo(
+    () => getPendingCountForDay(tomorrowDay.id),
+    [getPendingCountForDay, tomorrowDay.id]
+  );
+
+  const otherDaysPendingCount = useMemo(
+    () =>
+      activeAppointments.filter((apt) => {
+        if (apt.isBlockedSlot) return false;
+        const dId = resolveDayMetadata(apt.dayId).id;
+        return dId !== todayDay.id && dId !== tomorrowDay.id;
+      }).length,
+    [activeAppointments, todayDay.id, tomorrowDay.id]
+  );
+
+  const allPendingCount = useMemo(
+    () => activeAppointments.filter((apt) => !apt.isBlockedSlot).length,
+    [activeAppointments]
+  );
+
+  // Seçili Gün Filtresi (Varsayılan: Bugün)
+  const activeTargetDayId: string | null = useMemo(() => {
+    if (adminDayMode === "today") return todayDay.id;
+    if (adminDayMode === "tomorrow") return tomorrowDay.id;
+    if (adminDayMode === "calendar") return selectedCalendarDayId;
+    return null; // "all" (Tümü)
+  }, [adminDayMode, todayDay.id, tomorrowDay.id, selectedCalendarDayId]);
+
+  const activeTargetDayMeta = useMemo(
+    () => (activeTargetDayId ? resolveDayMetadata(activeTargetDayId) : null),
+    [activeTargetDayId]
+  );
+
+  const dayFilteredActiveAppointments = useMemo(() => {
+    if (!activeTargetDayId) return activeAppointments;
+    return activeAppointments.filter(
+      (apt) => resolveDayMetadata(apt.dayId).id === activeTargetDayId
+    );
+  }, [activeAppointments, activeTargetDayId]);
+
+  const dayFilteredHistoryAppointments = useMemo(() => {
+    if (!activeTargetDayId) return historyAppointments;
+    return historyAppointments.filter(
+      (apt) => resolveDayMetadata(apt.dayId).id === activeTargetDayId
+    );
+  }, [historyAppointments, activeTargetDayId]);
 
   const displayedAppointments =
-    appointmentFilter === "active" ? activeAppointments : historyAppointments;
+    appointmentFilter === "active"
+      ? dayFilteredActiveAppointments
+      : dayFilteredHistoryAppointments;
 
   return (
     <AdminPinGate>
@@ -880,10 +1000,223 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* ===================================================================== */}
-        {/* SEKME 1: 📅 RANDEVULAR (VARSAYILAN ANA EKRAN — ÇOK OKUNAKLI VE SADE) */}
+        {/* SEKME 1: 📅 RANDEVULAR (VARSAYILAN ANA EKRAN — GÜN GÜN AYRIMLI)      */}
         {/* ===================================================================== */}
         {bottomTab === "appointments" && (
           <div className="space-y-4">
+            {/* YATAY GÜN SEÇİCİ ŞERİT: [Bugün] [Yarın] [Diğer Günler / Takvim] [Tümü] */}
+            <div className="rounded-3xl border border-[#c88a53]/45 bg-[#161311] p-3 shadow-lg">
+              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#e6ccb2]">
+                  <CalendarIcon className="h-3.5 w-3.5 text-[#c88a53]" />
+                  <span>
+                    {activeTargetDayMeta
+                      ? `${activeTargetDayMeta.chipLabel} — ${activeTargetDayMeta.fullDate}`
+                      : "Tüm Günlerin Randevuları"}
+                  </span>
+                </span>
+                <span className="rounded-lg bg-white/5 px-2 py-0.5 text-[11px] font-bold text-stone-400">
+                  {shopSettings.openTime} → {shopSettings.closeTime} Sıralı
+                </span>
+              </div>
+
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                {/* 1. [Bugün] (Varsayılan Seçili) */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("today")}
+                  className={`flex min-w-[115px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
+                    adminDayMode === "today"
+                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                  }`}
+                >
+                  <div>
+                    <span className="block text-sm font-black leading-tight">
+                      Bugün
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold ${
+                        adminDayMode === "today"
+                          ? "text-[#1a110b]/85"
+                          : "text-[#c88a53]"
+                      }`}
+                    >
+                      {todayDay.dateStr}
+                    </span>
+                  </div>
+                  <span
+                    className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
+                      adminDayMode === "today"
+                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        : "bg-emerald-500/20 text-emerald-300"
+                    }`}
+                  >
+                    {todayPendingCount}
+                  </span>
+                </button>
+
+                {/* 2. [Yarın] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("tomorrow")}
+                  className={`flex min-w-[115px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
+                    adminDayMode === "tomorrow"
+                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                  }`}
+                >
+                  <div>
+                    <span className="block text-sm font-black leading-tight">
+                      Yarın
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold ${
+                        adminDayMode === "tomorrow"
+                          ? "text-[#1a110b]/85"
+                          : "text-[#c88a53]"
+                      }`}
+                    >
+                      {tomorrowDay.dateStr}
+                    </span>
+                  </div>
+                  <span
+                    className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
+                      adminDayMode === "tomorrow"
+                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        : "bg-emerald-500/20 text-emerald-300"
+                    }`}
+                  >
+                    {tomorrowPendingCount}
+                  </span>
+                </button>
+
+                {/* 3. [Diğer Günler / Takvim] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("calendar")}
+                  className={`flex min-w-[155px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
+                    adminDayMode === "calendar"
+                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                  }`}
+                >
+                  <div>
+                    <span className="block text-xs font-black leading-tight sm:text-sm">
+                      Diğer Günler / Takvim
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold ${
+                        adminDayMode === "calendar"
+                          ? "text-[#1a110b]/85"
+                          : "text-[#c88a53]"
+                      }`}
+                    >
+                      {adminDayMode === "calendar" && activeTargetDayMeta
+                        ? activeTargetDayMeta.chipLabel
+                        : "Gün Seç"}
+                    </span>
+                  </div>
+                  <span
+                    className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
+                      adminDayMode === "calendar"
+                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        : "bg-emerald-500/20 text-emerald-300"
+                    }`}
+                  >
+                    {otherDaysPendingCount}
+                  </span>
+                </button>
+
+                {/* 4. [Tümü] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("all")}
+                  className={`flex min-w-[105px] shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
+                    adminDayMode === "all"
+                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                  }`}
+                >
+                  <div>
+                    <span className="block text-sm font-black leading-tight">
+                      Tümü
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold ${
+                        adminDayMode === "all"
+                          ? "text-[#1a110b]/85"
+                          : "text-stone-400"
+                      }`}
+                    >
+                      Tüm Günler
+                    </span>
+                  </div>
+                  <span
+                    className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
+                      adminDayMode === "all"
+                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        : "bg-white/10 text-[#e6ccb2]"
+                    }`}
+                  >
+                    {allPendingCount}
+                  </span>
+                </button>
+              </div>
+
+              {/* Diğer Günler / Takvim Açılır Alt Şeridi */}
+              {adminDayMode === "calendar" && (
+                <div className="mt-3 space-y-2.5 border-t border-white/10 pt-3">
+                  <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                    {liveDays.slice(2).map((d) => {
+                      const isChosen = selectedCalendarDayId === d.id;
+                      const count = getPendingCountForDay(d.id);
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setSelectedCalendarDayId(d.id)}
+                          className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${
+                            isChosen
+                              ? "border-emerald-400 bg-emerald-500 text-[#06150f]"
+                              : "border-white/15 bg-[#110e0c] text-[#fdf8f5] hover:border-white/30"
+                          }`}
+                        >
+                          <span>{d.chipLabel}</span>
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                              isChosen
+                                ? "bg-[#06150f]/20 text-[#06150f]"
+                                : "bg-emerald-500/20 text-emerald-300"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#110e0c] px-3 py-2">
+                    <span className="text-xs font-bold text-[#e6ccb2]">
+                      📅 Takvimden İleri Bir Tarih Seçin:
+                    </span>
+                    <input
+                      type="date"
+                      min={todayDay.isoDate}
+                      value={selectedCalendarDayId}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setSelectedCalendarDayId(e.target.value);
+                        }
+                      }}
+                      className="rounded-lg border border-[#c88a53]/50 bg-[#181411] px-3 py-1.5 text-xs font-black text-[#fdf8f5] outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Sadece "Bekleyenler" ve "Geçmiş" Filtresi */}
             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-[#161311] p-1.5">
               <button
@@ -895,7 +1228,9 @@ export default function AdminDashboardPage() {
                     : "text-stone-400 hover:text-[#fdf8f5]"
                 }`}
               >
-                <span>⏳ Bekleyenler ({activeAppointments.length})</span>
+                <span>
+                  ⏳ Bekleyenler ({dayFilteredActiveAppointments.length})
+                </span>
               </button>
 
               <button
@@ -907,7 +1242,9 @@ export default function AdminDashboardPage() {
                     : "text-stone-400 hover:text-[#fdf8f5]"
                 }`}
               >
-                <span>✅ Geçmiş ({historyAppointments.length})</span>
+                <span>
+                  ✅ Geçmiş ({dayFilteredHistoryAppointments.length})
+                </span>
               </button>
             </div>
 
@@ -917,8 +1254,16 @@ export default function AdminDashboardPage() {
                 <CalendarIcon className="mx-auto h-10 w-10 text-[#c88a53]" />
                 <h3 className="mt-3 text-lg font-extrabold text-[#fdf8f5]">
                   {appointmentFilter === "active"
-                    ? "Şu Anda Bekleyen Randevu Yok"
-                    : "Henüz Geçmiş Randevu Yok"}
+                    ? `${
+                        activeTargetDayMeta
+                          ? activeTargetDayMeta.chipLabel
+                          : "Seçili Gün"
+                      } İçin Bekleyen Randevu Yok`
+                    : `${
+                        activeTargetDayMeta
+                          ? activeTargetDayMeta.chipLabel
+                          : "Seçili Gün"
+                      } İçin Geçmiş Randevu Yok`}
                 </h3>
                 <p className="mt-1 text-sm text-stone-400">
                   {appointmentFilter === "active"
@@ -929,6 +1274,9 @@ export default function AdminDashboardPage() {
             ) : (
               <div className="space-y-3">
                 {displayedAppointments.map((apt) => {
+                  const resolvedAptDay = resolveDayMetadata(apt.dayId);
+                  const cleanDateLabel = resolvedAptDay.chipLabel;
+
                   // Kilitli Saat Kartı
                   if (apt.isBlockedSlot) {
                     return (
@@ -939,7 +1287,7 @@ export default function AdminDashboardPage() {
                         <div>
                           <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-2.5 py-1 text-sm font-black text-amber-300">
                             <Lock className="h-4 w-4" />
-                            {apt.time} - {apt.endTime} ({apt.dateLabel})
+                            {apt.time} - {apt.endTime} ({cleanDateLabel})
                           </span>
                           <p className="mt-1.5 text-base font-extrabold text-[#fdf8f5]">
                             Saat Kapatıldı: {apt.blockReason} ({apt.barberName})
@@ -971,8 +1319,8 @@ export default function AdminDashboardPage() {
                     .map((s) => s.name)
                     .join(" + ");
 
-                  const reminderText = `Merhaba ${apt.customerName}, ${currentShop.name} randevunuzu hatırlatmak isteriz. 📅 Tarih: ${apt.dateLabel} ⏰ Saat: ${apt.time} ✂️ İşlem: ${servicesSummary}. Sizi bekliyoruz!`;
-                  const approvalText = `Merhaba ${apt.customerName}, ${apt.dateLabel} saat ${apt.time} için ${currentShop.name} randevunuz onaylanmıştır. Görüşmek üzere!`;
+                  const reminderText = `Merhaba ${apt.customerName}, ${currentShop.name} randevunuzu hatırlatmak isteriz. 📅 Tarih: ${cleanDateLabel} ⏰ Saat: ${apt.time} ✂️ İşlem: ${servicesSummary}. Sizi bekliyoruz!`;
+                  const approvalText = `Merhaba ${apt.customerName}, ${cleanDateLabel} saat ${apt.time} için ${currentShop.name} randevunuz onaylanmıştır. Görüşmek üzere!`;
                   const reminderWhatsAppUrl = buildWhatsAppUrl(
                     apt.customerPhone,
                     reminderText
@@ -1000,8 +1348,8 @@ export default function AdminDashboardPage() {
                             <span className="text-xl font-black leading-none text-[#fdf8f5] sm:text-2xl">
                               {apt.time}
                             </span>
-                            <span className="mt-1 text-[11px] font-extrabold text-[#e6ccb2]">
-                              {apt.dateLabel.split(" ")[0]}
+                            <span className="mt-1 whitespace-nowrap text-[11px] font-extrabold text-[#e6ccb2]">
+                              {cleanDateLabel}
                             </span>
                           </div>
 
@@ -1171,14 +1519,14 @@ export default function AdminDashboardPage() {
 
             {/* KUTU 2: SAAT SEÇİMİ */}
             <div className="rounded-2xl border border-white/10 bg-[#110e0c] p-4">
-              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="mb-2.5 flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-sm font-black uppercase text-[#e6ccb2]">
                   <Clock className="h-4 w-4 text-emerald-400" />
-                  <span>2. Saat Seçin ({quickSelectedDay.label})</span>
+                  <span>2. Gün & Saat Seçin ({quickSelectedDay.chipLabel})</span>
                 </label>
 
-                <div className="flex gap-1.5 overflow-x-auto">
-                  {DAYS_METADATA.slice(0, 4).map((d) => (
+                <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
+                  {liveDays.map((d) => (
                     <button
                       key={d.id}
                       type="button"
@@ -1186,13 +1534,13 @@ export default function AdminDashboardPage() {
                         setQuickDayId(d.id);
                         setQuickTime("");
                       }}
-                      className={`rounded-lg border px-2.5 py-1 text-xs font-extrabold ${
+                      className={`shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${
                         quickDayId === d.id
                           ? "border-[#e6ccb2] bg-[#c88a53] text-[#1a110b]"
-                          : "border-white/10 bg-[#181411] text-stone-300"
+                          : "border-white/10 bg-[#181411] text-stone-300 hover:border-white/30"
                       }`}
                     >
-                      {d.label}
+                      {d.chipLabel}
                     </button>
                   ))}
                 </div>

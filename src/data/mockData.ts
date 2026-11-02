@@ -57,15 +57,19 @@ export interface TimeSlot {
 }
 
 export interface DayMetadata {
-  id: string;
-  label: string; // e.g., "Bugün", "Yarın", "Cuma"
-  dayName: string; // e.g., "Çarşamba"
-  dateStr: string; // e.g., "28 Eki"
-  fullDate: string;
-  dayNumber: string;
-  monthShort: string;
+  id: string; // Gerçek ISO tarih: "YYYY-MM-DD" (Örn: "2026-11-02")
+  isoDate: string; // "YYYY-MM-DD"
+  label: string; // Örn: "Bugün", "Yarın", "4 Kas Çar"
+  chipLabel: string; // Örn: "Bugün (2 Kas)", "Yarın (3 Kas)", "4 Kas Çar"
+  dayName: string; // Örn: "Pazartesi"
+  dayShort: string; // Örn: "Pzt"
+  dateStr: string; // Örn: "2 Kas"
+  fullDate: string; // Örn: "2 Kasım Pazartesi"
+  dayNumber: string; // Örn: "2"
+  monthShort: string; // Örn: "KAS"
   dayOfWeek: number; // 0 (Pazar) - 6 (Cumartesi)
   isToday?: boolean;
+  isTomorrow?: boolean;
 }
 
 export type TrustBadgeType = "trusted" | "first_time" | "deposit_paid";
@@ -74,8 +78,8 @@ export type AppointmentStatus = "upcoming" | "completed" | "no_show" | "cancelle
 export interface Appointment {
   id: string;
   appointmentCode: string; // e.g., "#BRB-4829"
-  dayId: string; // e.g., "day-1"
-  dateLabel: string; // e.g., "Bugün (28 Eki)"
+  dayId: string; // Gerçek ISO tarih: "YYYY-MM-DD"
+  dateLabel: string; // Örn: "Bugün (2 Kas)"
   time: string;
   endTime: string;
   customerName: string;
@@ -345,86 +349,219 @@ export const INITIAL_SERVICES: Service[] = [
   },
 ];
 
-export const DAYS_METADATA: DayMetadata[] = [
-  {
-    id: "day-1",
-    label: "Bugün",
-    dayName: "Çarşamba",
-    dateStr: "28 Eki",
-    dayNumber: "28",
-    monthShort: "EKİ",
-    fullDate: "28 Ekim Çarşamba",
-    dayOfWeek: 3,
-    isToday: true,
-  },
-  {
-    id: "day-2",
-    label: "Yarın",
-    dayName: "Perşembe",
-    dateStr: "29 Eki",
-    dayNumber: "29",
-    monthShort: "EKİ",
-    fullDate: "29 Ekim Perşembe",
-    dayOfWeek: 4,
-  },
-  {
-    id: "day-3",
-    label: "Cuma",
-    dayName: "Cuma",
-    dateStr: "30 Eki",
-    dayNumber: "30",
-    monthShort: "EKİ",
-    fullDate: "30 Ekim Cuma",
-    dayOfWeek: 5,
-  },
-  {
-    id: "day-4",
-    label: "Cumartesi",
-    dayName: "Cumartesi",
-    dateStr: "31 Eki",
-    dayNumber: "31",
-    monthShort: "EKİ",
-    fullDate: "31 Ekim Cumartesi",
-    dayOfWeek: 6,
-  },
-  {
-    id: "day-5",
-    label: "Pazar",
-    dayName: "Pazar",
-    dateStr: "1 Kas",
-    dayNumber: "01",
-    monthShort: "KAS",
-    fullDate: "1 Kasım Pazar",
-    dayOfWeek: 0,
-  },
-  {
-    id: "day-6",
-    label: "Pazartesi",
-    dayName: "Pazartesi",
-    dateStr: "2 Kas",
-    dayNumber: "02",
-    monthShort: "KAS",
-    fullDate: "2 Kasım Pazartesi",
-    dayOfWeek: 1,
-  },
-  {
-    id: "day-7",
-    label: "Salı",
-    dayName: "Salı",
-    dateStr: "3 Kas",
-    dayNumber: "03",
-    monthShort: "KAS",
-    fullDate: "3 Kasım Salı",
-    dayOfWeek: 2,
-  },
+export const TR_MONTHS_SHORT = [
+  "Oca",
+  "Şub",
+  "Mar",
+  "Nis",
+  "May",
+  "Haz",
+  "Tem",
+  "Ağu",
+  "Eyl",
+  "Eki",
+  "Kas",
+  "Ara",
 ];
+
+export const TR_MONTHS_FULL = [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık",
+];
+
+export const TR_DAYS_FULL = [
+  "Pazar",
+  "Pazartesi",
+  "Salı",
+  "Çarşamba",
+  "Perşembe",
+  "Cuma",
+  "Cumartesi",
+];
+
+export const TR_DAYS_SHORT = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
+
+/**
+ * Cihazın gerçek güncel tarihini Türkiye saat dilimine (Europe/Istanbul, +03:00) göre döndürür.
+ */
+export function getTurkeyNow(): Date {
+  const now = new Date();
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Istanbul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+    const get = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value || 0);
+    const rawHour = get("hour");
+    return new Date(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      rawHour === 24 ? 0 : rawHour,
+      get("minute"),
+      get("second")
+    );
+  } catch {
+    return now;
+  }
+}
+
+export function toIsoDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function buildDayMetadataFromDate(
+  targetDate: Date,
+  todayRef: Date = getTurkeyNow()
+): DayMetadata {
+  const cleanTarget = new Date(
+    targetDate.getFullYear(),
+    targetDate.getMonth(),
+    targetDate.getDate()
+  );
+  const cleanToday = new Date(
+    todayRef.getFullYear(),
+    todayRef.getMonth(),
+    todayRef.getDate()
+  );
+
+  const diffDays = Math.round(
+    (cleanTarget.getTime() - cleanToday.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  const dayNum = cleanTarget.getDate();
+  const monthIdx = cleanTarget.getMonth();
+  const dayOfWeek = cleanTarget.getDay();
+
+  const monthShortTr = TR_MONTHS_SHORT[monthIdx] || "";
+  const monthFullTr = TR_MONTHS_FULL[monthIdx] || "";
+  const dayNameTr = TR_DAYS_FULL[dayOfWeek] || "";
+  const dayShortTr = TR_DAYS_SHORT[dayOfWeek] || "";
+
+  const isoDate = toIsoDateString(cleanTarget);
+  const dateStr = `${dayNum} ${monthShortTr}`;
+  const fullDate = `${dayNum} ${monthFullTr} ${dayNameTr}`;
+
+  const isToday = diffDays === 0;
+  const isTomorrow = diffDays === 1;
+
+  const label = isToday
+    ? "Bugün"
+    : isTomorrow
+    ? "Yarın"
+    : `${dayNum} ${monthShortTr} ${dayShortTr}`;
+
+  const chipLabel = isToday
+    ? `Bugün (${dateStr})`
+    : isTomorrow
+    ? `Yarın (${dateStr})`
+    : `${dayNum} ${monthShortTr} ${dayShortTr}`;
+
+  return {
+    id: isoDate,
+    isoDate,
+    label,
+    chipLabel,
+    dayName: dayNameTr,
+    dayShort: dayShortTr,
+    dateStr,
+    fullDate,
+    dayNumber: String(dayNum),
+    monthShort: monthShortTr.toUpperCase(),
+    dayOfWeek,
+    isToday,
+    isTomorrow,
+  };
+}
+
+/**
+ * Bugünden başlayarak önümüzdeki `count` günün (varsayılan 7 gün) gerçek zamanlı
+ * tarih verilerini üretir. Geçmiş günler kesinlikle dahil edilmez.
+ */
+export function getLiveDaysMetadata(count: number = 7): DayMetadata[] {
+  const today = getTurkeyNow();
+  const days: DayMetadata[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + i
+    );
+    days.push(buildDayMetadataFromDate(d, today));
+  }
+  return days;
+}
+
+/**
+ * Verilen ISO tarih veya eski "day-1", "day-2" kimliğini gerçek güncel DayMetadata'ya çevirir.
+ */
+export function resolveDayMetadata(rawDayId?: string | null): DayMetadata {
+  const liveDays = getLiveDaysMetadata(14);
+  if (!rawDayId) return liveDays[0];
+
+  const trimmed = rawDayId.trim();
+
+  // Eski "day-1" .. "day-7" formatını bugünden itibaren gerçek günlere eşle
+  if (/^day-\d+$/i.test(trimmed)) {
+    const idx = Math.max(0, parseInt(trimmed.split("-")[1], 10) - 1);
+    return liveDays[Math.min(idx, liveDays.length - 1)] || liveDays[0];
+  }
+
+  // ISO "YYYY-MM-DD" formatı
+  const matched = liveDays.find((d) => d.id === trimmed || d.isoDate === trimmed);
+  if (matched) return matched;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [y, m, d] = trimmed.split("-").map(Number);
+    const parsed = new Date(y, (m || 1) - 1, d || 1);
+    const today = getTurkeyNow();
+    const cleanToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    // Geçmiş bir tarih kalmışsa bugüne çek
+    if (parsed.getTime() < cleanToday.getTime()) {
+      return liveDays[0];
+    }
+    return buildDayMetadataFromDate(parsed, today);
+  }
+
+  return liveDays[0];
+}
+
+export const DAYS_METADATA: DayMetadata[] = getLiveDaysMetadata(7);
+
+const _D0 = DAYS_METADATA[0];
+const _D1 = DAYS_METADATA[1] || _D0;
+const _D2 = DAYS_METADATA[2] || _D0;
 
 export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-0a",
     appointmentCode: "#BRB-0910",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "09:00",
     endTime: "09:45",
     customerName: "Cemil Karadağ",
@@ -447,8 +584,8 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-0b",
     appointmentCode: "#BRB-0945",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "09:30",
     endTime: "10:15",
     customerName: "Melih Gündüz",
@@ -472,8 +609,8 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-1",
     appointmentCode: "#BRB-1042",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "10:00",
     endTime: "10:45",
     customerName: "Burak Soylu",
@@ -497,8 +634,8 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-2",
     appointmentCode: "#BRB-2190",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "10:30",
     endTime: "11:00",
     customerName: "Emre Karahan",
@@ -519,8 +656,8 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-3",
     appointmentCode: "#BRB-3085",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "12:00",
     endTime: "13:30",
     customerName: "Kaan Demirtaş",
@@ -540,8 +677,8 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-4",
     appointmentCode: "#BRB-4829",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
     time: "15:00",
     endTime: "15:45",
     customerName: "Tolga Çelik",
@@ -556,17 +693,17 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     totalPrice: 600,
     totalDuration: 45,
     trustBadge: "first_time",
-    trustDetail: "İlk Randevu • WhatsApp OTP Doğrulandı",
+    trustDetail: "İlk Randevu • WhatsApp Doğrulandı",
     status: "upcoming",
     reminderSent: false,
   },
   {
     id: "apt-5",
     appointmentCode: "#BRB-5512",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
-    time: "16:00",
-    endTime: "16:45",
+    dayId: _D0.id,
+    dateLabel: _D0.chipLabel,
+    time: "16:30",
+    endTime: "17:15",
     customerName: "Oğuzhan Yıldırım",
     customerPhone: "0555 000 00 00",
     barberId: "mert",
@@ -587,10 +724,10 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "apt-6",
     appointmentCode: "#BRB-6740",
-    dayId: "day-1",
-    dateLabel: "Bugün (28 Eki)",
-    time: "17:30",
-    endTime: "18:15",
+    dayId: _D1.id,
+    dateLabel: _D1.chipLabel,
+    time: "11:00",
+    endTime: "11:45",
     customerName: "Serkan Aksoy",
     customerPhone: "0530 911 64 22",
     barberId: "ahmet",
@@ -604,6 +741,26 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     status: "upcoming",
     reminderSent: false,
   },
+  {
+    id: "apt-7",
+    appointmentCode: "#BRB-7120",
+    dayId: _D2.id,
+    dateLabel: _D2.chipLabel,
+    time: "14:00",
+    endTime: "14:30",
+    customerName: "Murat Bozdağ",
+    customerPhone: "0532 718 44 10",
+    barberId: "mert",
+    barberName: "Stilist Mert",
+    chairLabel: "Koltuk #2",
+    services: [{ name: "Saç Kesimi", price: 450, duration: 30 }],
+    totalPrice: 450,
+    totalDuration: 30,
+    trustBadge: "trusted",
+    trustDetail: "Sadakat Üyesi",
+    status: "upcoming",
+    reminderSent: false,
+  },
 ];
 
 export const INITIAL_WAITLIST: WaitlistEntry[] = [
@@ -611,9 +768,9 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     id: "wl-1",
     customerName: "Alperen Kaya",
     customerPhone: "0532 601 88 12",
-    dayId: "day-1",
+    dayId: _D0.id,
     requestedTime: "15:00",
-    requestedDateLabel: "Bugün",
+    requestedDateLabel: _D0.label,
     barberName: "Usta Kerem",
     servicesSummary: "Saç Kesimi + Sakal Tıraşı",
     totalPrice: 600,
@@ -624,9 +781,9 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     id: "wl-2",
     customerName: "Mertcan Aydın",
     customerPhone: "0543 772 10 95",
-    dayId: "day-1",
+    dayId: _D0.id,
     requestedTime: "15:00",
-    requestedDateLabel: "Bugün",
+    requestedDateLabel: _D0.label,
     barberName: "Fark Etmez (İlk Müsait)",
     servicesSummary: "Saç Kesimi",
     totalPrice: 400,
@@ -637,9 +794,9 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     id: "wl-3",
     customerName: "Hakan Şahin",
     customerPhone: "0536 994 21 00",
-    dayId: "day-1",
-    requestedTime: "16:00",
-    requestedDateLabel: "Bugün",
+    dayId: _D0.id,
+    requestedTime: "16:30",
+    requestedDateLabel: _D0.label,
     barberName: "Stilist Mert",
     servicesSummary: "Saç & Sakal Komple Bakım",
     totalPrice: 550,
@@ -650,9 +807,9 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     id: "wl-4",
     customerName: "Onur Koçak",
     customerPhone: "0533 812 49 01",
-    dayId: "day-1",
+    dayId: _D0.id,
     requestedTime: "12:00",
-    requestedDateLabel: "Bugün",
+    requestedDateLabel: _D0.label,
     barberName: "Başberber Ahmet",
     servicesSummary: "VIP Damat Paketi",
     totalPrice: 1800,
@@ -666,7 +823,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05550000000",
     name: "Kayıtlı No-Show Müşterisi (Test)",
-    missedDate: "14 Ekim 2026 - 17:00",
+    missedDate: "Geçen Hafta - 17:00",
     missedService: "Saç & Sakal Komple Bakım (550 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "atelier-noir",
@@ -675,7 +832,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05329001122",
     name: "Caner Pektaş",
-    missedDate: "18 Ekim 2026 - 15:30",
+    missedDate: "6 Gün Önce - 15:30",
     missedService: "VIP Damat Paketi (1500 TL)",
     requiredDeposit: 150,
     reportedByShopSlug: "makas-vip",
@@ -684,7 +841,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05428113344",
     name: "Gökhan Sarı",
-    missedDate: "19 Ekim 2026 - 12:00",
+    missedDate: "5 Gün Önce - 12:00",
     missedService: "Saç Kesimi + Sakal (600 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "atelier-noir",
@@ -693,7 +850,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05334045566",
     name: "Barış Özkan",
-    missedDate: "20 Ekim 2026 - 18:00",
+    missedDate: "5 Gün Önce - 18:00",
     missedService: "Skin Fade & Sakal Tasarımı (500 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "makas-vip",
@@ -702,7 +859,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05456127788",
     name: "Cenk Yılmazer",
-    missedDate: "21 Ekim 2026 - 14:00",
+    missedDate: "4 Gün Önce - 14:00",
     missedService: "Saç Kesimi (400 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "salon-harun",
@@ -711,7 +868,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05302229900",
     name: "Sinan Akbulut",
-    missedDate: "22 Ekim 2026 - 16:30",
+    missedDate: "4 Gün Önce - 16:30",
     missedService: "Keratin Botoks & Saç Spa (450 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "atelier-noir",
@@ -720,7 +877,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05359981123",
     name: "Volkan Erdem",
-    missedDate: "23 Ekim 2026 - 11:00",
+    missedDate: "3 Gün Önce - 11:00",
     missedService: "Saç & Sakal Komple Bakım (550 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "makas-vip",
@@ -729,7 +886,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05443318877",
     name: "Uğur Taşkın",
-    missedDate: "24 Ekim 2026 - 19:00",
+    missedDate: "3 Gün Önce - 19:00",
     missedService: "Saç Kesimi (450 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "atelier-noir",
@@ -738,7 +895,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05367114455",
     name: "Koray Güler",
-    missedDate: "25 Ekim 2026 - 15:00",
+    missedDate: "2 Gün Önce - 15:00",
     missedService: "Buharlı Cilt Bakımı (300 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "salon-harun",
@@ -747,7 +904,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05381092233",
     name: "Tuna Soydan",
-    missedDate: "26 Ekim 2026 - 17:30",
+    missedDate: "2 Gün Önce - 17:30",
     missedService: "Saç Kesimi + Sakal Tıraşı (600 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "makas-vip",
@@ -756,7 +913,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05418826611",
     name: "Levent Çakır",
-    missedDate: "26 Ekim 2026 - 18:30",
+    missedDate: "Dün - 18:30",
     missedService: "VIP Damat Paketi (1500 TL)",
     requiredDeposit: 150,
     reportedByShopSlug: "atelier-noir",
@@ -765,7 +922,7 @@ export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
     phone: "05327654321",
     name: "Arda Kılıç",
-    missedDate: "27 Ekim 2026 - 13:30",
+    missedDate: "Dün - 13:30",
     missedService: "Saç Kesimi (400 TL)",
     requiredDeposit: 100,
     reportedByShopSlug: "makas-vip",
@@ -921,8 +1078,8 @@ export const INITIAL_SHOPS: TenantShop[] = [
       {
         id: "makas-apt-0",
         appointmentCode: "#MKS-1012",
-        dayId: "day-1",
-        dateLabel: "Bugün (28 Eki)",
+        dayId: _D0.id,
+        dateLabel: _D0.chipLabel,
         time: "10:00",
         endTime: "10:30",
         customerName: "Kerem Aktürkoğlu",
@@ -942,8 +1099,8 @@ export const INITIAL_SHOPS: TenantShop[] = [
       {
         id: "makas-apt-1",
         appointmentCode: "#MKS-8821",
-        dayId: "day-1",
-        dateLabel: "Bugün (28 Eki)",
+        dayId: _D0.id,
+        dateLabel: _D0.chipLabel,
         time: "11:00",
         endTime: "11:45",
         customerName: "Efe Çamoğlu",
@@ -963,8 +1120,8 @@ export const INITIAL_SHOPS: TenantShop[] = [
       {
         id: "makas-apt-2",
         appointmentCode: "#MKS-4109",
-        dayId: "day-1",
-        dateLabel: "Bugün (28 Eki)",
+        dayId: _D0.id,
+        dateLabel: _D0.chipLabel,
         time: "15:30",
         endTime: "16:00",
         customerName: "Dorukhan Yaman",
@@ -986,9 +1143,9 @@ export const INITIAL_SHOPS: TenantShop[] = [
         id: "makas-wl-1",
         customerName: "Batuhan Güzel",
         customerPhone: "0533 619 82 00",
-        dayId: "day-1",
+        dayId: _D0.id,
         requestedTime: "15:30",
-        requestedDateLabel: "Bugün",
+        requestedDateLabel: _D0.label,
         barberName: "Stilist Baran",
         servicesSummary: "Executive Saç Kesimi",
         totalPrice: 500,
@@ -1011,8 +1168,8 @@ export const INITIAL_SHOPS: TenantShop[] = [
     district: "Moda, Kadıköy",
     monthlyFee: 1000,
     subscriptionStatus: "expired", // Süresi Doldu (Nazik uyarı bildirimi aktif)
-    subscriptionEndDate: "25 Ekim 2026",
-    createdAt: "02 Ekim 2026",
+    subscriptionEndDate: "01 Kasım 2026",
+    createdAt: "01 Eylül 2026",
     adminPin: "1234",
     depositPolicy: "require_deposit",
     depositAmount: 100,
@@ -1096,8 +1253,8 @@ export const INITIAL_SHOPS: TenantShop[] = [
       {
         id: "harun-apt-1",
         appointmentCode: "#HRN-3011",
-        dayId: "day-1",
-        dateLabel: "Bugün (28 Eki)",
+        dayId: _D0.id,
+        dateLabel: _D0.chipLabel,
         time: "14:00",
         endTime: "15:00",
         customerName: "Kemal Arslan",

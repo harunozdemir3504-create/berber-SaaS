@@ -21,13 +21,12 @@ import {
   Store,
   CalendarDays,
 } from "lucide-react";
-import PwaInstallBanner from "@/components/PwaInstallBanner";
 import {
   readPersistentSession,
   PWA_INSTALL_ROLE_KEY,
 } from "@/components/AdminPinGate";
 import {
-  DAYS_METADATA,
+  getLiveDaysMetadata,
   Barber,
   Service,
   DayMetadata,
@@ -114,8 +113,11 @@ export default function CustomerBookingPage() {
   const [selectedBarberId, setSelectedBarberId] = useState<string>("any");
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
 
-  // Adım 2: Gün ve Saat Seçimi
-  const [selectedDay, setSelectedDay] = useState<DayMetadata>(DAYS_METADATA[0]);
+  // Gerçek Zamanlı Canlı Tarih (new Date() - Türkiye Saati, Bugün + Önümüzdeki 7 Gün)
+  const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
+
+  // Adım 2: Gün ve Saat Seçimi (Varsayılan her zaman Bugün, geçmiş günler listelenmez)
+  const [selectedDay, setSelectedDay] = useState<DayMetadata>(() => getLiveDaysMetadata(7)[0]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
 
   // Adım 3: İsim, Telefon ve Onay
@@ -213,7 +215,7 @@ export default function CustomerBookingPage() {
 
     const created = addAppointment({
       dayId: selectedDay.id,
-      dateLabel: `${selectedDay.label} (${selectedDay.dateStr})`,
+      dateLabel: selectedDay.chipLabel,
       time: selectedSlot.time,
       endTime: calculateEndTime(selectedSlot.time, totalDuration),
       customerName: customerName.trim(),
@@ -584,14 +586,14 @@ export default function CustomerBookingPage() {
                 </span>
               </div>
 
-              {/* Gün Seçimi — Büyük ve Net Butonlar */}
+              {/* Gün Seçimi — Bugünden Başlayan 7 Gerçek Gün (Yatay Kaydırılabilir Şık Kutular) */}
               <div>
                 <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
                   <CalendarDays className="h-4 w-4 text-[#c88a53]" />
-                  <span>1. Günü Seçin</span>
+                  <span>1. Günü Seçin (7 Günlük Canlı Takvim)</span>
                 </label>
-                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                  {DAYS_METADATA.map((day) => {
+                <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1.5">
+                  {liveDays.map((day) => {
                     const isSelected = selectedDay.id === day.id;
                     const isDayClosed = shopSettings.closedDays.includes(
                       day.dayOfWeek
@@ -608,7 +610,7 @@ export default function CustomerBookingPage() {
                           setSelectedDay(day);
                           setSelectedSlot(null);
                         }}
-                        className={`flex min-w-[84px] shrink-0 flex-col items-center rounded-2xl border-2 px-3 py-2.5 transition ${
+                        className={`flex min-w-[116px] shrink-0 flex-col items-center justify-between rounded-2xl border-2 px-3.5 py-3 transition ${
                           isSelected
                             ? "border-[#e6ccb2] bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
                             : isDayClosed
@@ -616,22 +618,19 @@ export default function CustomerBookingPage() {
                             : "border-white/10 bg-[#14110f] text-[#fdf8f5] hover:border-white/30"
                         }`}
                       >
-                        <span className="text-xs font-black uppercase">
-                          {day.label}
-                        </span>
-                        <span className="my-0.5 text-xl font-black">
-                          {day.dayNumber}
+                        <span className="whitespace-nowrap text-xs font-black tracking-tight sm:text-sm">
+                          {day.chipLabel}
                         </span>
                         <span
-                          className={`text-[10px] font-extrabold ${
+                          className={`mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
                             isSelected
-                              ? "text-[#1a110b]"
+                              ? "bg-[#1a110b]/20 text-[#1a110b]"
                               : isDayClosed
-                              ? "text-rose-400"
-                              : "text-emerald-400"
+                              ? "bg-rose-500/15 text-rose-400"
+                              : "bg-emerald-500/15 text-emerald-400"
                           }`}
                         >
-                          {isDayClosed ? "Kapalı" : `${freeCount} Boş`}
+                          {isDayClosed ? "Kapalı" : `${freeCount} Boş Saat`}
                         </span>
                       </button>
                     );
@@ -706,7 +705,7 @@ export default function CustomerBookingPage() {
               >
                 <span>
                   {selectedSlot
-                    ? `${selectedDay.label} Saat ${selectedSlot.time} İçin Devam Et`
+                    ? `${selectedDay.chipLabel} Saat ${selectedSlot.time} İçin Devam Et`
                     : "Lütfen Bir Saat Seçin"}
                 </span>
                 <ChevronRight className="h-5 w-5 stroke-[3]" />
@@ -756,7 +755,7 @@ export default function CustomerBookingPage() {
                       </div>
                       <div className="text-right">
                         <span className="inline-block rounded-xl bg-emerald-500/20 px-3 py-1 text-sm font-black text-emerald-300">
-                          {selectedDay.label} • Saat {selectedSlot?.time}
+                          {selectedDay.chipLabel} • Saat {selectedSlot?.time}
                         </span>
                         <p className="mt-1 text-base font-black text-[#e6ccb2]">
                           Toplam: {totalPrice} TL
@@ -1015,9 +1014,6 @@ export default function CustomerBookingPage() {
           )}
         </AnimatePresence>
       </div>
-
-      {/* PWA "Uygulamayı Yükle" Barı En Altta Küçük ve Sade Dursun */}
-      <PwaInstallBanner mode="customer" />
     </div>
   );
 }

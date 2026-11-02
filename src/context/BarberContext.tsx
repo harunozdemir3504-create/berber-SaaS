@@ -25,6 +25,7 @@ import {
   SubscriptionStatus,
   TimeSlot,
   WaitlistEntry,
+  resolveDayMetadata,
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { triggerAutomaticBookingNotification } from "@/lib/notifications";
@@ -227,6 +228,50 @@ function deduplicateServices(list: Service[]): Service[] {
   return Array.from(map.values());
 }
 
+/**
+ * Normalizes any legacy/hardcoded dayId ("day-1", etc.) or outdated dateLabel
+ * into real-time Türkiye dates (new Date()) and sorts appointments chronologically (09:00 -> 21:00).
+ */
+function sanitizeShopDates(shop: TenantShop): TenantShop {
+  const sanitizedAppointments = (shop.appointments || [])
+    .map((apt) => {
+      const resolved = resolveDayMetadata(apt.dayId);
+      return {
+        ...apt,
+        dayId: resolved.id,
+        dateLabel: resolved.chipLabel,
+      };
+    })
+    .sort((a, b) => {
+      if (a.dayId !== b.dayId) {
+        return a.dayId.localeCompare(b.dayId);
+      }
+      return timeToMinutes(a.time) - timeToMinutes(b.time);
+    });
+
+  const sanitizedWaitlist = (shop.waitlist || []).map((wl) => {
+    const resolved = resolveDayMetadata(wl.dayId);
+    return {
+      ...wl,
+      dayId: resolved.id,
+      requestedDateLabel: resolved.label,
+    };
+  });
+
+  return {
+    ...shop,
+    adminPin: shop.adminPin || "1234",
+    barbers: (shop.barbers || []).map((b) => ({
+      ...b,
+      commissionRate:
+        typeof b.commissionRate === "number" ? b.commissionRate : 50,
+    })),
+    services: deduplicateServices(shop.services || []),
+    appointments: sanitizedAppointments,
+    waitlist: sanitizedWaitlist,
+  };
+}
+
 // Helper component that syncs URL `?shop=[slug]` with context state
 function ShopUrlQuerySync({
   onSlugChange,
@@ -262,18 +307,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       if (savedShops) {
         const parsed: TenantShop[] = JSON.parse(savedShops);
         if (Array.isArray(parsed)) {
-          setShops(
-            parsed.map((shop) => ({
-              ...shop,
-              adminPin: shop.adminPin || "1234",
-              barbers: (shop.barbers || []).map((b) => ({
-                ...b,
-                commissionRate:
-                  typeof b.commissionRate === "number" ? b.commissionRate : 50,
-              })),
-              services: deduplicateServices(shop.services || []),
-            }))
-          );
+          setShops(parsed.map(sanitizeShopDates));
         }
       }
 
@@ -343,18 +377,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             };
 
             if (isMounted && Array.isArray(remote.shops)) {
-              setShops(
-                remote.shops.map((shop) => ({
-                  ...shop,
-                  adminPin: shop.adminPin || "1234",
-                  barbers: (shop.barbers || []).map((b) => ({
-                    ...b,
-                    commissionRate:
-                      typeof b.commissionRate === "number" ? b.commissionRate : 50,
-                  })),
-                  services: deduplicateServices(shop.services || []),
-                }))
-              );
+              setShops(remote.shops.map(sanitizeShopDates));
             }
 
             if (isMounted && Array.isArray(remote.globalBlacklist)) {
@@ -406,11 +429,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             const nextData = payload.new?.data;
             if (nextData) {
               setShops((prevShops) => {
-                if (
-                  Array.isArray(nextData.shops) &&
-                  JSON.stringify(prevShops) !== JSON.stringify(nextData.shops)
-                ) {
-                  return nextData.shops;
+                if (Array.isArray(nextData.shops)) {
+                  const sanitizedNext = nextData.shops.map(sanitizeShopDates);
+                  if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
+                    return sanitizedNext;
+                  }
                 }
                 return prevShops;
               });
@@ -928,6 +951,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const getSlotsForDay = useCallback(
     (dayId: string): TimeSlot[] => {
       const { shopSettings, appointments, waitlist } = currentShop;
+      const targetDayId = resolveDayMetadata(dayId).id;
       const startMins = timeToMinutes(shopSettings.openTime);
       const endMins = timeToMinutes(shopSettings.closeTime);
       const interval = Math.max(15, shopSettings.slotInterval || 30);
@@ -952,8 +976,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         }
 
         const activeApt = appointments.find((a) => {
+          const aptDayId = resolveDayMetadata(a.dayId).id;
           if (
-            a.dayId !== dayId ||
+            aptDayId !== targetDayId ||
             a.status === "cancelled" ||
             a.status === "no_show"
           ) {
@@ -969,7 +994,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         });
 
         const waitingCount = waitlist.filter(
-          (w) => w.dayId === dayId && w.requestedTime === timeLabel
+          (w) =>
+            resolveDayMetadata(w.dayId).id === targetDayId &&
+            w.requestedTime === timeLabel
         ).length;
 
         if (activeApt) {
@@ -997,8 +1024,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   // Add Appointment to Current Shop
   const addAppointment = useCallback(
     (newAptData: Omit<Appointment, "id" | "appointmentCode">): Appointment => {
+      const resolvedDay = resolveDayMetadata(newAptData.dayId);
       const newApt: Appointment = {
         ...newAptData,
+        dayId: resolvedDay.id,
+        dateLabel: resolvedDay.chipLabel,
         id: `apt-${Date.now()}`,
         appointmentCode: generateAppointmentCode(currentShop.slug),
       };
@@ -1038,9 +1068,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
           return {
             ...shop,
-            appointments: [...shop.appointments, newApt].sort((a, b) =>
-              a.time.localeCompare(b.time)
-            ),
+            appointments: [...shop.appointments, newApt].sort((a, b) => {
+              if (a.dayId !== b.dayId) return a.dayId.localeCompare(b.dayId);
+              return timeToMinutes(a.time) - timeToMinutes(b.time);
+            }),
             adminAlerts: newBookingAlert,
             stats: newApt.depositAmount
               ? {

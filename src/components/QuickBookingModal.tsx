@@ -18,7 +18,7 @@ import {
   Sparkles,
   Search,
 } from "lucide-react";
-import { DAYS_METADATA, Appointment } from "@/data/mockData";
+import { getLiveDaysMetadata, Appointment } from "@/data/mockData";
 import {
   useBarber,
   minutesToTime,
@@ -57,19 +57,21 @@ export default function QuickBookingModal({
   const [tab, setTab] = useState<ModalTab>("phone");
   const [error, setError] = useState<string>("");
 
+  const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
+
   // Phone booking state (Pratik & Esnaf Dostu)
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [barberId, setBarberId] = useState<string>("");
   const [phoneBarberSearch, setPhoneBarberSearch] = useState<string>("");
   const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [dayId, setDayId] = useState<string>(DAYS_METADATA[0].id);
+  const [dayId, setDayId] = useState<string>(() => getLiveDaysMetadata(7)[0].id);
   const [time, setTime] = useState<string>("");
 
   // Block state (Sade & Hızlı Saat Kapatma)
   const [blockBarberId, setBlockBarberId] = useState<string>("");
   const [blockBarberSearch, setBlockBarberSearch] = useState<string>("");
-  const [blockDayId, setBlockDayId] = useState<string>(DAYS_METADATA[0].id);
+  const [blockDayId, setBlockDayId] = useState<string>(() => getLiveDaysMetadata(7)[0].id);
   const [blockReason, setBlockReason] = useState<string>("");
   const [blockStart, setBlockStart] = useState<string>("");
   const [blockEnd, setBlockEnd] = useState<string>("");
@@ -106,11 +108,11 @@ export default function QuickBookingModal({
     setBarberId(realBarbers[0]?.id || "");
     setPhoneBarberSearch("");
     setServiceIds(services[0] ? [services[0].id] : []);
-    setDayId(DAYS_METADATA[0].id);
+    setDayId(liveDays[0].id);
     setTime("");
     setBlockBarberId(realBarbers[0]?.id || "");
     setBlockBarberSearch("");
-    setBlockDayId(DAYS_METADATA[0].id);
+    setBlockDayId(liveDays[0].id);
     setBlockReason("");
     setBlockStart("");
     setBlockEnd("");
@@ -127,9 +129,9 @@ export default function QuickBookingModal({
   const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
 
   const selectedDay =
-    DAYS_METADATA.find((d) => d.id === dayId) || DAYS_METADATA[0];
+    liveDays.find((d) => d.id === dayId) || liveDays[0];
   const blockDay =
-    DAYS_METADATA.find((d) => d.id === blockDayId) || DAYS_METADATA[0];
+    liveDays.find((d) => d.id === blockDayId) || liveDays[0];
 
   const phoneSlots = useMemo(() => getSlotsForDay(dayId), [getSlotsForDay, dayId]);
   const blockSlots = useMemo(
@@ -476,7 +478,7 @@ export default function QuickBookingModal({
                       <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" /> Tarih *
                     </label>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {DAYS_METADATA.map((d) => {
+                      {liveDays.map((d) => {
                         const closed = shopSettings.closedDays.includes(d.dayOfWeek);
                         return (
                           <button
@@ -625,7 +627,7 @@ export default function QuickBookingModal({
                       <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" /> Tarih *
                     </label>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {DAYS_METADATA.map((d) => {
+                      {liveDays.map((d) => {
                         const closed = shopSettings.closedDays.includes(d.dayOfWeek);
                         return (
                           <button
