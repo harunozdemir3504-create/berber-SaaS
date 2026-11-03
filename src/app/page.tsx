@@ -21,6 +21,7 @@ import {
   Store,
   CalendarDays,
   MessageSquare,
+  Zap,
 } from "lucide-react";
 import {
   PWA_INSTALL_ROLE_KEY,
@@ -1159,57 +1160,59 @@ export default function CustomerBookingPage() {
 
                   <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
                     {confirmedAppointment?.status === "confirmed"
-                      ? `Harika, Randevunuz Onaylandı ${customerName}!`
+                      ? `Harika, Randevunuz Kesinleşti ${customerName}!`
                       : `Randevunuz Alındı, ${customerName}!`}
                   </h3>
-                  <p className="mt-1 text-xs text-stone-300">
-                    {confirmedAppointment?.status === "confirmed"
-                      ? "Onay kodunuz berberinize iletildi. Randevunuz sistem tarafından otomatik olarak onaylandı."
-                      : "WhatsApp butonuna bastığınızda onay kodunuz berbere iletilecek ve randevunuz anında onaylanacaktır."}
-                  </p>
 
-                  {/* 4 HANELİ ONAY KODU VURGULU KART */}
-                  {confirmedAppointment && (
-                    <div className="mx-auto my-4 max-w-sm rounded-2xl border-2 border-dashed border-amber-400/80 bg-gradient-to-b from-amber-500/15 via-[#1a1715] to-[#111113] p-4 text-center shadow-xl shadow-amber-500/10">
-                      <span className="block text-[11px] font-black uppercase tracking-wider text-amber-300">
-                        ONAY KODUNUZ
-                      </span>
-                      <div className="my-2 flex items-center justify-center gap-2.5">
-                        <span className="font-mono text-3xl font-black tracking-widest text-[#fdf8f5] sm:text-4xl drop-shadow-md">
-                          {confirmedAppointment.verificationCode || "#4829"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCopyCode(
-                              confirmedAppointment.verificationCode || "#4829"
-                            )
-                          }
-                          className="inline-flex items-center gap-1 rounded-xl border border-amber-400/30 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          <span>{copiedCode ? "Kopyalandı" : "Kopyala"}</span>
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs font-bold leading-relaxed text-amber-200/95">
-                        {confirmedAppointment?.status === "confirmed"
-                          ? "Onay kodunuz berberinize iletildi. Randevunuz listede onaylı olarak yer almaktadır."
-                          : "Randevunuzun anında kesinleşmesi için aşağıdaki butona basarak onay kodunuzu WhatsApp üzerinden gönderin."}
-                      </p>
-                    </div>
-                  )}
+                  {/* 1. DİKKAT ÇEKİCİ SARI/TURUNCU UYARI KUTUSU */}
+                  <div
+                    className={`mx-auto my-3.5 max-w-md rounded-2xl border-2 p-3.5 sm:p-4 text-center shadow-lg transition-all ${
+                      confirmedAppointment?.status === "confirmed"
+                        ? "border-emerald-500/70 bg-emerald-500/15 shadow-emerald-500/10 text-emerald-200"
+                        : "border-amber-400 bg-amber-500/20 shadow-amber-500/15 text-amber-200"
+                    }`}
+                  >
+                    <p className="text-xs sm:text-sm font-black leading-relaxed">
+                      {confirmedAppointment?.status === "confirmed"
+                        ? "✅ TEBRİKLER: Randevunuz berberinize iletildi ve sistem tarafından otomatik olarak kesinleştirildi. Randevu saatinde salonda olmanız yeterlidir."
+                        : "⚠️ SON ADIM: Randevunuzun kesinleşmesi için aşağıdaki yeşil butona basıp açılan WhatsApp mesajını berberinize göndermeniz ZORUNLUDUR. Mesajı gönderdiğiniz anda randevunuz otomatik onaylanacaktır."}
+                    </p>
+                  </div>
 
-                  {/* BÜYÜK YEŞİL WHATSAPP İLE ONAYLA BUTONU (OTOMATİK ONAY TETİKLER) */}
+                  {/* 2. EKRANDA ŞIK VE KOMPAKT RANDEVU ÖZETİ KARTI VE BUTON */}
                   {(() => {
-                    const vCode =
+                    const rawCode =
                       confirmedAppointment?.verificationCode || "#4829";
-                    const cleanDate =
-                      confirmedAppointment?.dateLabel || selectedDay.chipLabel;
-                    const cleanTime =
+                    const vCode = rawCode.startsWith("#") ? rawCode : `#${rawCode}`;
+                    const barberText =
+                      confirmedAppointment?.barberName || selectedBarber?.name || "Usta";
+                    const dateText =
+                      selectedDay.fullDate ||
+                      confirmedAppointment?.dateLabel ||
+                      selectedDay.chipLabel;
+                    const timeText =
                       confirmedAppointment?.time || selectedSlot?.time || "";
-                    const client =
-                      confirmedAppointment?.customerName || customerName.trim();
-                    const waMessage = `Merhaba, viprandevusistemi.com.tr randevu onay kodum: ${vCode} - ${client}`;
+                    const serviceNamesText =
+                      confirmedAppointment?.services?.map((s) => s.name).join(" + ") ||
+                      selectedServices.map((s) => s.name).join(" + ") ||
+                      "Saç Kesimi";
+                    const isEarlyEligible = Boolean(
+                      confirmedAppointment?.canComeEarly ?? canComeEarly
+                    );
+
+                    // 3. WHATSAPP TAM BİLDİRİM ŞABLONU
+                    const waMessageLines = [
+                      `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
+                      `👤 *Müşteri:* ${customerName.trim()}`,
+                      `💈 *Usta:* ${barberText}`,
+                      `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
+                      `📋 *İşlem:* ${serviceNamesText}`,
+                    ];
+                    if (isEarlyEligible) {
+                      waMessageLines.push("⚡ Not: Erken boşluk olursa gelebilir.");
+                    }
+                    const waMessage = waMessageLines.join("\n");
+
                     const waHref = buildWhatsAppUrl(
                       currentShop?.phone,
                       waMessage,
@@ -1225,57 +1228,84 @@ export default function CustomerBookingPage() {
                       }
                     };
 
-                    const isConfirmed = confirmedAppointment?.status === "confirmed";
+                    const isConfirmed =
+                      confirmedAppointment?.status === "confirmed";
 
                     return (
-                      <div className="mt-4 space-y-3">
+                      <div className="mx-auto max-w-md space-y-3">
+                        {/* Randevu Özeti Kartı (Butonun hemen üstünde) */}
+                        <div className="rounded-2xl border border-white/15 bg-[#141417] p-3.5 sm:p-4 text-left shadow-xl space-y-2.5">
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <span className="text-xs font-bold text-stone-400">
+                              💈 Berber / Koltuk:
+                            </span>
+                            <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
+                              {barberText}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <span className="text-xs font-bold text-stone-400">
+                              📅 Tarih & Saat:
+                            </span>
+                            <span className="text-xs sm:text-sm font-black text-amber-300">
+                              {dateText} - {timeText}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <span className="text-xs font-bold text-stone-400">
+                              📋 İşlem:
+                            </span>
+                            <span className="text-xs sm:text-sm font-bold text-[#fdf8f5] text-right truncate max-w-[200px] sm:max-w-[240px]">
+                              {serviceNamesText}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-0.5">
+                            <span className="text-xs font-bold text-[#dfc39e]">
+                              🔑 Onay Kodu:
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-base font-black tracking-wider text-[#fdf8f5]">
+                                {vCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCode(vCode)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-300 hover:bg-white/10"
+                              >
+                                {copiedCode ? "Kopyalandı" : "Kopyala"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {isEarlyEligible && (
+                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2 py-1 text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                              <Zap className="h-3 w-3 fill-amber-300 shrink-0" />
+                              <span>⚡ Erken boşluk olursa haber verilecek</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* BÜYÜK YEŞİL WHATSAPP BUTONU */}
                         <a
                           href={waHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={handleWhatsAppClick}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-3 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
                         >
-                          <MessageSquare className="h-5 w-5 fill-[#081510]" />
-                          <span>
+                          <MessageSquare className="h-5 w-5 fill-[#081510] shrink-0" />
+                          <span className="text-center">
                             {isConfirmed
                               ? "💬 WhatsApp Açıldı • Randevunuz Onaylandı ✅"
-                              : "💬 WhatsApp ile Onay Kodunu Gönder"}
+                              : "💬 WhatsApp'tan Gönder ve Randevuyu Kesinleştir"}
                           </span>
                         </a>
                       </div>
                     );
                   })()}
-
-                  {/* Randevu Detay Özeti */}
-                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#111113] p-3.5 text-left text-xs sm:text-sm">
-                    <div className="flex justify-between border-b border-white/10 pb-2">
-                      <span className="text-stone-400">Dükkan / Usta:</span>
-                      <span className="font-bold text-[#fdf8f5]">
-                        {currentShop.name} ({selectedBarber?.name})
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-white/10 pb-2">
-                      <span className="text-stone-400">Tarih & Saat:</span>
-                      <span className="font-black text-amber-300">
-                        {selectedDay.fullDate} • {selectedSlot?.time}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-white/10 pb-2">
-                      <span className="text-stone-400">Hizmet:</span>
-                      <span className="font-bold text-[#fdf8f5]">
-                        {selectedServices.map((s) => s.name).join(" + ")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between pt-1">
-                      <span className="font-bold text-[#f3e8dc]">
-                        Toplam Tutar:
-                      </span>
-                      <span className="text-base font-black text-[#dfc39e]">
-                        {totalPrice} TL
-                      </span>
-                    </div>
-                  </div>
 
                   <div className="mt-4">
                     <button
