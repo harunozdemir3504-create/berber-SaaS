@@ -168,7 +168,7 @@ interface BarberContextType {
   // Shop Schedule Settings (Scoped to Current Shop)
   updateShopSettings: (updated: Partial<ShopSettings>) => void;
   toggleClosedDay: (dayOfWeek: number) => void;
-  getSlotsForDay: (dayId: string) => TimeSlot[];
+  getSlotsForDay: (dayId: string, barberId?: string) => TimeSlot[];
 
   // Admin Alerts (Scoped to Current Shop)
   dismissAdminAlert: (id: string) => void;
@@ -1261,10 +1261,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // Dynamic Slot Generator for Current Shop (Includes Phone Bookings & Blocked Time Ranges!)
+  // Dynamic Slot Generator for Current Shop (Koltuk / Personel Bazlı & Müsaitlik Kontrolü)
   const getSlotsForDay = useCallback(
-    (dayId: string): TimeSlot[] => {
-      const { shopSettings, appointments, waitlist } = currentShop;
+    (dayId: string, barberId?: string): TimeSlot[] => {
+      const { shopSettings, appointments, waitlist, barbers } = currentShop;
+      const realBarbers = barbers.filter((b) => !b.isAnyOption);
       const targetDayId = resolveDayMetadata(dayId).id;
       const startMins = timeToMinutes(shopSettings.openTime);
       const endMins = timeToMinutes(shopSettings.closeTime);
@@ -1273,6 +1274,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const breakEndMins = timeToMinutes(shopSettings.breakEnd);
 
       const slots: TimeSlot[] = [];
+
+      // O güne ait aktif randevular (iptal ve no-show hariç)
+      const dayAppointments = appointments.filter((a) => {
+        const aptDayId = resolveDayMetadata(a.dayId).id;
+        return (
+          aptDayId === targetDayId &&
+          a.status !== "cancelled" &&
+          a.status !== "no_show"
+        );
+      });
 
       for (let m = startMins; m + interval <= endMins; m += interval) {
         const timeLabel = minutesToTime(m);
@@ -1289,44 +1300,88 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           continue;
         }
 
-        const activeApt = appointments.find((a) => {
-          const aptDayId = resolveDayMetadata(a.dayId).id;
+        // 1. Salon genelinde bloke edilmiş saat aralığı kontrolü
+        const shopBlock = dayAppointments.find((a) => {
+          if (!a.isBlockedSlot) return false;
+          // Eğer blokaj belirli bir ustaya özel ise ve başka bir usta sorgulanıyorsa bloke etmez
           if (
-            aptDayId !== targetDayId ||
-            a.status === "cancelled" ||
-            a.status === "no_show"
+            barberId &&
+            barberId !== "any" &&
+            a.barberId &&
+            a.barberId !== barberId
           ) {
             return false;
           }
-          if (a.time === timeLabel) return true;
-          if (a.isBlockedSlot) {
-            const bStart = timeToMinutes(a.time);
-            const bEnd = timeToMinutes(a.endTime);
-            return m >= bStart && m < bEnd;
-          }
-          return false;
+          const bStart = timeToMinutes(a.time);
+          const bEnd = timeToMinutes(a.endTime);
+          return m >= bStart && m < bEnd;
         });
 
-        const waitingCount = waitlist.filter(
-          (w) =>
-            resolveDayMetadata(w.dayId).id === targetDayId &&
-            w.requestedTime === timeLabel
-        ).length;
-
-        if (activeApt) {
+        if (shopBlock) {
           slots.push({
             time: timeLabel,
             available: false,
             state: "booked",
-            waitlistCount: waitingCount > 0 ? waitingCount : 1,
-            bookedBy: activeApt.customerName,
+            bookedBy: shopBlock.customerName || "Kapalı / Mola",
           });
+          continue;
+        }
+
+        // 2. Personel / Koltuk Bazlı Doluluk Kontrolü
+        if (barberId && barberId !== "any") {
+          // Belirli bir berber seçilmişse (Örn: Harun Usta):
+          // SADECE ve SADECE o berberin o saatteki randevusunu kontrol et!
+          const activeApt = dayAppointments.find((a) => {
+            if (a.isBlockedSlot) return false;
+            const matchBarber =
+              a.barberId === barberId ||
+              (a.barberName &&
+                a.barberName.toLowerCase().includes(barberId.toLowerCase()));
+            if (!matchBarber) return false;
+            return a.time === timeLabel;
+          });
+
+          if (activeApt) {
+            slots.push({
+              time: timeLabel,
+              available: false,
+              state: "booked",
+              bookedBy: `${activeApt.customerName} (${activeApt.barberName})`,
+            });
+          } else {
+            slots.push({
+              time: timeLabel,
+              available: true,
+              state: "available",
+            });
+          }
         } else {
-          slots.push({
-            time: timeLabel,
-            available: true,
-            state: "available",
-          });
+          // "Fark Etmez / Tümü":
+          // Bir saat sadece salondaki TÜM ustalar doluysa "dolu" sayılır; en az 1 usta boşsa saat boştur!
+          const bookedBarberIds = new Set(
+            dayAppointments
+              .filter((a) => !a.isBlockedSlot && a.time === timeLabel)
+              .map((a) => a.barberId)
+          );
+
+          const allBarbersBooked =
+            realBarbers.length > 0 &&
+            realBarbers.every((b) => bookedBarberIds.has(b.id));
+
+          if (allBarbersBooked) {
+            slots.push({
+              time: timeLabel,
+              available: false,
+              state: "booked",
+              bookedBy: "Tüm Koltuklar Dolu",
+            });
+          } else {
+            slots.push({
+              time: timeLabel,
+              available: true,
+              state: "available",
+            });
+          }
         }
       }
 

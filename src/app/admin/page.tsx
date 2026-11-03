@@ -132,6 +132,8 @@ export default function AdminDashboardPage() {
   const [bottomTab, setBottomTab] = useState<BottomNavTab>("appointments");
   const [appointmentFilter, setAppointmentFilter] =
     useState<AppointmentFilterTab>("active");
+  // Koltuk / Personel Filtresi (Tümü | Harun Usta | Ali Usta vb.)
+  const [adminStaffFilter, setAdminStaffFilter] = useState<string>("all");
   // Gün Seçici Şerit: Varsayılan olarak her zaman "Bugün" ("today") seçili gelir
   const [adminDayMode, setAdminDayMode] = useState<AdminDayViewMode>("today");
   const [selectedCalendarDayId, setSelectedCalendarDayId] = useState<string>(
@@ -483,6 +485,14 @@ export default function AdminDashboardPage() {
       if (!isLive) return false;
       if (!a.canComeEarly) return false;
       if (resolveDayMetadata(a.dayId).id !== aptDayMeta.id) return false;
+      // Koltuk / Usta kontrolü: Boşalan saat sadece o ustanın kendi erken gelebilecek müşterilerine önerilsin
+      if (
+        vacatedApt.barberId &&
+        a.barberId &&
+        a.barberId !== vacatedApt.barberId
+      ) {
+        return false;
+      }
       return timeToMinutes(a.time) > vacatedMinutes;
     });
 
@@ -573,8 +583,10 @@ export default function AdminDashboardPage() {
   );
   const quickAvailableSlots = useMemo(
     () =>
-      getSlotsForDay(quickDayId).filter((slot) => slot.state === "available"),
-    [getSlotsForDay, quickDayId]
+      getSlotsForDay(quickDayId, quickSelectedBarber?.id).filter(
+        (slot) => slot.state === "available"
+      ),
+    [getSlotsForDay, quickDayId, quickSelectedBarber?.id]
   );
 
   const toggleQuickService = (id: string) => {
@@ -994,11 +1006,23 @@ export default function AdminDashboardPage() {
   }, [dayFilteredActiveAppointments]);
 
   const displayedAppointments = useMemo(() => {
-    if (appointmentFilter === "active") return dayFilteredActiveAppointments;
-    if (appointmentFilter === "early_backup") return dayEarlyBackupAppointments;
-    return dayFilteredHistoryAppointments;
+    let baseList = dayFilteredActiveAppointments;
+    if (appointmentFilter === "early_backup") baseList = dayEarlyBackupAppointments;
+    if (appointmentFilter === "history") baseList = dayFilteredHistoryAppointments;
+
+    if (adminStaffFilter === "all") return baseList;
+
+    return baseList.filter((apt) => {
+      if (apt.isBlockedSlot) return true;
+      return (
+        apt.barberId === adminStaffFilter ||
+        (apt.barberName &&
+          apt.barberName.toLowerCase().includes(adminStaffFilter.toLowerCase()))
+      );
+    });
   }, [
     appointmentFilter,
+    adminStaffFilter,
     dayFilteredActiveAppointments,
     dayEarlyBackupAppointments,
     dayFilteredHistoryAppointments,
@@ -1485,6 +1509,61 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
+            {/* 👤 KOLTUK / PERSONEL HIZLI FİLTRE ŞERİDİ (Tümü | Harun Usta | Ali Usta ...) */}
+            {realBarbers.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-stone-400 mr-1 flex items-center gap-1">
+                  <User className="h-3 w-3 text-[#dfc39e]" /> Koltuk:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAdminStaffFilter("all")}
+                  className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                    adminStaffFilter === "all"
+                      ? "border border-[#dfc39e] bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                      : "border border-white/10 bg-[#141416] text-stone-300 hover:border-white/25 hover:text-white"
+                  }`}
+                >
+                  Tümü ({dayFilteredActiveAppointments.length})
+                </button>
+                {realBarbers.map((b) => {
+                  const staffCount = dayFilteredActiveAppointments.filter(
+                    (a) =>
+                      !a.isBlockedSlot &&
+                      (a.barberId === b.id ||
+                        (a.barberName &&
+                          a.barberName
+                            .toLowerCase()
+                            .includes(b.name.toLowerCase())))
+                  ).length;
+                  const isSelected = adminStaffFilter === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setAdminStaffFilter(b.id)}
+                      className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-black transition flex items-center gap-1.5 ${
+                        isSelected
+                          ? "border border-[#dfc39e] bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                          : "border border-white/10 bg-[#141416] text-stone-300 hover:border-white/25 hover:text-white"
+                      }`}
+                    >
+                      <span>{b.name}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                          isSelected
+                            ? "bg-[#1a110b]/20 text-[#1a110b]"
+                            : "bg-white/10 text-stone-400"
+                        }`}
+                      >
+                        {staffCount}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Randevu Kartları Listesi */}
             {displayedAppointments.length === 0 ? (
               <div className="rounded-3xl border border-white/10 bg-[#141416] p-8 text-center">
@@ -1607,6 +1686,13 @@ export default function AdminDashboardPage() {
                               <span className="truncate text-xs font-black text-[#fdf8f5] sm:text-sm">
                                 {apt.customerName}
                               </span>
+                              {/* Koltuk / Personel Rozeti */}
+                              {apt.barberName && !apt.isBlockedSlot && (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-1.5 py-0.5 text-[10px] font-black text-[#dfc39e]">
+                                  <User className="h-2.5 w-2.5" />
+                                  <span>{apt.barberName.replace(/\s*\(.*?\)/, "")}</span>
+                                </span>
+                              )}
                               {apt.status === "pending" && (
                                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/80 bg-amber-500/25 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm animate-pulse">
                                   <span>
@@ -1699,7 +1785,7 @@ export default function AdminDashboardPage() {
 
                               {/* ⚡ Erken Saate / Boş Saate Kaydırma (Eski Saati Anında Serbest Bırakır) */}
                               {(() => {
-                                const daySlots = getSlotsForDay(apt.dayId).filter(
+                                const daySlots = getSlotsForDay(apt.dayId, apt.barberId).filter(
                                   (s) => s.state === "available"
                                 );
                                 if (daySlots.length === 0) return null;

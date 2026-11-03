@@ -101,8 +101,14 @@ export default function CustomerBookingPage() {
   // 3 Adımlı Ultra-Sade Randevu Sihirbazı (1: Dükkan & Hizmet, 2: Gün & Saat, 3: İsim, Telefon & Onay)
   const [step, setStep] = useState<number>(1);
 
-  // Adım 1: Dükkan / Usta ve Hizmet Seçimi
-  const [selectedBarberId, setSelectedBarberId] = useState<string>("any");
+  // Gerçek ustalar / koltuklar (isAnyOption hariç)
+  const realBarbers = useMemo(
+    () => barbers.filter((b) => !b.isAnyOption),
+    [barbers]
+  );
+
+  // Adım 1 & 2: Dükkan / Usta ve Hizmet Seçimi (İlk personel varsayılan olarak seçili)
+  const [selectedBarberId, setSelectedBarberId] = useState<string>("");
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
 
   // Gerçek Zamanlı Canlı Tarih (new Date() - Türkiye Saati, Bugün + Önümüzdeki 7 Gün)
@@ -169,13 +175,16 @@ export default function CustomerBookingPage() {
     useState<Appointment | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
-  // Dükkan değiştiğinde seçimleri sıfırla
+  // Dükkan değiştiğinde seçimleri sıfırla (İlk personel varsayılan olarak seçili gelir)
   useEffect(() => {
-    setSelectedBarberId("any");
+    const firstReal = realBarbers[0] || barbers[0];
+    if (firstReal) {
+      setSelectedBarberId(firstReal.id);
+    }
     setSelectedSlot(null);
     setStage("idle");
     setConfirmedAppointment(null);
-  }, [currentShopSlug]);
+  }, [currentShopSlug, realBarbers, barbers]);
 
   useEffect(() => {
     setSelectedServiceIds((prev) => {
@@ -188,13 +197,18 @@ export default function CustomerBookingPage() {
   }, [services]);
 
   const selectedBarber: Barber | null = useMemo(
-    () => barbers.find((b) => b.id === selectedBarberId) || barbers[0] || null,
-    [barbers, selectedBarberId]
+    () =>
+      barbers.find((b) => b.id === selectedBarberId) ||
+      realBarbers[0] ||
+      barbers[0] ||
+      null,
+    [barbers, realBarbers, selectedBarberId]
   );
 
+  // Seçili personele / koltuğa özel günün slotları (Harun'un randevusu Ali'yi bloke etmez!)
   const currentDaySlots = useMemo(
-    () => getSlotsForDay(selectedDay.id),
-    [getSlotsForDay, selectedDay.id]
+    () => getSlotsForDay(selectedDay.id, selectedBarber?.id),
+    [getSlotsForDay, selectedDay.id, selectedBarber?.id]
   );
 
   // Seçili gün bugün mü?
@@ -535,14 +549,14 @@ export default function CustomerBookingPage() {
               </div>
 
               {/* Usta / Koltuk Seçimi (Kompakt Grid) */}
-              {barbers.length > 1 && (
+              {realBarbers.length > 1 && (
                 <div>
                   <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
                     <User className="h-3.5 w-3.5 text-[#dfc39e]" />
                     <span>Usta / Koltuk Seçin</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {barbers.map((barber) => {
+                    {realBarbers.map((barber) => {
                       const isSelected = selectedBarber?.id === barber.id;
                       return (
                         <button
@@ -679,6 +693,61 @@ export default function CustomerBookingPage() {
                 </span>
               </div>
 
+              {/* Usta / Koltuk Seçimi (1'den Fazla Personel Varsa Şık ve Kompakt Tablar) */}
+              {realBarbers.length > 1 && (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
+                      <User className="h-3.5 w-3.5 text-[#dfc39e]" />
+                      <span>Berber / Koltuk Seçimi</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-[#dfc39e]">
+                      {selectedBarber?.chairName}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                    {realBarbers.map((barber) => {
+                      const isSelected = selectedBarber?.id === barber.id;
+                      return (
+                        <button
+                          key={barber.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBarberId(barber.id);
+                            setSelectedSlot(null); // Usta değişince seçili saati sıfırla
+                          }}
+                          className={`flex items-center justify-between gap-1.5 rounded-xl border-2 px-3 py-2 text-left transition ${
+                            isSelected
+                              ? "border-[#f3e8dc] bg-[#1a191d] text-[#fdf8f5] shadow-lg shadow-[#dfc39e]/15"
+                              : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/20 hover:text-white"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span className="block truncate text-xs font-black text-[#fdf8f5]">
+                              {barber.name}
+                            </span>
+                            <span className="block truncate text-[10px] text-[#dfc39e]">
+                              {barber.chairName}
+                            </span>
+                          </div>
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              isSelected
+                                ? "border-emerald-400 bg-emerald-500 text-[#081510]"
+                                : "border-white/20 bg-transparent"
+                            }`}
+                          >
+                            {isSelected && (
+                              <Check className="h-2.5 w-2.5 stroke-[3]" />
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Gün Seçimi — Bugünden Başlayan 7 Gerçek Gün */}
               <div>
                 <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
@@ -694,7 +763,7 @@ export default function CustomerBookingPage() {
                     const isDayToday = Boolean(
                       day.isToday || day.isoDate === toIsoDateString(getTurkeyNow())
                     );
-                    const daySlots = getSlotsForDay(day.id);
+                    const daySlots = getSlotsForDay(day.id, selectedBarber?.id);
                     const validDaySlots = daySlots.filter((s) => {
                       if (s.state !== "available") return false;
                       if (isDayToday && isSlotPassedOrImminent(s.time, true)) {
