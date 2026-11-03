@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -176,16 +176,27 @@ export default function CustomerBookingPage() {
     useState<Appointment | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
-  // Dükkan değiştiğinde seçimleri sıfırla (İlk personel varsayılan olarak seçili gelir)
+  // Dükkan değiştiğinde seçimleri sıfırla (Sadece ve sadece dükkan slug'ı gerçekten değiştiğinde çalışır)
+  const prevShopSlugRef = useRef<string>(currentShopSlug);
   useEffect(() => {
-    const firstReal = realBarbers[0] || barbers[0];
-    if (firstReal) {
-      setSelectedBarberId(firstReal.id);
+    if (prevShopSlugRef.current !== currentShopSlug) {
+      prevShopSlugRef.current = currentShopSlug;
+      const firstReal = realBarbers[0] || barbers[0];
+      if (firstReal) {
+        setSelectedBarberId(firstReal.id);
+      }
+      setSelectedSlot(null);
+      setStage("idle");
+      setConfirmedAppointment(null);
     }
-    setSelectedSlot(null);
-    setStage("idle");
-    setConfirmedAppointment(null);
   }, [currentShopSlug, realBarbers, barbers]);
+
+  // Sayfa ilk açıldığında henüz berber seçilmemişse ilk personeli seç (Randevu eklenince sıfırlanmaz!)
+  useEffect(() => {
+    if (!selectedBarberId && realBarbers.length > 0) {
+      setSelectedBarberId(realBarbers[0].id);
+    }
+  }, [realBarbers, selectedBarberId]);
 
   useEffect(() => {
     setSelectedServiceIds((prev) => {
@@ -333,7 +344,7 @@ export default function CustomerBookingPage() {
         ? `${requiredDepositAmount} TL Kapora Alındı`
         : "WhatsApp Onay Kodu Doğrulaması",
       depositAmount: withDeposit ? requiredDepositAmount : undefined,
-      status: "pending", // WhatsApp onayı bekleniyor
+      status: "confirmed", // Doğrudan onaylandı olarak kaydedilir
       verificationCode,
       reminderSent: false,
       bookingSource: "online",
@@ -1165,17 +1176,9 @@ export default function CustomerBookingPage() {
                   </h3>
 
                   {/* 1. DİKKAT ÇEKİCİ SARI/TURUNCU UYARI KUTUSU */}
-                  <div
-                    className={`mx-auto my-3.5 max-w-md rounded-2xl border-2 p-3.5 sm:p-4 text-center shadow-lg transition-all ${
-                      confirmedAppointment?.status === "confirmed"
-                        ? "border-emerald-500/70 bg-emerald-500/15 shadow-emerald-500/10 text-emerald-200"
-                        : "border-amber-400 bg-amber-500/20 shadow-amber-500/15 text-amber-200"
-                    }`}
-                  >
-                    <p className="text-xs sm:text-sm font-black leading-relaxed">
-                      {confirmedAppointment?.status === "confirmed"
-                        ? "✅ TEBRİKLER: Randevunuz berberinize iletildi ve sistem tarafından otomatik olarak kesinleştirildi. Randevu saatinde salonda olmanız yeterlidir."
-                        : "⚠️ SON ADIM: Randevunuzun kesinleşmesi için aşağıdaki yeşil butona basıp açılan WhatsApp mesajını berberinize göndermeniz ZORUNLUDUR. Mesajı gönderdiğiniz anda randevunuz otomatik onaylanacaktır."}
+                  <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-amber-400 bg-amber-500/20 p-3.5 sm:p-4 text-center shadow-lg shadow-amber-500/15">
+                    <p className="text-xs sm:text-sm font-black leading-relaxed text-amber-200">
+                      ⚠️ SON ADIM: Randevunuzun geçerli olması için aşağıdaki yeşil butona basarak randevu fişinizi WhatsApp&apos;tan berberinize göndermeniz ZORUNLUDUR.
                     </p>
                   </div>
 
@@ -1219,17 +1222,11 @@ export default function CustomerBookingPage() {
                       DEFAULT_SHOP_WHATSAPP_PHONE
                     );
 
-                    const handleWhatsAppClick = () => {
-                      if (confirmedAppointment?.id) {
-                        confirmAppointment(confirmedAppointment.id);
-                        setConfirmedAppointment((prev) =>
-                          prev ? { ...prev, status: "confirmed" } : prev
-                        );
+                    const handleOpenWhatsApp = () => {
+                      if (typeof window !== "undefined") {
+                        window.open(waHref, "_blank", "noopener,noreferrer");
                       }
                     };
-
-                    const isConfirmed =
-                      confirmedAppointment?.status === "confirmed";
 
                     return (
                       <div className="mx-auto max-w-md space-y-3">
@@ -1237,7 +1234,7 @@ export default function CustomerBookingPage() {
                         <div className="rounded-2xl border border-white/15 bg-[#141417] p-3.5 sm:p-4 text-left shadow-xl space-y-2.5">
                           <div className="flex items-center justify-between border-b border-white/10 pb-2">
                             <span className="text-xs font-bold text-stone-400">
-                              💈 Berber / Koltuk:
+                              💈 Seçilen Usta:
                             </span>
                             <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
                               {barberText}
@@ -1246,10 +1243,19 @@ export default function CustomerBookingPage() {
 
                           <div className="flex items-center justify-between border-b border-white/10 pb-2">
                             <span className="text-xs font-bold text-stone-400">
-                              📅 Tarih & Saat:
+                              📅 Tarih:
+                            </span>
+                            <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
+                              {dateText}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <span className="text-xs font-bold text-stone-400">
+                              ⏰ Saat:
                             </span>
                             <span className="text-xs sm:text-sm font-black text-amber-300">
-                              {dateText} - {timeText}
+                              {timeText}
                             </span>
                           </div>
 
@@ -1288,32 +1294,29 @@ export default function CustomerBookingPage() {
                           )}
                         </div>
 
-                        {/* BÜYÜK YEŞİL WHATSAPP BUTONU */}
-                        <a
-                          href={waHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={handleWhatsAppClick}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-3 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
+                        {/* BÜYÜK YEŞİL WHATSAPP BUTONU (window.open ile yeni sekmede açılır) */}
+                        <button
+                          type="button"
+                          onClick={handleOpenWhatsApp}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-3 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99] cursor-pointer"
                         >
                           <MessageSquare className="h-5 w-5 fill-[#081510] shrink-0" />
                           <span className="text-center">
-                            {isConfirmed
-                              ? "💬 WhatsApp Açıldı • Randevunuz Onaylandı ✅"
-                              : "💬 WhatsApp'tan Gönder ve Randevuyu Kesinleştir"}
+                            💬 WhatsApp&apos;tan Gönder ve Kesinleştir
                           </span>
-                        </a>
+                        </button>
                       </div>
                     );
                   })()}
 
-                  <div className="mt-4">
+                  {/* KÜÇÜK VE GRİ YENİ RANDEVU AL / ANA SAYFAYA DÖN BUTONU */}
+                  <div className="mt-4 pt-1 text-center">
                     <button
                       type="button"
                       onClick={handleResetWizard}
-                      className="w-full rounded-2xl border border-white/15 bg-[#131316] py-3 text-xs font-bold text-[#f3e8dc] transition hover:border-[#dfc39e]"
+                      className="text-xs text-stone-400 hover:text-stone-200 underline underline-offset-4 transition cursor-pointer"
                     >
-                      Yeni Randevu Oluştur
+                      Yeni Randevu Al / Ana Sayfaya Dön
                     </button>
                   </div>
                 </motion.div>
