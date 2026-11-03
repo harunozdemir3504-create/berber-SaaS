@@ -158,6 +158,7 @@ interface BarberContextType {
     barberName: string,
     chairLabel: string
   ) => void;
+  updateAppointmentPhone: (appointmentId: string, newPhone: string) => void;
   getServicePriceForBarber: (service: Service, barber?: Barber | null) => number;
 
   // Services CRUD (Scoped to Current Shop)
@@ -1608,6 +1609,38 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [currentShop.slug, syncDirectlyToCloud]
   );
 
+  // Update Customer Phone for an appointment (Scoped to Current Shop & Synced to Cloud)
+  const updateAppointmentPhone = useCallback(
+    (appointmentId: string, newPhone: string) => {
+      const cleaned = newPhone.trim();
+      if (!cleaned) return;
+
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+          return {
+            ...shop,
+            appointments: shop.appointments.map((a) =>
+              a.id === appointmentId ? { ...a, customerPhone: cleaned } : a
+            ),
+            adminAlerts: shop.adminAlerts.map((alert) =>
+              alert.appointmentId === appointmentId
+                ? {
+                    ...alert,
+                    customerPhone: cleaned,
+                    message: alert.message.replace(/Tel:\s*[^\s•]+/, `Tel: ${cleaned}`),
+                  }
+                : alert
+            ),
+          };
+        });
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [currentShop.slug, syncDirectlyToCloud]
+  );
+
   // Add Waitlist Entry to Current Shop
   const addWaitlistEntry = useCallback(
     (
@@ -2321,6 +2354,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         updateBarber,
         deleteBarber,
         updateAppointmentBarber,
+        updateAppointmentPhone,
         getServicePriceForBarber,
         updateService,
         addService,

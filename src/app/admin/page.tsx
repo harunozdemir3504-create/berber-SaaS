@@ -108,6 +108,7 @@ export default function AdminDashboardPage() {
     updateBarber,
     deleteBarber,
     updateAppointmentBarber,
+    updateAppointmentPhone,
     getServicePriceForBarber,
     updateService,
     addService,
@@ -227,6 +228,10 @@ export default function AdminDashboardPage() {
   const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
   const [notifPermission, setNotifPermission] = useState<string>("default");
+
+  // Berber Panelinde Müşteri Telefonu Hızlı Düzenleme State'i
+  const [editingPhoneAptId, setEditingPhoneAptId] = useState<string | null>(null);
+  const [editingPhoneValue, setEditingPhoneValue] = useState<string>("");
 
   // Canlı Yeni Randevu Üst Uyarı State
   const [liveBookingBanner, setLiveBookingBanner] =
@@ -440,6 +445,21 @@ export default function AdminDashboardPage() {
     setTimeout(() => {
       setToastMessage((prev) => (prev?.title === title ? null : prev));
     }, 4500);
+  };
+
+  const handleSaveCustomerPhone = (aptId: string, aptCustomerName: string) => {
+    const cleaned = editingPhoneValue.trim();
+    if (!cleaned) {
+      triggerToast("Uyarı", "Telefon numarası boş bırakılamaz.", "warning");
+      return;
+    }
+    updateAppointmentPhone(aptId, cleaned);
+    triggerToast(
+      `${aptCustomerName} — Telefon Güncellendi ✅`,
+      `Yeni numara: ${cleaned} olarak kaydedildi ve bulutla eşitlendi.`,
+      "success"
+    );
+    setEditingPhoneAptId(null);
   };
 
   const handleEnableNotificationsAndSound = async () => {
@@ -1832,13 +1852,71 @@ export default function AdminDashboardPage() {
                               </span>
                             </div>
 
-                            <a
-                              href={`tel:${apt.customerPhone}`}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
-                            >
-                              <Phone className="h-3.5 w-3.5" />
-                              <span>{apt.customerPhone}</span>
-                            </a>
+                            {editingPhoneAptId === apt.id ? (
+                              <div
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-[#0d0c0b] p-1 shadow-md"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Phone className="ml-1 h-3.5 w-3.5 text-amber-300 shrink-0" />
+                                <input
+                                  type="tel"
+                                  autoFocus
+                                  value={editingPhoneValue}
+                                  onChange={(e) => setEditingPhoneValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleSaveCustomerPhone(apt.id, apt.customerName);
+                                    } else if (e.key === "Escape") {
+                                      setEditingPhoneAptId(null);
+                                    }
+                                  }}
+                                  placeholder="05XX XXX XX XX"
+                                  className="w-32 sm:w-36 bg-transparent px-1 py-0.5 font-mono text-xs font-bold text-[#fdf8f5] outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveCustomerPhone(apt.id, apt.customerName)}
+                                  className="inline-flex items-center justify-center rounded bg-emerald-500 px-2 py-1 text-[11px] font-black text-[#06150f] hover:bg-emerald-400 transition cursor-pointer"
+                                  title="Numarayı Kaydet"
+                                >
+                                  <Check className="h-3 w-3 stroke-[3]" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingPhoneAptId(null)}
+                                  className="inline-flex items-center justify-center rounded border border-white/20 bg-white/10 px-1.5 py-1 text-[11px] font-bold text-stone-300 hover:bg-white/20 transition cursor-pointer"
+                                  title="İptal"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5">
+                                <a
+                                  href={`tel:${apt.customerPhone}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                                  title="Müşteriyi Ara"
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                  <span>{apt.customerPhone}</span>
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingPhoneAptId(apt.id);
+                                    setEditingPhoneValue(apt.customerPhone);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-400/20 hover:border-amber-400 transition cursor-pointer"
+                                  title="Numarayı Düzenle"
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                  <span>✏️ Düzenle</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           {/* ⏳ WhatsApp Onay Kodu Bilgi Şeridi */}

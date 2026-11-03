@@ -22,6 +22,7 @@ import {
   CalendarDays,
   MessageSquare,
   Zap,
+  Edit2,
 } from "lucide-react";
 import {
   PWA_INSTALL_ROLE_KEY,
@@ -70,6 +71,7 @@ export default function CustomerBookingPage() {
     shopSettings,
     addAppointment,
     confirmAppointment,
+    updateAppointmentPhone,
     checkHasActiveAppointmentForDay,
     isPhoneBlacklisted,
     getSlotsForDay,
@@ -175,6 +177,10 @@ export default function CustomerBookingPage() {
   const [confirmedAppointment, setConfirmedAppointment] =
     useState<Appointment | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+  const [isEditingPhoneOnConfirm, setIsEditingPhoneOnConfirm] = useState<boolean>(false);
+  const [tempPhoneOnConfirm, setTempPhoneOnConfirm] = useState<string>("");
+  const [phoneEditError, setPhoneEditError] = useState<string>("");
+  const [phoneEditSuccess, setPhoneEditSuccess] = useState<boolean>(false);
 
   // Dükkan değiştiğinde seçimleri sıfırla (Sadece ve sadece dükkan slug'ı gerçekten değiştiğinde çalışır)
   const prevShopSlugRef = useRef<string>(currentShopSlug);
@@ -411,6 +417,9 @@ export default function CustomerBookingPage() {
     setCustomerPhone("");
     setConfirmedAppointment(null);
     setStage("idle");
+    setIsEditingPhoneOnConfirm(false);
+    setPhoneEditError("");
+    setPhoneEditSuccess(false);
   };
 
   const handleCopyCode = (code: string) => {
@@ -1204,9 +1213,13 @@ export default function CustomerBookingPage() {
                     );
 
                     // 3. WHATSAPP TAM BİLDİRİM ŞABLONU
+                    const displayPhone =
+                      confirmedAppointment?.customerPhone || customerPhone || "";
+
                     const waMessageLines = [
                       `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
                       `👤 *Müşteri:* ${customerName.trim()}`,
+                      `📞 *Kayıtlı Tel:* ${displayPhone}`,
                       `💈 *Usta:* ${barberText}`,
                       `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
                       `📋 *İşlem:* ${serviceNamesText}`,
@@ -1293,6 +1306,115 @@ export default function CustomerBookingPage() {
                             </div>
                           )}
                         </div>
+
+                        {/* 📞 Sizi Arayacağımız Numara Kontrolü ve Hızlı Düzenleme (Yeşil Butonun Hemen Üstünde) */}
+                        {!isEditingPhoneOnConfirm ? (
+                          <div className="rounded-2xl border-2 border-amber-400/50 bg-gradient-to-br from-amber-500/15 via-[#1a1714] to-amber-500/10 p-3 sm:p-4 text-left shadow-lg shadow-amber-500/10">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                  <Phone className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <span className="block text-xs font-bold text-amber-300 tracking-wide">
+                                    📞 Sizi Arayacağımız Numara:
+                                  </span>
+                                  <span className="font-mono text-base sm:text-lg font-black tracking-wider text-[#fdf8f5]">
+                                    {displayPhone}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTempPhoneOnConfirm(displayPhone);
+                                  setPhoneEditError("");
+                                  setIsEditingPhoneOnConfirm(true);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-stone-200 hover:bg-white/20 hover:text-white transition active:scale-95 cursor-pointer self-start sm:self-auto"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 text-amber-300" />
+                                <span>✏️ Numarayı Yanlış mı Yazdınız? Düzenle</span>
+                              </button>
+                            </div>
+
+                            {phoneEditSuccess && (
+                              <div className="mt-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                <Check className="h-3.5 w-3.5" />
+                                <span>Telefon numaranız başarıyla güncellendi! WhatsApp linki yenilendi.</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border-2 border-amber-400 bg-[#161412] p-3.5 sm:p-4 text-left shadow-xl space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5">
+                                <Phone className="h-4 w-4" />
+                                Telefon Numaranızı Düzeltin
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingPhoneOnConfirm(false)}
+                                className="text-xs text-stone-400 hover:text-stone-200 cursor-pointer"
+                              >
+                                Vazgeç ✕
+                              </button>
+                            </div>
+
+                            <div className="space-y-1">
+                              <input
+                                type="tel"
+                                autoFocus
+                                value={tempPhoneOnConfirm}
+                                onChange={(e) => {
+                                  setTempPhoneOnConfirm(e.target.value);
+                                  setPhoneEditError("");
+                                }}
+                                placeholder="05XX XXX XX XX"
+                                className="w-full rounded-xl border border-amber-400/50 bg-[#0d0c0b] px-3.5 py-2.5 font-mono text-sm sm:text-base font-bold text-[#fdf8f5] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 placeholder:text-stone-500"
+                              />
+                              {phoneEditError && (
+                                <p className="text-[11px] font-bold text-rose-400">{phoneEditError}</p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cleaned = tempPhoneOnConfirm.trim();
+                                  if (!cleaned || cleaned.replace(/\D/g, "").length < 10) {
+                                    setPhoneEditError(
+                                      "Lütfen geçerli bir cep telefonu numarası girin (örn: 0532 123 45 67)."
+                                    );
+                                    return;
+                                  }
+                                  if (confirmedAppointment?.id) {
+                                    updateAppointmentPhone(confirmedAppointment.id, cleaned);
+                                    setConfirmedAppointment((prev) =>
+                                      prev ? { ...prev, customerPhone: cleaned } : null
+                                    );
+                                  }
+                                  setCustomerPhone(cleaned);
+                                  setIsEditingPhoneOnConfirm(false);
+                                  setPhoneEditSuccess(true);
+                                  setTimeout(() => setPhoneEditSuccess(false), 3500);
+                                }}
+                                className="flex-1 rounded-xl bg-amber-400 py-2.5 text-xs sm:text-sm font-black text-[#14120e] hover:bg-amber-300 transition active:scale-95 cursor-pointer text-center"
+                              >
+                                Kaydet ve Güncelle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingPhoneOnConfirm(false)}
+                                className="rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-bold text-stone-300 hover:bg-white/10 cursor-pointer"
+                              >
+                                İptal
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {/* BÜYÜK YEŞİL WHATSAPP BUTONU (window.open ile yeni sekmede açılır) */}
                         <button
