@@ -3,7 +3,12 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Printer, Scissors, Camera, Clock, ShieldCheck } from "lucide-react";
-import { useBarber } from "@/context/BarberContext";
+import {
+  useBarber,
+  getShopBookingUrl,
+  getShopDisplayUrl,
+  SITE_DOMAIN,
+} from "@/context/BarberContext";
 
 interface QrPosterModalProps {
   open: boolean;
@@ -14,10 +19,9 @@ interface QrPosterModalProps {
 export default function QrPosterModal({ open, onClose }: QrPosterModalProps) {
   const { currentShop, shopSettings } = useBarber();
 
-  const bookingUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/?shop=${currentShop.slug}`
-      : `http://localhost:3000/?shop=${currentShop.slug}`;
+  // Resmi ve kalıcı domain: https://viprandevusistemi.com.tr/[slug]
+  const bookingUrl = getShopBookingUrl(currentShop.slug);
+  const displayUrl = getShopDisplayUrl(currentShop.slug);
 
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&margin=10&ecc=M&color=1a110b&bgcolor=fdf8f5&data=${encodeURIComponent(
     bookingUrl
@@ -126,7 +130,7 @@ export default function QrPosterModal({ open, onClose }: QrPosterModalProps) {
                 </div>
 
                 <div className="mt-4 rounded-full border border-[#c88a53]/45 bg-[#14100d] px-4 py-1.5 font-mono text-[11px] font-bold text-[#e6ccb2]">
-                  {bookingUrl.replace(/^https?:\/\//, "")}
+                  {displayUrl}
                 </div>
 
                 <div className="mt-5 grid w-full grid-cols-3 gap-2 text-[10px] font-bold text-[#e6ccb2]">
@@ -144,10 +148,19 @@ export default function QrPosterModal({ open, onClose }: QrPosterModalProps) {
                   </div>
                 </div>
 
-                <p className="mt-5 flex items-center gap-1.5 text-[10px] text-[#e6ccb2]/60">
-                  <ShieldCheck className="h-3 w-3 text-[#c88a53]" />
-                  {currentShop.district} • {shopSettings.openTime} -{" "}
-                  {shopSettings.closeTime} • {currentShop.phone}
+                <p className="mt-5 flex flex-wrap items-center justify-center gap-1.5 text-[10px] text-[#e6ccb2]/75">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#c88a53]" />
+                  <span className="font-extrabold tracking-wide text-[#fdf8f5]">
+                    {SITE_DOMAIN}
+                  </span>
+                  <span className="text-[#c88a53]">•</span>
+                  <span>{currentShop.district}</span>
+                  <span className="text-[#c88a53]">•</span>
+                  <span>
+                    {shopSettings.openTime} - {shopSettings.closeTime}
+                  </span>
+                  <span className="text-[#c88a53]">•</span>
+                  <span>{currentShop.phone}</span>
                 </p>
               </div>
             </div>

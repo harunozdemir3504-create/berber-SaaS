@@ -42,6 +42,7 @@ import {
   DEFAULT_SHOP_WHATSAPP_PHONE,
   minutesToTime,
   timeToMinutes,
+  getShopBookingUrl,
 } from "@/context/BarberContext";
 
 type VerificationStage =
@@ -1119,7 +1120,7 @@ export default function CustomerBookingPage() {
                                 .map((s) => s.name)
                                 .join(" + ")
                             : selectedServices.map((s) => s.name).join(" + ")
-                        } randevusu oluşturdum.`,
+                        } randevusu oluşturdum. Randevu Takip: ${getShopBookingUrl(currentShop?.slug)}`,
                         DEFAULT_SHOP_WHATSAPP_PHONE
                       )}
                       target="_blank"

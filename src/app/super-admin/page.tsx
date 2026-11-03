@@ -33,7 +33,14 @@ import {
   CalendarDays,
   Clock,
 } from "lucide-react";
-import { useBarber, slugifyShopName } from "@/context/BarberContext";
+import {
+  useBarber,
+  slugifyShopName,
+  getShopBookingUrl,
+  getShopDisplayUrl,
+  SITE_DOMAIN,
+  SITE_URL,
+} from "@/context/BarberContext";
 import { SubscriptionStatus } from "@/data/mockData";
 
 export default function SuperAdminPage() {
@@ -45,6 +52,7 @@ export default function SuperAdminPage() {
     toggleShopSubscription,
     updateShopSubscription,
     updateShopPinBySlug,
+    updateShopDetails,
     deleteShop,
     masterPin,
     updateMasterPin,
@@ -93,6 +101,66 @@ export default function SuperAdminPage() {
     subtitle: string;
     type: "success" | "warning";
   } | null>(null);
+
+  // Edit Shop Details Modal State (İsim, Telefon, İlçe, Ciro/Ücret vb.)
+  const [editShopModal, setEditShopModal] = useState<{
+    isOpen: boolean;
+    slug: string;
+    name: string;
+    phone: string;
+    district: string;
+    monthlyFee: number;
+    subtitle: string;
+  } | null>(null);
+
+  const handleOpenEditShopModal = (shop: (typeof shops)[0]) => {
+    setEditShopModal({
+      isOpen: true,
+      slug: shop.slug,
+      name: shop.name,
+      phone: shop.phone,
+      district: shop.district,
+      monthlyFee: shop.monthlyFee,
+      subtitle: shop.subtitle || "",
+    });
+  };
+
+  const handleCloseEditShopModal = () => {
+    setEditShopModal(null);
+  };
+
+  const handleSaveShopDetails = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editShopModal) return;
+
+    const trimmedName = editShopModal.name.trim();
+    const trimmedPhone = editShopModal.phone.trim();
+    const trimmedDistrict = editShopModal.district.trim();
+
+    if (!trimmedName) {
+      showToast("Eksik Bilgi", "Berber / Dükkan adı boş bırakılamaz.", "warning");
+      return;
+    }
+    if (!trimmedPhone) {
+      showToast("Eksik Bilgi", "İletişim telefon numarası boş bırakılamaz.", "warning");
+      return;
+    }
+
+    updateShopDetails(editShopModal.slug, {
+      name: trimmedName,
+      phone: trimmedPhone,
+      district: trimmedDistrict || "İstanbul",
+      monthlyFee: Number(editShopModal.monthlyFee) || 0,
+      subtitle: editShopModal.subtitle.trim(),
+    });
+
+    showToast(
+      "Dükkan Bilgileri Güncellendi",
+      `${trimmedName} dükkanının bilgileri (telefon, konum, aylık ücret) başarıyla güncellendi.`,
+      "success"
+    );
+    setEditShopModal(null);
+  };
 
   // Delete Shop Confirmation Modal State
   const [deleteShopModal, setDeleteShopModal] = useState<{
@@ -293,13 +361,17 @@ export default function SuperAdminPage() {
   };
 
   const handleCopyShopUrl = (slug: string) => {
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/?shop=${slug}`
-        : `http://localhost:3000/?shop=${slug}`;
-    navigator.clipboard?.writeText(url);
+    const url = getShopBookingUrl(slug);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+    }
     setCopiedSlug(slug);
-    setTimeout(() => setCopiedSlug(null), 2000);
+    showToast(
+      "Randevu Linki Kopyalandı",
+      `${url} adresi panoya kopyalandı.`,
+      "success"
+    );
+    setTimeout(() => setCopiedSlug(null), 2500);
   };
 
   // MASTER PIN GUARD SCREEN (/super-admin)
@@ -654,6 +726,17 @@ export default function SuperAdminPage() {
                             {shop.name}
                           </h3>
 
+                          {/* BERBER İSMİNİN HEMEN YANINDA: BİLGİLERİ DÜZENLE BUTONU */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditShopModal(shop)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#e6ccb2]/35 bg-[#251a14] px-2.5 py-1 text-xs font-bold text-[#e6ccb2] transition hover:border-[#c88a53] hover:bg-[#32231b] hover:text-white"
+                            title="Berber Bilgilerini Düzenle (Telefon, İsim, Konum, Aylık Ücret)"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 text-[#c88a53]" />
+                            <span>Bilgileri Düzenle</span>
+                          </button>
+
                           {/* DİKKAT ÇEKİCİ ABONELİK DURUM ROZETİ */}
                           {isActive ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-400">
@@ -677,7 +760,7 @@ export default function SuperAdminPage() {
                             title="Müşteri Randevu Linkini Kopyala"
                           >
                             <Link2 className="h-3 w-3 text-sky-400" />
-                            <span>/?shop={shop.slug}</span>
+                            <span>{getShopDisplayUrl(shop.slug)}</span>
                             {isCopied ? (
                               <Check className="ml-1 h-3 w-3 text-emerald-400" />
                             ) : (
@@ -1056,7 +1139,7 @@ export default function SuperAdminPage() {
               <label className="mb-1 flex items-center justify-between text-xs font-bold text-[#c88a53]">
                 <span>Özel Link (Slug) *</span>
                 <span className="font-mono text-[10px] text-[#e6ccb2]/70">
-                  /?shop={newShopSlug || "efe-berber"}
+                  {SITE_DOMAIN}/{newShopSlug || "efe-berber"}
                 </span>
               </label>
               <input
@@ -1206,7 +1289,7 @@ export default function SuperAdminPage() {
                     • <strong>Dükkan:</strong> {deleteShopModal.name}
                   </p>
                   <p>
-                    • <strong>Link:</strong> /?shop={deleteShopModal.slug}
+                    • <strong>Link:</strong> {getShopDisplayUrl(deleteShopModal.slug)}
                   </p>
                 </div>
                 <p className="mt-2 text-[11px] text-rose-200/70">
@@ -1315,6 +1398,177 @@ export default function SuperAdminPage() {
                   <span>Evet, Kara Listeden Çıkar</span>
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* BERBER BİLGİLERİ DÜZENLEME MODALI (SÜPER ADMİN) */}
+      <AnimatePresence>
+        {editShopModal?.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseEditShopModal}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-[#e6ccb2]/35 bg-[#1a1410] p-4 shadow-2xl shadow-[#c88a53]/20 sm:p-6"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]">
+                    <Edit2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-[#fdf8f5]">
+                      Berber Bilgilerini Düzenle
+                    </h3>
+                    <p className="text-xs text-stone-400">
+                      {SITE_DOMAIN}/{editShopModal.slug} için profil ve iletişim ayarları
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseEditShopModal}
+                  className="rounded-lg p-1 text-stone-400 hover:bg-white/5 hover:text-white"
+                >
+                  <span className="sr-only">Kapat</span>
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveShopDetails} className="mt-4 space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-[#e6ccb2]">
+                    Berber / Salon Adı
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShopModal.name}
+                    onChange={(e) =>
+                      setEditShopModal((prev) =>
+                        prev ? { ...prev, name: e.target.value } : null
+                      )
+                    }
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                    placeholder="Örn: Atelier Noir Beşiktaş"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#e6ccb2]">
+                      Telefon Numarası
+                    </label>
+                    <div className="relative mt-1">
+                      <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type="tel"
+                        required
+                        value={editShopModal.phone}
+                        onChange={(e) =>
+                          setEditShopModal((prev) =>
+                            prev ? { ...prev, phone: e.target.value } : null
+                          )
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                        placeholder="0532 800 50 60"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#e6ccb2]">
+                      İlçe / Konum
+                    </label>
+                    <div className="relative mt-1">
+                      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                      <input
+                        type="text"
+                        value={editShopModal.district}
+                        onChange={(e) =>
+                          setEditShopModal((prev) =>
+                            prev ? { ...prev, district: e.target.value } : null
+                          )
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                        placeholder="Beşiktaş, İstanbul"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-[#e6ccb2]">
+                      Aylık SaaS Ücreti (TL)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={editShopModal.monthlyFee}
+                      onChange={(e) =>
+                        setEditShopModal((prev) =>
+                          prev
+                            ? { ...prev, monthlyFee: Number(e.target.value) || 0 }
+                            : null
+                        )
+                      }
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                      placeholder="1000"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#e6ccb2]">
+                      Slogan / Alt Başlık
+                    </label>
+                    <input
+                      type="text"
+                      value={editShopModal.subtitle}
+                      onChange={(e) =>
+                        setEditShopModal((prev) =>
+                          prev ? { ...prev, subtitle: e.target.value } : null
+                        )
+                      }
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                      placeholder="VIP Grooming & Gentlemen's Club"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-sky-500/20 bg-sky-950/20 p-2.5 text-[11px] text-sky-200">
+                  <span>
+                    💡 <strong>Not:</strong> Bu bilgiler güncellendiğinde hem müşteri vitrini (<code>{getShopDisplayUrl(editShopModal.slug)}</code>) hem de esnafın yönetim paneli anında yeni bilgilerle senkronize olur.
+                  </span>
+                </div>
+
+                <div className="mt-5 flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseEditShopModal}
+                    className="rounded-xl border border-white/10 bg-[#14100d] px-4 py-2.5 text-xs font-bold text-stone-300 transition hover:bg-white/5"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-4 py-2.5 text-xs font-extrabold text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>Değişiklikleri Kaydet</span>
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

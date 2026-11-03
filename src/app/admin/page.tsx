@@ -37,6 +37,8 @@ import {
   LogOut,
   User,
   Volume2,
+  Copy,
+  MapPin,
 } from "lucide-react";
 import {
   useBarber,
@@ -44,6 +46,10 @@ import {
   buildWhatsAppUrl,
   minutesToTime,
   timeToMinutes,
+  getShopBookingUrl,
+  getShopDisplayUrl,
+  SITE_DOMAIN,
+  SITE_URL,
 } from "@/context/BarberContext";
 import AdminPinGate, { lockAdminSession } from "@/components/AdminPinGate";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
@@ -67,7 +73,12 @@ import {
 type BottomNavTab = "appointments" | "quick_add" | "other";
 type AppointmentFilterTab = "active" | "history";
 type AdminDayViewMode = "today" | "tomorrow" | "calendar" | "all";
-type OtherSubTab = "stats_blacklist" | "barbers" | "services" | "schedule";
+type OtherSubTab =
+  | "shop_info"
+  | "stats_blacklist"
+  | "barbers"
+  | "services"
+  | "schedule";
 
 export default function AdminDashboardPage() {
   const {
@@ -99,6 +110,8 @@ export default function AdminDashboardPage() {
     updateShopSettings,
     toggleClosedDay,
     updateCurrentShopDepositPolicy,
+    updateCurrentShopPin,
+    updateShopDetails,
     getSlotsForDay,
     dismissAdminAlert,
     clearAllAdminAlerts,
@@ -120,7 +133,88 @@ export default function AdminDashboardPage() {
     () => getLiveDaysMetadata(7)[2]?.id || getLiveDaysMetadata(7)[0].id
   );
   const [otherSubTab, setOtherSubTab] =
-    useState<OtherSubTab>("stats_blacklist");
+    useState<OtherSubTab>("shop_info");
+
+  // SALON BİLGİLERİ DÜZENLEME STATE (Dükkan Adı, Telefon, İlçe, Slogan)
+  const [shopNameInput, setShopNameInput] = useState<string>("");
+  const [shopPhoneInput, setShopPhoneInput] = useState<string>("");
+  const [shopDistrictInput, setShopDistrictInput] = useState<string>("");
+  const [shopSubtitleInput, setShopSubtitleInput] = useState<string>("");
+  const [shopPinInput, setShopPinInput] = useState<string>("");
+  const [isCopiedShopUrl, setIsCopiedShopUrl] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (currentShop) {
+      setShopNameInput(currentShop.name || "");
+      setShopPhoneInput(currentShop.phone || "");
+      setShopDistrictInput(currentShop.district || "");
+      setShopSubtitleInput(currentShop.subtitle || "");
+      setShopPinInput(currentShop.adminPin || "");
+    }
+  }, [
+    currentShop?.slug,
+    currentShop?.name,
+    currentShop?.phone,
+    currentShop?.district,
+    currentShop?.subtitle,
+    currentShop?.adminPin,
+  ]);
+
+  const handleSaveShopInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = shopNameInput.trim();
+    const trimmedPhone = shopPhoneInput.trim();
+    const trimmedDistrict = shopDistrictInput.trim();
+    const trimmedPin = shopPinInput.trim();
+
+    if (!trimmedName) {
+      setToastMessage({
+        title: "Eksik Bilgi",
+        subtitle: "Salon adı boş bırakılamaz.",
+        type: "warning",
+      });
+      return;
+    }
+    if (!trimmedPhone) {
+      setToastMessage({
+        title: "Eksik Bilgi",
+        subtitle: "İletişim telefon numarası boş bırakılamaz.",
+        type: "warning",
+      });
+      return;
+    }
+
+    updateShopDetails(currentShop.slug, {
+      name: trimmedName,
+      phone: trimmedPhone,
+      district: trimmedDistrict || "İstanbul",
+      subtitle: shopSubtitleInput.trim(),
+    });
+
+    if (trimmedPin && trimmedPin !== currentShop.adminPin) {
+      updateCurrentShopPin(trimmedPin);
+    }
+
+    setToastMessage({
+      title: "Salon Bilgileri Güncellendi",
+      subtitle: `${trimmedName} salonunun telefon ve profil bilgileri başarıyla kaydedildi.`,
+      type: "success",
+    });
+  };
+
+  const handleCopyShopPageUrl = () => {
+    const url = getShopBookingUrl(currentShop.slug);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+    }
+    setIsCopiedShopUrl(true);
+    setTimeout(() => setIsCopiedShopUrl(false), 2000);
+    setToastMessage({
+      title: "Link Kopyalandı",
+      subtitle: `${url} adresi panoya kopyalandı.`,
+      type: "success",
+    });
+  };
 
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
   const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
@@ -354,11 +448,10 @@ export default function AdminDashboardPage() {
   };
 
   const handleCopyBookingLink = () => {
-    const shareUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/?shop=${currentShop.slug}`
-        : `http://localhost:3000/?shop=${currentShop.slug}`;
-    navigator.clipboard?.writeText(shareUrl);
+    const shareUrl = getShopBookingUrl(currentShop.slug);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl);
+    }
     setCopiedShareLink(true);
     triggerToast(
       "Müşteri Randevu Linki Kopyalandı!",
@@ -830,7 +923,7 @@ export default function AdminDashboardPage() {
                   <a
                     href={buildWhatsAppUrl(
                       liveBookingBanner.customerPhone,
-                      `Merhaba ${liveBookingBanner.customerName}, ${liveBookingBanner.dateLabel} saat ${liveBookingBanner.time} için ${currentShop.name} randevunuz onaylanmıştır. Görüşmek üzere!`
+                      `Merhaba ${liveBookingBanner.customerName}, ${liveBookingBanner.dateLabel} saat ${liveBookingBanner.time} için ${currentShop.name} randevunuz onaylanmıştır. Randevu detayları: ${getShopBookingUrl(currentShop.slug)} — Görüşmek üzere!`
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -1333,8 +1426,9 @@ export default function AdminDashboardPage() {
                     .map((s) => s.name)
                     .join(" + ");
 
-                  const reminderText = `Merhaba ${apt.customerName}, ${currentShop.name} randevunuzu hatırlatmak isteriz. 📅 Tarih: ${cleanDateLabel} ⏰ Saat: ${apt.time} ✂️ İşlem: ${servicesSummary}. Sizi bekliyoruz!`;
-                  const approvalText = `Merhaba ${apt.customerName}, ${cleanDateLabel} saat ${apt.time} için ${currentShop.name} randevunuz onaylanmıştır. Görüşmek üzere!`;
+                  const bookingLink = getShopBookingUrl(currentShop.slug);
+                  const reminderText = `Merhaba ${apt.customerName}, ${currentShop.name} randevunuzu hatırlatmak isteriz. 📅 Tarih: ${cleanDateLabel} ⏰ Saat: ${apt.time} ✂️ İşlem: ${servicesSummary}. Randevu detayları: ${bookingLink} — Sizi bekliyoruz!`;
+                  const approvalText = `Merhaba ${apt.customerName}, ${cleanDateLabel} saat ${apt.time} için ${currentShop.name} randevunuz onaylanmıştır. Randevu takip ve işlemleriniz: ${bookingLink} — Görüşmek üzere!`;
                   const reminderWhatsAppUrl = buildWhatsAppUrl(
                     apt.customerPhone,
                     reminderText
@@ -1655,12 +1749,23 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ===================================================================== */}
-        {/* SEKME 3: ⚙️ DİĞER (KARA LİSTE, İSTATİSTİK & SALON AYARLARI)          */}
+        {/* SEKME 3: ⚙️ DİĞER (SALON BİLGİLERİ, KARA LİSTE, İSTATİSTİK & AYARLAR) */}
         {/* ===================================================================== */}
         {bottomTab === "other" && (
           <div className="space-y-5">
             {/* Alt Kategori Seçici */}
-            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#161311] p-1.5 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#161311] p-1.5 sm:grid-cols-5">
+              <button
+                type="button"
+                onClick={() => setOtherSubTab("shop_info")}
+                className={`rounded-xl py-2.5 text-xs font-black transition ${
+                  otherSubTab === "shop_info"
+                    ? "bg-[#c88a53] text-[#1a110b]"
+                    : "text-stone-300 hover:text-white"
+                }`}
+              >
+                🏢 Salon Bilgileri
+              </button>
               <button
                 type="button"
                 onClick={() => setOtherSubTab("stats_blacklist")}
@@ -1706,6 +1811,176 @@ export default function AdminDashboardPage() {
                 ⏰ Saat & Kapora
               </button>
             </div>
+
+            {/* 3.0: SALON PROFİLİ & İLETİŞİM BİLGİLERİ (BERBER PANELİNDE DÜZENLENEBİLİR) */}
+            {otherSubTab === "shop_info" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-[#c88a53]/35 bg-gradient-to-br from-[#241a14] via-[#1a1410] to-[#120f0d] p-4 sm:p-6 shadow-xl shadow-[#c88a53]/15">
+                  <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c88a53]/20 text-[#c88a53]">
+                          <Scissors className="h-4 w-4" />
+                        </span>
+                        <h3 className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
+                          Salon Profil & İletişim Bilgileri
+                        </h3>
+                      </div>
+                      <p className="mt-1 text-xs text-stone-400">
+                        Müşterilerinizin randevu sayfasında ve WhatsApp bildirimlerinde gördüğü iletişim ve adres bilgilerinizi buradan güncelleyin.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyShopPageUrl}
+                      className="inline-flex items-center gap-1.5 self-start rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20 sm:self-auto"
+                    >
+                      <Share2 className="h-3.5 w-3.5 text-sky-400" />
+                      <span>{isCopiedShopUrl ? "Link Kopyalandı!" : "Randevu Linkimi Kopyala"}</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveShopInfo} className="mt-5 space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          Salon / Berber Adı
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={shopNameInput}
+                          onChange={(e) => setShopNameInput(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                          placeholder="Örn: Atelier Noir Beşiktaş"
+                        />
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Müşteri sayfasında başlık olarak görünür.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          WhatsApp & Randevu Telefon Numarası
+                        </label>
+                        <div className="relative mt-1.5">
+                          <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <input
+                            type="tel"
+                            required
+                            value={shopPhoneInput}
+                            onChange={(e) => setShopPhoneInput(e.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            placeholder="0532 800 50 60"
+                          />
+                        </div>
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Müşterilere gidecek otomatik WhatsApp onay linkleri bu numara ile ilişkilendirilir.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          İlçe / Konum / Adres
+                        </label>
+                        <div className="relative mt-1.5">
+                          <MapPin className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <input
+                            type="text"
+                            value={shopDistrictInput}
+                            onChange={(e) => setShopDistrictInput(e.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            placeholder="Beşiktaş, İstanbul"
+                          />
+                        </div>
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Müşteriler randevu alırken salonunuzun konumunu bu metin ile görür.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          Slogan / Alt Başlık
+                        </label>
+                        <input
+                          type="text"
+                          value={shopSubtitleInput}
+                          onChange={(e) => setShopSubtitleInput(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                          placeholder="VIP Grooming & Gentlemen's Club"
+                        />
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Salonunuzun tarzını yansıtan kısa tanıtım cümlesi.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          Dükkan Yönetim PIN Şifresi
+                        </label>
+                        <div className="relative mt-1.5">
+                          <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <input
+                            type="text"
+                            maxLength={16}
+                            value={shopPinInput}
+                            onChange={(e) => setShopPinInput(e.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            placeholder="1234"
+                          />
+                        </div>
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Yönetim paneline giriş yaparken kullandığınız gizli PIN kodunuz.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                          Özel Müşteri Randevu Linkiniz
+                        </label>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={getShopBookingUrl(currentShop.slug)}
+                            className="w-full rounded-xl border border-sky-500/30 bg-[#120f0d] px-3.5 py-2.5 font-mono text-xs font-bold text-sky-300 focus:outline-none cursor-default"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCopyShopPageUrl}
+                            className="shrink-0 rounded-xl border border-sky-500/40 bg-sky-500/15 p-2.5 text-sky-300 hover:bg-sky-500/25"
+                            title="Linki Kopyala"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Instagram biyografinize veya WhatsApp durumunuza ekleyeceğiniz link.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+                      <div className="text-[11px] text-[#e6ccb2]/80">
+                        ✨ Kaydettiğiniz tüm bilgiler tüm cihazlarda ve müşteri randevu sayfasında anında güncellenir.
+                      </div>
+                      <button
+                        type="submit"
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-5 py-2.5 text-xs font-extrabold text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>Salon Bilgilerini Kaydet</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* 3A: CİRO HESAPLARI, KARA LİSTE VE HIZLI ARAÇLAR */}
             {otherSubTab === "stats_blacklist" && (

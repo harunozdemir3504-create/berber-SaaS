@@ -9,7 +9,7 @@ import React, {
   useMemo,
   Suspense,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import {
   AdminAlert,
   Appointment,
@@ -34,6 +34,20 @@ export {
   buildWhatsAppUrl,
   DEFAULT_SHOP_WHATSAPP_PHONE,
 } from "@/lib/whatsapp";
+export {
+  SITE_DOMAIN,
+  SITE_URL,
+  getShopBookingUrl,
+  getShopDisplayUrl,
+} from "@/lib/siteConfig";
+
+export interface UpdateShopDetailsInput {
+  name?: string;
+  phone?: string;
+  district?: string;
+  monthlyFee?: number;
+  subtitle?: string;
+}
 
 interface NewShopInput {
   name: string;
@@ -68,6 +82,7 @@ interface BarberContextType {
   toggleShopSubscription: (slug: string) => void;
   updateShopSubscription: (slug: string, status: SubscriptionStatus, endDate?: string) => void;
   updateShopPinBySlug: (slug: string, newPin: string) => void;
+  updateShopDetails: (slug: string, details: UpdateShopDetailsInput) => void;
   deleteShop: (slug: string) => void;
   currentShopExists: boolean;
   updateCurrentShopDepositPolicy: (policy: DepositPolicyType, amount: number) => void;
@@ -364,18 +379,40 @@ function mergeShopsSafely(
   return merged;
 }
 
-// Helper component that syncs URL `?shop=[slug]` with context state
+// Helper component that syncs URL (both `/:slug` path and `?shop=:slug` query) with context state
 function ShopUrlQuerySync({
   onSlugChange,
 }: {
   onSlugChange: (slugFromUrl: string | null) => void;
 }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const shopParam = searchParams?.get("shop") || null;
 
   useEffect(() => {
-    onSlugChange(shopParam);
-  }, [shopParam, onSlugChange]);
+    if (shopParam) {
+      onSlugChange(shopParam);
+      return;
+    }
+
+    if (pathname) {
+      const clean = pathname.replace(/^\/+/, "").split("/")[0]?.trim();
+      const reserved = [
+        "admin",
+        "super-admin",
+        "api",
+        "favicon.ico",
+        "manifest.json",
+        "sw.js",
+      ];
+      if (clean && !reserved.includes(clean.toLowerCase())) {
+        onSlugChange(clean);
+        return;
+      }
+    }
+
+    onSlugChange(null);
+  }, [shopParam, pathname, onSlugChange]);
 
   return null;
 }
@@ -968,6 +1005,47 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       });
     },
     [globalBlacklist, masterPin]
+  );
+
+  // SUPER ADMIN & SHOP ADMIN: Update Shop Details (Name, Phone, District, Fee, Subtitle)
+  const updateShopDetails = useCallback(
+    (slug: string, details: UpdateShopDetailsInput) => {
+      const targetSlug = slug.trim().toLowerCase();
+      if (!targetSlug) return;
+
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((s) => {
+          if (s.slug.toLowerCase() !== targetSlug) return s;
+          return {
+            ...s,
+            name:
+              details.name !== undefined && details.name.trim()
+                ? details.name.trim()
+                : s.name,
+            phone:
+              details.phone !== undefined && details.phone.trim()
+                ? details.phone.trim()
+                : s.phone,
+            district:
+              details.district !== undefined && details.district.trim()
+                ? details.district.trim()
+                : s.district,
+            monthlyFee:
+              details.monthlyFee !== undefined
+                ? Math.max(0, Number(details.monthlyFee) || 0)
+                : s.monthlyFee,
+            subtitle:
+              details.subtitle !== undefined
+                ? details.subtitle.trim()
+                : s.subtitle,
+          };
+        });
+
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [syncDirectlyToCloud]
   );
 
   // SUPER ADMIN: Permanently delete a shop (and all of its data) from global_state
@@ -1931,6 +2009,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         toggleShopSubscription,
         updateShopSubscription,
         updateShopPinBySlug,
+        updateShopDetails,
         deleteShop,
         currentShopExists,
         updateCurrentShopDepositPolicy,

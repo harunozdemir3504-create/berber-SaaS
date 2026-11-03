@@ -1,4 +1,5 @@
 import { buildWhatsAppUrl, formatPhoneForWhatsApp, DEFAULT_SHOP_WHATSAPP_PHONE } from "@/lib/whatsapp";
+import { getShopBookingUrl } from "@/lib/siteConfig";
 
 export interface NewBookingNotificationPayload {
   appointmentId: string;
@@ -142,8 +143,9 @@ export async function triggerAutomaticBookingNotification(
   barberWhatsAppUrl: string;
   customerApprovalWhatsAppUrl: string;
 }> {
-  const customerToBarberText = `Merhaba, ben ${payload.customerName}. ${payload.dateLabel} saat ${payload.time} için ${payload.servicesSummary} randevusu oluşturdum.`;
-  const barberToCustomerApprovalText = `Merhaba ${payload.customerName}, ${payload.dateLabel} saat ${payload.time} için ${payload.shopName} randevunuz onaylanmıştır. Görüşmek üzere!`;
+  const bookingUrl = getShopBookingUrl(payload.shopSlug);
+  const customerToBarberText = `Merhaba, ben ${payload.customerName}. ${payload.dateLabel} saat ${payload.time} için ${payload.servicesSummary} randevusu oluşturdum. Randevu Takip: ${bookingUrl}`;
+  const barberToCustomerApprovalText = `Merhaba ${payload.customerName}, ${payload.dateLabel} saat ${payload.time} için ${payload.shopName} randevunuz onaylanmıştır. Randevu Takip ve İptal: ${bookingUrl} — Görüşmek üzere!`;
 
   const barberWhatsAppUrl = buildWhatsAppUrl(
     payload.shopPhone,

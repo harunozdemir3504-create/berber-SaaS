@@ -18,6 +18,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://viprandevusistemi.com.tr"),
   title: "VIP Berber Online Randevu",
   description:
     "VIP berber ve kuaför salonları için hızlı ve güvenli online randevu sistemi.",
