@@ -9,23 +9,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#0d0a08",
-        surface: "#1c1613",
+        background: "#09090b",
+        surface: "#141417",
         espresso: {
-          950: "#0d0a08",
-          900: "#14100d",
-          800: "#1c1613",
-          700: "#281f1a",
-          600: "#362a23",
+          950: "#09090b",
+          900: "#121215",
+          800: "#18181c",
+          700: "#242429",
+          600: "#303036",
         },
         cognac: {
-          300: "#e6ccb2",
-          400: "#c88a53",
-          500: "#b47b48",
-          600: "#9a6334",
-          700: "#8c5828",
+          300: "#f3e8dc",
+          400: "#dfc39e",
+          500: "#d4af7a",
+          600: "#c59960",
+          700: "#ab8046",
         },
-        champagne: "#e6ccb2",
+        champagne: "#f3e8dc",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "-apple-system", "sans-serif"],

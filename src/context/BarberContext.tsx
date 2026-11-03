@@ -141,11 +141,23 @@ interface BarberContextType {
     newDateLabel: string,
     newTime: string
   ) => Appointment | undefined;
+  shiftAppointmentToEarlySlot: (
+    id: string,
+    newTime: string,
+    newDayId?: string,
+    newDateLabel?: string
+  ) => Appointment | undefined;
 
   // Barbers / Employees & Chairs CRUD + Custom Pricing (Scoped to Current Shop)
   addBarber: (barberData: Omit<Barber, "id">) => Barber;
   updateBarber: (id: string, updated: Partial<Barber>) => void;
   deleteBarber: (id: string) => void;
+  updateAppointmentBarber: (
+    appointmentId: string,
+    barberId: string,
+    barberName: string,
+    chairLabel: string
+  ) => void;
   getServicePriceForBarber: (service: Service, barber?: Barber | null) => number;
 
   // Services CRUD (Scoped to Current Shop)
@@ -171,7 +183,32 @@ const STORAGE_KEYS = {
   GLOBAL_BLACKLIST: "vip_barber_saas_global_blacklist_v4",
   MASTER_PIN: "vip_barber_saas_master_pin_v4",
   DISMISSED_ALERTS: "vip_barber_dismissed_alerts_v1",
+  DELETED_SHOPS: "vip_barber_deleted_slugs_v1",
 };
+
+export function getDeletedShopSlugs(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_SHOPS);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function recordDeletedShopSlug(slug: string) {
+  if (typeof window === "undefined" || !slug) return;
+  try {
+    const current = getDeletedShopSlugs();
+    current.add(slug.toLowerCase().trim());
+    localStorage.setItem(
+      STORAGE_KEYS.DELETED_SHOPS,
+      JSON.stringify(Array.from(current))
+    );
+  } catch {}
+}
 
 export function getDismissedAlertIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -400,62 +437,22 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
 }
 
 /**
- * Uzaktan gelen Supabase verisi ile yerel localStorage verisini akıllıca birleştirir.
- * Kullanıcının yerelde eklediği hiçbir dükkan veya berber (usta) ASLA kaybolmaz.
+ * Supabase bulut verisini öncelikli ve kesin doğru kabul eder.
+ * Silinen dükkan ve randevular ASLA geri diriltilmez.
  */
 function mergeShopsSafely(
   localShops: TenantShop[],
   remoteShops: TenantShop[]
 ): TenantShop[] {
+  const deletedSlugs = getDeletedShopSlugs();
   if (!Array.isArray(remoteShops) || remoteShops.length === 0) {
-    return localShops;
-  }
-  if (!Array.isArray(localShops) || localShops.length === 0) {
-    return remoteShops;
-  }
-
-  const merged = remoteShops.map(sanitizeShopDates);
-
-  // 1. Yerelde olup remote'da henüz bulunmayan dükkanları koru
-  for (const localShop of localShops) {
-    const existsInRemote = merged.find(
-      (s) => s.slug.toLowerCase() === localShop.slug.toLowerCase()
+    return (localShops || []).filter(
+      (s) => !deletedSlugs.has(s.slug.toLowerCase())
     );
-    if (!existsInRemote) {
-      merged.push(sanitizeShopDates(localShop));
-    } else {
-      // 2. Dükkan varsa bile, yereldeki berberleri (ustaları) kontrol et:
-      // Eğer kullanıcının eklediği bir berber/usta remote'da yoksa, o berberi koru!
-      const remoteBarberIds = new Set(
-        (existsInRemote.barbers || []).map((b) => b.id)
-      );
-      const missingBarbers = (localShop.barbers || []).filter(
-        (b) => !remoteBarberIds.has(b.id)
-      );
-      if (missingBarbers.length > 0) {
-        existsInRemote.barbers = [
-          ...(existsInRemote.barbers || []),
-          ...missingBarbers,
-        ];
-      }
-
-      // Aynı şekilde yerelde eklenen randevuları da koru
-      const remoteAptIds = new Set(
-        (existsInRemote.appointments || []).map((a) => a.id)
-      );
-      const missingApts = (localShop.appointments || []).filter(
-        (a) => !remoteAptIds.has(a.id)
-      );
-      if (missingApts.length > 0) {
-        existsInRemote.appointments = [
-          ...(existsInRemote.appointments || []),
-          ...missingApts,
-        ].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
-      }
-    }
   }
-
-  return merged;
+  return remoteShops
+    .map(sanitizeShopDates)
+    .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
 }
 
 // Helper component that syncs URL (both `/:slug` path and `?shop=:slug` query) with context state
@@ -508,6 +505,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
   const loadFromStorage = useCallback(() => {
     try {
+      const deletedSlugs = getDeletedShopSlugs();
       const savedShops = localStorage.getItem(STORAGE_KEYS.SHOPS);
       const savedBlacklist = localStorage.getItem(STORAGE_KEYS.GLOBAL_BLACKLIST);
       const savedMasterPin = localStorage.getItem(STORAGE_KEYS.MASTER_PIN);
@@ -515,7 +513,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       if (savedShops) {
         const parsed: TenantShop[] = JSON.parse(savedShops);
         if (Array.isArray(parsed)) {
-          setShops(parsed.map(sanitizeShopDates));
+          const filtered = parsed
+            .map(sanitizeShopDates)
+            .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
+          setShops(filtered);
         }
       }
 
@@ -627,7 +628,17 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             };
 
             if (isMounted && Array.isArray(remote.shops)) {
-              setShops((prev) => mergeShopsSafely(prev, remote.shops!));
+              const deletedSlugs = getDeletedShopSlugs();
+              const sanitizedRemote = remote.shops
+                .map(sanitizeShopDates)
+                .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
+              setShops(sanitizedRemote);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.SHOPS,
+                  JSON.stringify(sanitizedRemote)
+                );
+              } catch {}
             }
 
             if (isMounted && Array.isArray(remote.globalBlacklist)) {
@@ -680,8 +691,17 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             if (nextData) {
               setShops((prevShops) => {
                 if (Array.isArray(nextData.shops)) {
-                  const sanitizedNext = mergeShopsSafely(prevShops, nextData.shops);
+                  const deletedSlugs = getDeletedShopSlugs();
+                  const sanitizedNext = nextData.shops
+                    .map(sanitizeShopDates)
+                    .filter((s: TenantShop) => !deletedSlugs.has(s.slug.toLowerCase()));
                   if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
+                    try {
+                      localStorage.setItem(
+                        STORAGE_KEYS.SHOPS,
+                        JSON.stringify(sanitizedNext)
+                      );
+                    } catch {}
                     return sanitizedNext;
                   }
                 }
@@ -1133,10 +1153,18 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const target = slug.trim().toLowerCase();
       if (!target) return;
 
+      recordDeletedShopSlug(target);
+
       setShops((prevShops) => {
         const nextShops = prevShops.filter(
           (s) => s.slug.toLowerCase() !== target
         );
+
+        try {
+          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
+        } catch {
+          // ignore
+        }
 
         // Anında Supabase'e yaz (debounce beklemeden)
         if (isSupabaseConfigured && supabase) {
@@ -1154,12 +1182,6 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             .then(({ error }) => {
               if (error) console.warn("Supabase deleteShop direct sync error:", error.message);
             });
-        }
-
-        try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
-        } catch {
-          // ignore
         }
 
         return nextShops;
@@ -1484,15 +1506,51 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [currentShop.phone, updateCurrentShop]
   );
 
-  // Remove / Unlock a Blocked Time Range or Appointment
+  // Remove / Unlock a Blocked Time Range or Appointment (Instant Cloud Sync)
   const removeAppointmentOrBlock = useCallback(
     (id: string) => {
-      updateCurrentShop((shop) => ({
-        ...shop,
-        appointments: shop.appointments.filter((a) => a.id !== id),
-      }));
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                appointments: shop.appointments.filter((a) => a.id !== id),
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [updateCurrentShop]
+    [currentShop.slug, syncDirectlyToCloud]
+  );
+
+  // Update Staff / Chair assigned to an appointment
+  const updateAppointmentBarber = useCallback(
+    (
+      appointmentId: string,
+      barberId: string,
+      barberName: string,
+      chairLabel: string
+    ) => {
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
+          shop.slug === currentShop.slug
+            ? {
+                ...shop,
+                appointments: shop.appointments.map((a) =>
+                  a.id === appointmentId
+                    ? { ...a, barberId, barberName, chairLabel }
+                    : a
+                ),
+              }
+            : shop
+        );
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   // Add Waitlist Entry to Current Shop
@@ -1876,6 +1934,51 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [currentShop.appointments, updateCurrentShop]
   );
 
+  // Berber Paneli: Erken Saate Alma & Eski Saati Anında Boşa Çıkarma (Çakışma / Çift Kayıt Engelli)
+  const shiftAppointmentToEarlySlot = useCallback(
+    (
+      id: string,
+      newTime: string,
+      newDayId?: string,
+      newDateLabel?: string
+    ): Appointment | undefined => {
+      let movedApt: Appointment | undefined;
+
+      updateCurrentShop((shop) => {
+        const target = shop.appointments.find((a) => a.id === id);
+        if (!target) return shop;
+
+        const targetDayId = newDayId || target.dayId;
+        const targetDateLabel = newDateLabel || target.dateLabel;
+        const newEndTime = minutesToTime(
+          timeToMinutes(newTime) + (target.totalDuration || 30)
+        );
+
+        movedApt = {
+          ...target,
+          dayId: targetDayId,
+          dateLabel: targetDateLabel,
+          time: newTime,
+          endTime: newEndTime,
+          canComeEarly: false, // Erken saate alındı
+          status: target.status === "pending" ? "confirmed" : target.status,
+        };
+
+        // Eski saat anında boşa çıkarıldı çünkü hedef randevunun zamanı newTime oldu
+        // Tek ve güncel randevu nesnesi listeye yerleştirilir
+        return {
+          ...shop,
+          appointments: shop.appointments
+            .map((a) => (a.id === id ? movedApt! : a))
+            .sort((a, b) => a.time.localeCompare(b.time)),
+        };
+      });
+
+      return movedApt;
+    },
+    [updateCurrentShop]
+  );
+
   // BARBERS / CHAIRS CRUD (Scoped to Current Shop)
   const addBarber = useCallback(
     (barberData: Omit<Barber, "id">): Barber => {
@@ -2158,9 +2261,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         findCustomerAppointments,
         cancelAppointmentByCustomer,
         rescheduleAppointmentByCustomer,
+        shiftAppointmentToEarlySlot,
         addBarber,
         updateBarber,
         deleteBarber,
+        updateAppointmentBarber,
         getServicePriceForBarber,
         updateService,
         addService,

@@ -99,6 +99,7 @@ export default function AdminDashboardPage() {
     confirmAppointment,
     markAppointmentNoShow,
     cancelAppointmentByCustomer,
+    shiftAppointmentToEarlySlot,
     removeFromBlacklist,
     isPhoneBlacklisted,
     sendWhatsAppReminder,
@@ -106,6 +107,7 @@ export default function AdminDashboardPage() {
     addBarber,
     updateBarber,
     deleteBarber,
+    updateAppointmentBarber,
     getServicePriceForBarber,
     updateService,
     addService,
@@ -331,13 +333,7 @@ export default function AdminDashboardPage() {
       }
       lastNotifiedAptIdRef.current = payload.appointmentId;
 
-      // 1. AudioContext ile net zil sesi çal
-      playNewBookingChime();
-
-      // 2. Ekranın en üstünde dikkat çekici yeşil uyarı bandı göster
-      setLiveBookingBanner(payload);
-
-      // 3. Tarayıcı / Telefon bildirim çubuğuna bildirim düşür
+      // Sessiz ve sade arka plan bildirimi (ekran pop-up ve ses kalabalığı yapmaz)
       sendBrowserNotification(payload);
     },
     [currentShop.slug]
@@ -473,11 +469,6 @@ export default function AdminDashboardPage() {
 
   const handleComplete = (apt: Appointment) => {
     markAppointmentCompleted(apt.id);
-    triggerToast(
-      `${apt.customerName} — Geldi ✅`,
-      `${apt.totalPrice} TL tahsilat kaydedildi ve randevu Geçmiş listesine taşındı.`,
-      "success"
-    );
   };
 
   const checkAndTriggerEarlyCandidates = (vacatedApt: Appointment) => {
@@ -778,7 +769,7 @@ export default function AdminDashboardPage() {
       earliestSlot: newBarberChair.trim(),
       specialties: ["Saç Kesimi", "Sakal Tıraşı"],
       badge: "VIP Uzman",
-      avatarGradient: "from-[#3b281c] via-[#261a12] to-[#14100d]",
+      avatarGradient: "from-[#3b281c] via-[#261a12] to-[#131316]",
       initials,
       commissionRate: 50,
       customPrices: {},
@@ -876,6 +867,57 @@ export default function AdminDashboardPage() {
     [appointments]
   );
 
+  // 👥 PERSONEL / KOLTUK BAZLI CİRO HESAPLAMA (GÜNLÜK & AYLIK)
+  const staffRevenueStats = useMemo(() => {
+    const todayIso = todayDay.id;
+    const currentMonthPrefix = todayIso.substring(0, 7); // "YYYY-MM"
+
+    // Sadece tamamlanan randevuların cirosunu hesapla
+    const completedApts = appointments.filter(
+      (a) => a.status === "completed" && !a.isBlockedSlot
+    );
+
+    return realBarbers.map((b) => {
+      const barberCompleted = completedApts.filter(
+        (a) =>
+          a.barberId === b.id ||
+          a.barberName.toLowerCase().includes(b.name.toLowerCase())
+      );
+
+      const todayApts = barberCompleted.filter(
+        (a) => resolveDayMetadata(a.dayId).id === todayIso
+      );
+      const todayRevenue = todayApts.reduce(
+        (sum, a) => sum + (Number(a.totalPrice) || 0),
+        0
+      );
+
+      const monthApts = barberCompleted.filter((a) => {
+        const resolved = resolveDayMetadata(a.dayId).id;
+        return resolved.startsWith(currentMonthPrefix);
+      });
+      const monthRevenue = monthApts.reduce(
+        (sum, a) => sum + (Number(a.totalPrice) || 0),
+        0
+      );
+
+      const totalRevenue = barberCompleted.reduce(
+        (sum, a) => sum + (Number(a.totalPrice) || 0),
+        0
+      );
+
+      return {
+        barber: b,
+        todayRevenue,
+        todayCount: todayApts.length,
+        monthRevenue,
+        monthCount: monthApts.length,
+        totalRevenue,
+        totalCount: barberCompleted.length,
+      };
+    });
+  }, [realBarbers, appointments, todayDay.id]);
+
   // Her Gün İçin Bekleyen Randevu Sayısı Rozeti (Badge) Hesaplayıcı
   const getPendingCountForDay = useCallback(
     (targetDayId: string) => {
@@ -971,127 +1013,6 @@ export default function AdminDashboardPage() {
           onClose={() => setIsQrModalOpen(false)}
         />
 
-        {/* 1. EN ÜSTTE OTOMATİK YENİ RANDEVU YEŞİL UYARI BANDI (Web Notification + Sesli Uyarı) */}
-        <AnimatePresence>
-          {liveBookingBanner && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.96 }}
-              className="mb-4 overflow-hidden rounded-3xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-950 via-emerald-900/90 to-[#11221a] p-4 shadow-2xl shadow-emerald-500/30"
-            >
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-400 text-[#06150f] shadow-lg">
-                    <BellRing className="h-7 w-7 animate-bounce stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <span className="inline-block rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-300">
-                      ANLIK OTOMATİK BİLDİRİM
-                    </span>
-                    <h2 className="mt-1 text-base font-black text-white sm:text-lg">
-                      🔔 YENİ RANDEVU GELDİ: {liveBookingBanner.customerName} -{" "}
-                      {liveBookingBanner.time}
-                    </h2>
-                    <p className="mt-0.5 text-xs font-bold text-emerald-200">
-                      {liveBookingBanner.dateLabel} •{" "}
-                      {liveBookingBanner.servicesSummary} (
-                      {liveBookingBanner.totalPrice} TL) • Tel:{" "}
-                      {liveBookingBanner.customerPhone}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <a
-                    href={buildWhatsAppUrl(
-                      liveBookingBanner.customerPhone,
-                      `Merhaba ${liveBookingBanner.customerName}, ${liveBookingBanner.dateLabel} saat ${liveBookingBanner.time} için ${currentShop.name} randevunuz onaylanmıştır. Randevu detayları: ${getShopBookingUrl(currentShop.slug)} — Görüşmek üzere!`
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setLiveBookingBanner(null)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 py-2.5 text-xs font-black text-[#06150f] shadow-md transition hover:bg-emerald-300"
-                  >
-                    <span>✅ WhatsApp Onay Gönder</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (liveBookingBanner?.appointmentId) {
-                        const matching = adminAlerts.find(
-                          (a) => a.appointmentId === liveBookingBanner.appointmentId
-                        );
-                        if (matching) dismissAdminAlert(matching.id);
-                      }
-                      setLiveBookingBanner(null);
-                    }}
-                    className="rounded-xl border border-emerald-400/40 bg-black/30 px-3 py-2.5 text-xs font-bold text-emerald-200 hover:bg-black/50"
-                  >
-                    Kapat
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Kalıcı Admin Uyarıları (Varsa) */}
-        <AnimatePresence>
-          {adminAlerts.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-4 space-y-2"
-            >
-              {adminAlerts.slice(0, 3).map((alert) => (
-                <div
-                  key={alert.id}
-                  className={`flex items-center justify-between gap-3 rounded-2xl border-2 p-3.5 shadow-lg ${
-                    alert.type === "new_booking"
-                      ? "border-emerald-500/80 bg-gradient-to-r from-emerald-950/90 via-[#15241c] to-[#121614]"
-                      : "border-[#c88a53] bg-[#1c1613]"
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black text-[#fdf8f5]">
-                      {alert.title}
-                    </p>
-                    <p className="truncate text-xs font-semibold text-emerald-200/90">
-                      {alert.message}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      dismissAdminAlert(alert.id);
-                      setLiveBookingBanner(null);
-                    }}
-                    className="shrink-0 rounded-xl border border-white/15 bg-black/30 px-3 py-1.5 text-xs font-bold text-[#e6ccb2] hover:bg-black/60 transition"
-                  >
-                    Tamam
-                  </button>
-                </div>
-              ))}
-              {adminAlerts.length > 1 && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearAllAdminAlerts();
-                      setLiveBookingBanner(null);
-                    }}
-                    className="text-xs font-bold text-[#e6ccb2]/80 underline"
-                  >
-                    Tüm Uyarıları Temizle
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* ⚡ BOŞALAN SAAT & ERKEN GELEBİLİR AKILLI ÖNERİ KUTUSU */}
         <AnimatePresence>
           {earlyFillAlert && (
@@ -1154,6 +1075,30 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const oldTime = cand.time;
+                            shiftAppointmentToEarlySlot(
+                              cand.id,
+                              earlyFillAlert.vacatedTime,
+                              resolveDayMetadata(cand.dayId).id,
+                              resolveDayMetadata(cand.dayId).chipLabel
+                            );
+                            triggerToast(
+                              `${cand.customerName} — Saat ${earlyFillAlert.vacatedTime}'e Taşındı! ⚡`,
+                              `Eski saati (${oldTime}) anında boşa çıkarıldı ve diğer müşterilere açıldı.`,
+                              "success"
+                            );
+                            setEarlyFillAlert(null);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-3.5 py-2 text-xs font-black text-[#1a110b] shadow-md shadow-amber-400/25 transition hover:brightness-110 active:scale-95"
+                          title="Müşteriyi bu erken saate kaydırır ve eski saatini anında serbest bırakır"
+                        >
+                          <Zap className="h-3.5 w-3.5 fill-[#1a110b]" />
+                          <span>⚡ Bu Saate Taşı ({earlyFillAlert.vacatedTime})</span>
+                        </button>
+
                         <a
                           href={`tel:${cand.customerPhone}`}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-[#06150f] shadow-md shadow-emerald-500/20 transition hover:bg-emerald-400"
@@ -1236,12 +1181,12 @@ export default function AdminDashboardPage() {
         </AnimatePresence>
 
         {/* SADE ÜST BAŞLIK */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#161311] px-4 py-3 shadow-md">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#141416] px-4 py-3 shadow-md">
           <div>
             <h1 className="text-base font-black text-[#fdf8f5] sm:text-lg">
               {currentShop.name}
             </h1>
-            <p className="text-xs font-semibold text-[#c88a53]">
+            <p className="text-xs font-semibold text-[#dfc39e]">
               Berber Yönetim Ekranı
             </p>
           </div>
@@ -1268,9 +1213,9 @@ export default function AdminDashboardPage() {
             <button
               type="button"
               onClick={handleCopyBookingLink}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#1c1613] px-3 py-2 text-xs font-extrabold text-[#e6ccb2]"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#dfc39e]/40 bg-[#1c1613] px-3 py-2 text-xs font-extrabold text-[#f3e8dc]"
             >
-              <Share2 className="h-3.5 w-3.5 text-[#c88a53]" />
+              <Share2 className="h-3.5 w-3.5 text-[#dfc39e]" />
               <span>{copiedShareLink ? "Kopyalandı ✓" : "Link Kopyala"}</span>
             </button>
           </div>
@@ -1282,10 +1227,10 @@ export default function AdminDashboardPage() {
         {bottomTab === "appointments" && (
           <div className="space-y-4">
             {/* YATAY GÜN SEÇİCİ ŞERİT: [Bugün] [Yarın] [Diğer Günler / Takvim] [Tümü] */}
-            <div className="rounded-3xl border border-[#c88a53]/45 bg-[#161311] p-3 shadow-lg">
+            <div className="rounded-3xl border border-[#dfc39e]/45 bg-[#141416] p-3 shadow-lg">
               <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#e6ccb2]">
-                  <CalendarIcon className="h-3.5 w-3.5 text-[#c88a53]" />
+                <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#f3e8dc]">
+                  <CalendarIcon className="h-3.5 w-3.5 text-[#dfc39e]" />
                   <span>
                     {activeTargetDayMeta
                       ? `${activeTargetDayMeta.chipLabel} — ${activeTargetDayMeta.fullDate}`
@@ -1304,8 +1249,8 @@ export default function AdminDashboardPage() {
                   onClick={() => setAdminDayMode("today")}
                   className={`flex min-w-[115px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
                     adminDayMode === "today"
-                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
-                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                      ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
+                      : "border-white/10 bg-[#101012] text-[#fdf8f5] hover:border-white/25"
                   }`}
                 >
                   <div>
@@ -1316,7 +1261,7 @@ export default function AdminDashboardPage() {
                       className={`text-[11px] font-extrabold ${
                         adminDayMode === "today"
                           ? "text-[#1a110b]/85"
-                          : "text-[#c88a53]"
+                          : "text-[#dfc39e]"
                       }`}
                     >
                       {todayDay.dateStr}
@@ -1325,7 +1270,7 @@ export default function AdminDashboardPage() {
                   <span
                     className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
                       adminDayMode === "today"
-                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
                         : "bg-emerald-500/20 text-emerald-300"
                     }`}
                   >
@@ -1339,8 +1284,8 @@ export default function AdminDashboardPage() {
                   onClick={() => setAdminDayMode("tomorrow")}
                   className={`flex min-w-[115px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
                     adminDayMode === "tomorrow"
-                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
-                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                      ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
+                      : "border-white/10 bg-[#101012] text-[#fdf8f5] hover:border-white/25"
                   }`}
                 >
                   <div>
@@ -1351,7 +1296,7 @@ export default function AdminDashboardPage() {
                       className={`text-[11px] font-extrabold ${
                         adminDayMode === "tomorrow"
                           ? "text-[#1a110b]/85"
-                          : "text-[#c88a53]"
+                          : "text-[#dfc39e]"
                       }`}
                     >
                       {tomorrowDay.dateStr}
@@ -1360,7 +1305,7 @@ export default function AdminDashboardPage() {
                   <span
                     className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
                       adminDayMode === "tomorrow"
-                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
                         : "bg-emerald-500/20 text-emerald-300"
                     }`}
                   >
@@ -1374,8 +1319,8 @@ export default function AdminDashboardPage() {
                   onClick={() => setAdminDayMode("calendar")}
                   className={`flex min-w-[155px] flex-1 shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
                     adminDayMode === "calendar"
-                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
-                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                      ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
+                      : "border-white/10 bg-[#101012] text-[#fdf8f5] hover:border-white/25"
                   }`}
                 >
                   <div>
@@ -1386,7 +1331,7 @@ export default function AdminDashboardPage() {
                       className={`text-[11px] font-extrabold ${
                         adminDayMode === "calendar"
                           ? "text-[#1a110b]/85"
-                          : "text-[#c88a53]"
+                          : "text-[#dfc39e]"
                       }`}
                     >
                       {adminDayMode === "calendar" && activeTargetDayMeta
@@ -1397,7 +1342,7 @@ export default function AdminDashboardPage() {
                   <span
                     className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
                       adminDayMode === "calendar"
-                        ? "bg-[#1a110b] text-[#e6ccb2]"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
                         : "bg-emerald-500/20 text-emerald-300"
                     }`}
                   >
@@ -1411,8 +1356,8 @@ export default function AdminDashboardPage() {
                   onClick={() => setAdminDayMode("all")}
                   className={`flex min-w-[105px] shrink-0 items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-3 text-left transition ${
                     adminDayMode === "all"
-                      ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
-                      : "border-white/10 bg-[#110e0c] text-[#fdf8f5] hover:border-white/25"
+                      ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
+                      : "border-white/10 bg-[#101012] text-[#fdf8f5] hover:border-white/25"
                   }`}
                 >
                   <div>
@@ -1432,8 +1377,8 @@ export default function AdminDashboardPage() {
                   <span
                     className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-black ${
                       adminDayMode === "all"
-                        ? "bg-[#1a110b] text-[#e6ccb2]"
-                        : "bg-white/10 text-[#e6ccb2]"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
+                        : "bg-white/10 text-[#f3e8dc]"
                     }`}
                   >
                     {allPendingCount}
@@ -1456,7 +1401,7 @@ export default function AdminDashboardPage() {
                           className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${
                             isChosen
                               ? "border-emerald-400 bg-emerald-500 text-[#06150f]"
-                              : "border-white/15 bg-[#110e0c] text-[#fdf8f5] hover:border-white/30"
+                              : "border-white/15 bg-[#101012] text-[#fdf8f5] hover:border-white/30"
                           }`}
                         >
                           <span>{d.chipLabel}</span>
@@ -1474,8 +1419,8 @@ export default function AdminDashboardPage() {
                     })}
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#110e0c] px-3 py-2">
-                    <span className="text-xs font-bold text-[#e6ccb2]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#101012] px-3 py-2">
+                    <span className="text-xs font-bold text-[#f3e8dc]">
                       📅 Takvimden İleri Bir Tarih Seçin:
                     </span>
                     <input
@@ -1487,7 +1432,7 @@ export default function AdminDashboardPage() {
                           setSelectedCalendarDayId(e.target.value);
                         }
                       }}
-                      className="rounded-lg border border-[#c88a53]/50 bg-[#181411] px-3 py-1.5 text-xs font-black text-[#fdf8f5] outline-none focus:border-emerald-400"
+                      className="rounded-lg border border-[#dfc39e]/50 bg-[#181411] px-3 py-1.5 text-xs font-black text-[#fdf8f5] outline-none focus:border-emerald-400"
                     />
                   </div>
                 </div>
@@ -1495,13 +1440,13 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Bekleyenler, Erken Gelebilir ve Geçmiş Filtresi */}
-            <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/10 bg-[#161311] p-1.5">
+            <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/10 bg-[#141416] p-1.5">
               <button
                 type="button"
                 onClick={() => setAppointmentFilter("active")}
                 className={`flex items-center justify-center gap-1 rounded-xl py-2.5 sm:py-3 text-xs sm:text-sm font-black transition ${
                   appointmentFilter === "active"
-                    ? "bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md"
+                    ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md"
                     : "text-stone-400 hover:text-[#fdf8f5]"
                 }`}
               >
@@ -1542,8 +1487,8 @@ export default function AdminDashboardPage() {
 
             {/* Randevu Kartları Listesi */}
             {displayedAppointments.length === 0 ? (
-              <div className="rounded-3xl border border-white/10 bg-[#161311] p-8 text-center">
-                <CalendarIcon className="mx-auto h-10 w-10 text-[#c88a53]" />
+              <div className="rounded-3xl border border-white/10 bg-[#141416] p-8 text-center">
+                <CalendarIcon className="mx-auto h-10 w-10 text-[#dfc39e]" />
                 <h3 className="mt-3 text-lg font-extrabold text-[#fdf8f5]">
                   {appointmentFilter === "active"
                     ? `${
@@ -1637,12 +1582,12 @@ export default function AdminDashboardPage() {
                       key={apt.id}
                       className={`overflow-hidden rounded-xl border transition-all ${
                         isExpanded
-                          ? "border-[#c88a53] bg-[#1a1410] shadow-lg shadow-[#c88a53]/15"
+                          ? "border-[#dfc39e] bg-[#161519] shadow-lg shadow-[#dfc39e]/15"
                           : isCompleted
                           ? "border-emerald-500/25 bg-[#121614] hover:border-emerald-500/40"
                           : isCancelled || isNoShow
                           ? "border-rose-500/25 bg-[#181212] hover:border-rose-500/40"
-                          : "border-white/10 bg-[#161311] hover:border-[#c88a53]/45"
+                          : "border-white/10 bg-[#141416] hover:border-[#dfc39e]/45"
                       }`}
                     >
                       {/* 1. KAPALI (VARSAYILAN) TEK SATIR: SAAT | MÜŞTERİ | HİZMET | DURUM */}
@@ -1652,7 +1597,7 @@ export default function AdminDashboardPage() {
                       >
                         <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                           {/* Saat Rozeti */}
-                          <div className="shrink-0 rounded-lg border border-[#c88a53]/40 bg-[#c88a53]/15 px-2 py-1 text-center font-mono text-xs font-black text-[#fdf8f5] sm:text-sm">
+                          <div className="shrink-0 rounded-lg border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-2 py-1 text-center font-mono text-xs font-black text-[#fdf8f5] sm:text-sm">
                             {apt.time}
                           </div>
 
@@ -1712,12 +1657,12 @@ export default function AdminDashboardPage() {
 
                         {/* Tutar & Accordion Oku */}
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs font-black text-[#c88a53] sm:text-sm">
+                          <span className="text-xs font-black text-[#dfc39e] sm:text-sm">
                             {apt.totalPrice} TL
                           </span>
                           <div
                             className={`flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-stone-400 transition-transform ${
-                              isExpanded ? "rotate-180 text-[#c88a53]" : ""
+                              isExpanded ? "rotate-180 text-[#dfc39e]" : ""
                             }`}
                           >
                             <ChevronDown className="h-3.5 w-3.5" />
@@ -1727,12 +1672,74 @@ export default function AdminDashboardPage() {
 
                       {/* 2. AÇIK (TIKLANINCA AÇILAN) DETAY & AKSİYON ÇEKMECESİ */}
                       {isExpanded && (
-                        <div className="border-t border-white/10 bg-[#120f0d] p-3 sm:p-4">
+                        <div className="border-t border-white/10 bg-[#111113] p-3 sm:p-4">
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-300">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-bold text-[#e6ccb2]">
-                                👤 {apt.barberName}
-                              </span>
+                              {/* Personel / Koltuk Seçimi & Değiştirme */}
+                              <div className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#181411] px-2 py-1">
+                                <span className="text-[11px] font-bold text-stone-400">👤 Personel:</span>
+                                <select
+                                  value={apt.barberId}
+                                  onChange={(e) => {
+                                    const selectedB = realBarbers.find((b) => b.id === e.target.value);
+                                    if (selectedB) {
+                                      updateAppointmentBarber(apt.id, selectedB.id, selectedB.name, selectedB.chairName);
+                                    }
+                                  }}
+                                  className="bg-transparent font-black text-[#fdf8f5] outline-none text-xs cursor-pointer"
+                                  title="Bu randevuyu tamamlayacak personeli seçin"
+                                >
+                                  {realBarbers.map((b) => (
+                                    <option key={b.id} value={b.id} className="bg-[#181411] text-white">
+                                      {b.name} ({b.chairName})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* ⚡ Erken Saate / Boş Saate Kaydırma (Eski Saati Anında Serbest Bırakır) */}
+                              {(() => {
+                                const daySlots = getSlotsForDay(apt.dayId).filter(
+                                  (s) => s.state === "available"
+                                );
+                                if (daySlots.length === 0) return null;
+                                return (
+                                  <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2 py-1">
+                                    <span className="text-[11px] font-bold text-amber-300">⚡ Saati Taşı:</span>
+                                    <select
+                                      value=""
+                                      onChange={(e) => {
+                                        const newTime = e.target.value;
+                                        if (!newTime) return;
+                                        const oldTime = apt.time;
+                                        shiftAppointmentToEarlySlot(
+                                          apt.id,
+                                          newTime,
+                                          resolveDayMetadata(apt.dayId).id,
+                                          resolveDayMetadata(apt.dayId).chipLabel
+                                        );
+                                        triggerToast(
+                                          `${apt.customerName} — Saat ${newTime}'e Taşındı! ⚡`,
+                                          `Eski saat (${oldTime}) anında boşa çıkarıldı ve diğer müşterilere açıldı.`,
+                                          "success"
+                                        );
+                                      }}
+                                      className="bg-transparent font-black text-amber-200 outline-none text-xs cursor-pointer"
+                                      title="Randevuyu boş bir saate kaydırın (Eski saat anında boşa çıkar)"
+                                    >
+                                      <option value="" disabled className="bg-[#181411] text-stone-400">
+                                        Boş Saate Kaydır ({apt.time} ➔ ?)
+                                      </option>
+                                      {daySlots.map((s) => (
+                                        <option key={s.time} value={s.time} className="bg-[#181411] text-emerald-300">
+                                          🕒 {s.time} (Boş Saat)
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                );
+                              })()}
+
                               <span>•</span>
                               <span className="text-stone-400">
                                 📅 {cleanDateLabel} - {apt.time}
@@ -1812,7 +1819,7 @@ export default function AdminDashboardPage() {
                                 )}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2.5 px-3 text-xs font-bold text-[#e6ccb2] transition hover:bg-[#c88a53]/25"
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 py-2.5 px-3 text-xs font-bold text-[#f3e8dc] transition hover:bg-[#dfc39e]/25"
                               >
                                 <span>💬 Kod İste</span>
                               </a>
@@ -1890,7 +1897,7 @@ export default function AdminDashboardPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={() => handleSendReminder(apt, "approval")}
-                                className="flex items-center justify-center gap-1 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2 text-xs font-bold text-[#e6ccb2] hover:bg-[#c88a53]/25"
+                                className="flex items-center justify-center gap-1 rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 py-2 text-xs font-bold text-[#f3e8dc] hover:bg-[#dfc39e]/25"
                               >
                                 <span>✅ Onay</span>
                               </a>
@@ -1912,7 +1919,7 @@ export default function AdminDashboardPage() {
         {bottomTab === "quick_add" && (
           <form
             onSubmit={handleSaveQuickAdd}
-            className="space-y-5 rounded-3xl border border-[#c88a53]/50 bg-[#161311] p-4 shadow-2xl sm:p-6"
+            className="space-y-5 rounded-3xl border border-[#dfc39e]/50 bg-[#141416] p-4 shadow-2xl sm:p-6"
           >
             <div className="border-b border-white/10 pb-3">
               <h2 className="text-lg font-black text-[#fdf8f5] sm:text-xl">
@@ -1924,9 +1931,9 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* KUTU 1: MÜŞTERİ İSMİ (ve İsteğe Bağlı Telefon) */}
-            <div className="rounded-2xl border border-white/10 bg-[#110e0c] p-4">
-              <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase text-[#e6ccb2]">
-                <User className="h-4 w-4 text-[#c88a53]" />
+            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
+              <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
+                <User className="h-4 w-4 text-[#dfc39e]" />
                 <span>1. Müşteri İsmi</span>
               </label>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -1935,7 +1942,7 @@ export default function AdminDashboardPage() {
                   value={quickName}
                   onChange={(e) => setQuickName(e.target.value)}
                   placeholder="Müşteri Adı (Boşsa: Misafir Müşteri)"
-                  className="w-full rounded-xl border-2 border-white/15 bg-[#181411] px-4 py-3.5 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none focus:border-[#c88a53]"
+                  className="w-full rounded-xl border-2 border-white/15 bg-[#181411] px-4 py-3.5 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none focus:border-[#dfc39e]"
                 />
                 <input
                   type="tel"
@@ -1955,7 +1962,7 @@ export default function AdminDashboardPage() {
                       onClick={() => setQuickBarberId(b.id)}
                       className={`rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${
                         quickBarberId === b.id
-                          ? "border-[#e6ccb2] bg-[#c88a53] text-[#1a110b]"
+                          ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
                           : "border-white/10 bg-[#181411] text-stone-300"
                       }`}
                     >
@@ -1967,9 +1974,9 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* KUTU 2: SAAT SEÇİMİ */}
-            <div className="rounded-2xl border border-white/10 bg-[#110e0c] p-4">
+            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
               <div className="mb-2.5 flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#e6ccb2]">
+                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
                   <Clock className="h-4 w-4 text-emerald-400" />
                   <span>2. Gün & Saat Seçin ({quickSelectedDay.chipLabel})</span>
                 </label>
@@ -1985,7 +1992,7 @@ export default function AdminDashboardPage() {
                       }}
                       className={`shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${
                         quickDayId === d.id
-                          ? "border-[#e6ccb2] bg-[#c88a53] text-[#1a110b]"
+                          ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
                           : "border-white/10 bg-[#181411] text-stone-300 hover:border-white/30"
                       }`}
                     >
@@ -2023,13 +2030,13 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* KUTU 3: HİZMET SEÇİMİ */}
-            <div className="rounded-2xl border border-white/10 bg-[#110e0c] p-4">
+            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
               <div className="mb-2.5 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#e6ccb2]">
-                  <Scissors className="h-4 w-4 text-[#c88a53]" />
+                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
+                  <Scissors className="h-4 w-4 text-[#dfc39e]" />
                   <span>3. Hizmet Seçin</span>
                 </label>
-                <span className="text-sm font-black text-[#c88a53]">
+                <span className="text-sm font-black text-[#dfc39e]">
                   Toplam: {quickTotalPrice} TL
                 </span>
               </div>
@@ -2048,7 +2055,7 @@ export default function AdminDashboardPage() {
                       onClick={() => toggleQuickService(srv.id)}
                       className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3.5 py-3 text-left transition ${
                         active
-                          ? "border-[#e6ccb2] bg-[#c88a53]/25 text-[#fdf8f5]"
+                          ? "border-[#f3e8dc] bg-[#dfc39e]/25 text-[#fdf8f5]"
                           : "border-white/10 bg-[#181411] text-stone-300"
                       }`}
                     >
@@ -2064,7 +2071,7 @@ export default function AdminDashboardPage() {
                         </span>
                         <span className="text-sm">{srv.name}</span>
                       </span>
-                      <span className="shrink-0 text-sm font-black text-[#e6ccb2]">
+                      <span className="shrink-0 text-sm font-black text-[#f3e8dc]">
                         {price} TL
                       </span>
                     </button>
@@ -2095,13 +2102,13 @@ export default function AdminDashboardPage() {
         {bottomTab === "other" && (
           <div className="space-y-5">
             {/* Alt Kategori Seçici */}
-            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#161311] p-1.5 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#141416] p-1.5 sm:grid-cols-5">
               <button
                 type="button"
                 onClick={() => setOtherSubTab("shop_info")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "shop_info"
-                    ? "bg-[#c88a53] text-[#1a110b]"
+                    ? "bg-[#dfc39e] text-[#1a110b]"
                     : "text-stone-300 hover:text-white"
                 }`}
               >
@@ -2112,7 +2119,7 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("stats_blacklist")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "stats_blacklist"
-                    ? "bg-[#c88a53] text-[#1a110b]"
+                    ? "bg-[#dfc39e] text-[#1a110b]"
                     : "text-stone-300 hover:text-white"
                 }`}
               >
@@ -2123,7 +2130,7 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("barbers")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "barbers"
-                    ? "bg-[#c88a53] text-[#1a110b]"
+                    ? "bg-[#dfc39e] text-[#1a110b]"
                     : "text-stone-300 hover:text-white"
                 }`}
               >
@@ -2134,7 +2141,7 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("services")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "services"
-                    ? "bg-[#c88a53] text-[#1a110b]"
+                    ? "bg-[#dfc39e] text-[#1a110b]"
                     : "text-stone-300 hover:text-white"
                 }`}
               >
@@ -2145,7 +2152,7 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("schedule")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "schedule"
-                    ? "bg-[#c88a53] text-[#1a110b]"
+                    ? "bg-[#dfc39e] text-[#1a110b]"
                     : "text-stone-300 hover:text-white"
                 }`}
               >
@@ -2156,11 +2163,11 @@ export default function AdminDashboardPage() {
             {/* 3.0: SALON PROFİLİ & İLETİŞİM BİLGİLERİ (BERBER PANELİNDE DÜZENLENEBİLİR) */}
             {otherSubTab === "shop_info" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#c88a53]/35 bg-gradient-to-br from-[#241a14] via-[#1a1410] to-[#120f0d] p-4 sm:p-6 shadow-xl shadow-[#c88a53]/15">
+                <div className="rounded-2xl border border-[#dfc39e]/35 bg-gradient-to-br from-[#1a191d] via-[#161519] to-[#111113] p-4 sm:p-6 shadow-xl shadow-[#dfc39e]/15">
                   <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c88a53]/20 text-[#c88a53]">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#dfc39e]/20 text-[#dfc39e]">
                           <Scissors className="h-4 w-4" />
                         </span>
                         <h3 className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
@@ -2185,7 +2192,7 @@ export default function AdminDashboardPage() {
                   <form onSubmit={handleSaveShopInfo} className="mt-5 space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           Salon / Berber Adı
                         </label>
                         <input
@@ -2193,7 +2200,7 @@ export default function AdminDashboardPage() {
                           required
                           value={shopNameInput}
                           onChange={(e) => setShopNameInput(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="Örn: Atelier Noir Beşiktaş"
                         />
                         <span className="mt-1 block text-[11px] text-stone-400">
@@ -2202,7 +2209,7 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           WhatsApp & Randevu Telefon Numarası
                         </label>
                         <div className="relative mt-1.5">
@@ -2212,7 +2219,7 @@ export default function AdminDashboardPage() {
                             required
                             value={shopPhoneInput}
                             onChange={(e) => setShopPhoneInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="0532 800 50 60"
                           />
                         </div>
@@ -2224,7 +2231,7 @@ export default function AdminDashboardPage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           İlçe / Konum / Adres
                         </label>
                         <div className="relative mt-1.5">
@@ -2233,7 +2240,7 @@ export default function AdminDashboardPage() {
                             type="text"
                             value={shopDistrictInput}
                             onChange={(e) => setShopDistrictInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="Beşiktaş, İstanbul"
                           />
                         </div>
@@ -2243,14 +2250,14 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           Slogan / Alt Başlık
                         </label>
                         <input
                           type="text"
                           value={shopSubtitleInput}
                           onChange={(e) => setShopSubtitleInput(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#120f0d] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="VIP Grooming & Gentlemen's Club"
                         />
                         <span className="mt-1 block text-[11px] text-stone-400">
@@ -2261,7 +2268,7 @@ export default function AdminDashboardPage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           Dükkan Yönetim PIN Şifresi
                         </label>
                         <div className="relative mt-1.5">
@@ -2271,7 +2278,7 @@ export default function AdminDashboardPage() {
                             maxLength={16}
                             value={shopPinInput}
                             onChange={(e) => setShopPinInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#120f0d] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#c88a53] focus:outline-none"
+                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="1234"
                           />
                         </div>
@@ -2281,7 +2288,7 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#e6ccb2]">
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           Özel Müşteri Randevu Linkiniz
                         </label>
                         <div className="mt-1.5 flex items-center gap-2">
@@ -2289,7 +2296,7 @@ export default function AdminDashboardPage() {
                             type="text"
                             readOnly
                             value={getShopBookingUrl(currentShop.slug)}
-                            className="w-full rounded-xl border border-sky-500/30 bg-[#120f0d] px-3.5 py-2.5 font-mono text-xs font-bold text-sky-300 focus:outline-none cursor-default"
+                            className="w-full rounded-xl border border-sky-500/30 bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-sky-300 focus:outline-none cursor-default"
                           />
                           <button
                             type="button"
@@ -2307,12 +2314,12 @@ export default function AdminDashboardPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
-                      <div className="text-[11px] text-[#e6ccb2]/80">
+                      <div className="text-[11px] text-[#f3e8dc]/80">
                         ✨ Kaydettiğiniz tüm bilgiler tüm cihazlarda ve müşteri randevu sayfasında anında güncellenir.
                       </div>
                       <button
                         type="submit"
-                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-5 py-2.5 text-xs font-extrabold text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110"
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] px-5 py-2.5 text-xs font-extrabold text-[#1a110b] shadow-lg shadow-[#dfc39e]/25 transition hover:brightness-110"
                       >
                         <Save className="h-4 w-4" />
                         <span>Salon Bilgilerini Kaydet</span>
@@ -2328,7 +2335,7 @@ export default function AdminDashboardPage() {
               <div className="space-y-5">
                 {/* Gelir & İstatistik Kartları */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-2xl border border-emerald-500/30 bg-[#161311] p-4">
+                  <div className="rounded-2xl border border-emerald-500/30 bg-[#141416] p-4">
                     <span className="text-xs font-bold text-emerald-300">
                       Tamamlanan Ciro
                     </span>
@@ -2336,15 +2343,15 @@ export default function AdminDashboardPage() {
                       {completedRevenue.toLocaleString("tr-TR")} TL
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-[#c88a53]/40 bg-[#161311] p-4">
-                    <span className="text-xs font-bold text-[#e6ccb2]">
+                  <div className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4">
+                    <span className="text-xs font-bold text-[#f3e8dc]">
                       Kurtarılan Gelir
                     </span>
-                    <p className="mt-1 text-xl font-black text-[#c88a53]">
+                    <p className="mt-1 text-xl font-black text-[#dfc39e]">
                       {stats.savedRevenue.toLocaleString("tr-TR")} TL
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-sky-500/30 bg-[#161311] p-4">
+                  <div className="rounded-2xl border border-sky-500/30 bg-[#141416] p-4">
                     <span className="text-xs font-bold text-sky-300">
                       Yedek Doluluk
                     </span>
@@ -2352,7 +2359,7 @@ export default function AdminDashboardPage() {
                       {stats.waitlistFilled} Koltuk
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-rose-500/30 bg-[#161311] p-4">
+                  <div className="rounded-2xl border border-rose-500/30 bg-[#141416] p-4">
                     <span className="text-xs font-bold text-rose-300">
                       No-Show Kalkanı
                     </span>
@@ -2362,8 +2369,115 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
+                {/* 👥 Personel / Koltuk Bazlı Ciro Takibi (Harun Usta, Ömer Çırak vb.) */}
+                <div className="rounded-2xl border border-[#dfc39e]/35 bg-[#141416] p-4 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-3">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
+                        <Users className="h-4 w-4 text-[#dfc39e]" />
+                        <span>Personel & Koltuk Ciro Takibi</span>
+                      </h3>
+                      <p className="mt-0.5 text-[11px] text-stone-400">
+                        Harun Usta, Ömer Çırak ve diğer personellerin günlük ve aylık net kazanç dağılımı
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOtherSubTab("barbers")}
+                      className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-3 py-1.5 text-[11px] font-black text-[#f3e8dc] transition hover:bg-[#dfc39e]/25"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      <span>Personel / Koltuk Yönet</span>
+                    </button>
+                  </div>
+
+                  {/* Hızlı Özet Şeridi */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold text-stone-400">
+                      Bugün:
+                    </span>
+                    {staffRevenueStats.map((item) => (
+                      <span
+                        key={`today-${item.barber.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dfc39e]/30 bg-[#221a14] px-2.5 py-1 text-xs font-black text-[#fdf8f5]"
+                      >
+                        <span className="text-[#dfc39e]">{item.barber.name}:</span>
+                        <span className="text-emerald-400">{item.todayRevenue.toLocaleString("tr-TR")} TL</span>
+                      </span>
+                    ))}
+                    <span className="ml-2 text-[11px] font-bold text-stone-400">
+                      Bu Ay:
+                    </span>
+                    {staffRevenueStats.map((item) => (
+                      <span
+                        key={`month-${item.barber.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#1c1815] px-2.5 py-1 text-xs font-semibold text-stone-300"
+                      >
+                        <span>{item.barber.name}:</span>
+                        <span className="font-bold text-amber-300">{item.monthRevenue.toLocaleString("tr-TR")} TL</span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Personel Detay Kartları */}
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {staffRevenueStats.map((item) => (
+                      <div
+                        key={item.barber.id}
+                        className="rounded-xl border border-white/10 bg-[#101012] p-3.5"
+                      >
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <div className="min-w-0">
+                            <span className="block truncate text-xs font-black text-[#fdf8f5]">
+                              {item.barber.name}
+                            </span>
+                            <span className="text-[10px] text-[#dfc39e]">
+                              {item.barber.chairName || item.barber.role}
+                            </span>
+                          </div>
+                          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-300">
+                            {item.totalCount} Tamamlanan
+                          </span>
+                        </div>
+
+                        <div className="mt-2.5 grid grid-cols-2 gap-2 text-center">
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2">
+                            <span className="block text-[10px] font-bold text-emerald-400">
+                              Bugün
+                            </span>
+                            <p className="mt-0.5 text-sm font-black text-[#fdf8f5]">
+                              {item.todayRevenue.toLocaleString("tr-TR")} TL
+                            </p>
+                            <span className="text-[9px] text-stone-400">
+                              {item.todayCount} randevu
+                            </span>
+                          </div>
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                            <span className="block text-[10px] font-bold text-amber-300">
+                              Bu Ay
+                            </span>
+                            <p className="mt-0.5 text-sm font-black text-[#fdf8f5]">
+                              {item.monthRevenue.toLocaleString("tr-TR")} TL
+                            </p>
+                            <span className="text-[9px] text-stone-400">
+                              {item.monthCount} randevu
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-black/30 px-2.5 py-1 text-[11px]">
+                          <span className="text-stone-400">Toplam Ciro:</span>
+                          <span className="font-black text-[#dfc39e]">
+                            {item.totalRevenue.toLocaleString("tr-TR")} TL
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Hızlı Araçlar: QR Afiş, Müşteri Vitrini, Çıkış */}
-                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#161311] p-4">
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#141416] p-4">
                   <button
                     type="button"
                     onClick={() => setIsQrModalOpen(true)}
@@ -2395,7 +2509,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Randevuya Gelmeyen Müşteriyi Kara Listeye Alma */}
-                <div className="rounded-2xl border border-rose-500/35 bg-[#161311] p-4">
+                <div className="rounded-2xl border border-rose-500/35 bg-[#141416] p-4">
                   <div className="flex items-center justify-between">
                     <h3 className="flex items-center gap-2 text-base font-black text-[#fdf8f5]">
                       <ShieldAlert className="h-5 w-5 text-rose-400" />
@@ -2412,7 +2526,7 @@ export default function AdminDashboardPage() {
 
                   {activeAppointments.length > 0 && (
                     <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-                      <span className="block text-xs font-bold text-[#e6ccb2]">
+                      <span className="block text-xs font-bold text-[#f3e8dc]">
                         Aktif Randevulardan Gelmeyen Varsa İşaretleyin:
                       </span>
                       {activeAppointments
@@ -2420,7 +2534,7 @@ export default function AdminDashboardPage() {
                         .map((apt) => (
                           <div
                             key={apt.id}
-                            className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#110e0c] px-3 py-2 text-xs"
+                            className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#101012] px-3 py-2 text-xs"
                           >
                             <span className="font-bold text-[#fdf8f5]">
                               {apt.time} • {apt.customerName} (
@@ -2488,7 +2602,7 @@ export default function AdminDashboardPage() {
 
                 {/* Yedek Liste */}
                 {waitlist.length > 0 && (
-                  <div className="rounded-2xl border border-amber-500/30 bg-[#161311] p-4">
+                  <div className="rounded-2xl border border-amber-500/30 bg-[#141416] p-4">
                     <h3 className="text-sm font-black text-[#fdf8f5]">
                       Yedek Liste ({waitlist.length})
                     </h3>
@@ -2496,7 +2610,7 @@ export default function AdminDashboardPage() {
                       {waitlist.map((wl) => (
                         <div
                           key={wl.id}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#110e0c] p-3 text-xs"
+                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#101012] p-3 text-xs"
                         >
                           <div>
                             <p className="font-bold text-[#fdf8f5]">
@@ -2533,10 +2647,10 @@ export default function AdminDashboardPage() {
               <div className="space-y-4">
                 <form
                   onSubmit={handleCreateBarber}
-                  className="rounded-2xl border border-[#c88a53]/40 bg-[#161311] p-4"
+                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4"
                 >
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                    <UserPlus className="h-4 w-4 text-[#c88a53]" />
+                    <UserPlus className="h-4 w-4 text-[#dfc39e]" />
                     <span>Yeni Usta / Koltuk Ekle</span>
                   </h3>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -2546,7 +2660,7 @@ export default function AdminDashboardPage() {
                       value={newBarberName}
                       onChange={(e) => setNewBarberName(e.target.value)}
                       placeholder="Usta Adı (Örn: Usta Ali)"
-                      className="rounded-xl border border-white/15 bg-[#110e0c] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
                     />
                     <input
                       type="text"
@@ -2554,11 +2668,11 @@ export default function AdminDashboardPage() {
                       value={newBarberChair}
                       onChange={(e) => setNewBarberChair(e.target.value)}
                       placeholder="Koltuk Adı (Örn: Koltuk #4)"
-                      className="rounded-xl border border-white/15 bg-[#110e0c] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
                     />
                     <button
                       type="submit"
-                      className="rounded-xl bg-[#c88a53] py-2.5 text-sm font-black text-[#1a110b]"
+                      className="rounded-xl bg-[#dfc39e] py-2.5 text-sm font-black text-[#1a110b]"
                     >
                       + Usta Ekle
                     </button>
@@ -2571,7 +2685,7 @@ export default function AdminDashboardPage() {
                     return (
                       <div
                         key={barber.id}
-                        className="rounded-2xl border border-white/10 bg-[#161311] p-4"
+                        className="rounded-2xl border border-white/10 bg-[#141416] p-4"
                       >
                         {isEditing ? (
                           <div className="space-y-3">
@@ -2582,7 +2696,7 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditBarberName(e.target.value)
                                 }
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
                               />
                               <input
                                 type="text"
@@ -2590,7 +2704,7 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditBarberChair(e.target.value)
                                 }
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2 text-sm font-bold text-[#e6ccb2]"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
                               />
                             </div>
                             <div className="flex justify-end gap-2">
@@ -2604,7 +2718,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleSaveBarber(barber)}
-                                className="rounded-xl bg-[#c88a53] px-4 py-1.5 text-xs font-black text-[#1a110b]"
+                                className="rounded-xl bg-[#dfc39e] px-4 py-1.5 text-xs font-black text-[#1a110b]"
                               >
                                 Kaydet
                               </button>
@@ -2616,7 +2730,7 @@ export default function AdminDashboardPage() {
                               <p className="text-sm font-black text-[#fdf8f5]">
                                 {barber.name}
                               </p>
-                              <p className="text-xs text-[#c88a53]">
+                              <p className="text-xs text-[#dfc39e]">
                                 {barber.chairName}
                               </p>
                             </div>
@@ -2624,7 +2738,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => startEditBarber(barber)}
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-1.5 text-xs font-bold text-stone-200"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-200"
                               >
                                 <Edit3 className="inline h-3.5 w-3.5 mr-1" />
                                 Düzenle
@@ -2653,7 +2767,7 @@ export default function AdminDashboardPage() {
               <div className="space-y-4">
                 <form
                   onSubmit={handleCreateService}
-                  className="rounded-2xl border border-[#c88a53]/40 bg-[#161311] p-4"
+                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4"
                 >
                   <h3 className="mb-3 text-sm font-black text-[#fdf8f5]">
                     + Yeni Hizmet Ekle
@@ -2665,7 +2779,7 @@ export default function AdminDashboardPage() {
                       value={newServiceName}
                       onChange={(e) => setNewServiceName(e.target.value)}
                       placeholder="Hizmet Adı"
-                      className="rounded-xl border border-white/15 bg-[#110e0c] px-3.5 py-2.5 text-sm text-[#fdf8f5] sm:col-span-2"
+                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5] sm:col-span-2"
                     />
                     <input
                       type="number"
@@ -2673,11 +2787,11 @@ export default function AdminDashboardPage() {
                       value={newServicePrice}
                       onChange={(e) => setNewServicePrice(e.target.value)}
                       placeholder="Fiyat (TL)"
-                      className="rounded-xl border border-white/15 bg-[#110e0c] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
                     />
                     <button
                       type="submit"
-                      className="rounded-xl bg-[#c88a53] py-2.5 text-sm font-black text-[#1a110b]"
+                      className="rounded-xl bg-[#dfc39e] py-2.5 text-sm font-black text-[#1a110b]"
                     >
                       + Hizmet Ekle
                     </button>
@@ -2690,7 +2804,7 @@ export default function AdminDashboardPage() {
                     return (
                       <div
                         key={srv.id}
-                        className="rounded-2xl border border-white/10 bg-[#161311] p-4"
+                        className="rounded-2xl border border-white/10 bg-[#141416] p-4"
                       >
                         {isEditing ? (
                           <div className="space-y-3">
@@ -2699,7 +2813,7 @@ export default function AdminDashboardPage() {
                                 type="text"
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
                               />
                               <input
                                 type="number"
@@ -2707,7 +2821,7 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditPrice(Number(e.target.value))
                                 }
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2 text-sm font-bold text-[#e6ccb2]"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
                               />
                               <input
                                 type="number"
@@ -2715,7 +2829,7 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditDuration(Number(e.target.value))
                                 }
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2 text-sm font-bold text-sky-300"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-sky-300"
                               />
                             </div>
                             <div className="flex justify-end gap-2">
@@ -2729,7 +2843,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleSaveService(srv.id)}
-                                className="rounded-xl bg-[#c88a53] px-4 py-1.5 text-xs font-black text-[#1a110b]"
+                                className="rounded-xl bg-[#dfc39e] px-4 py-1.5 text-xs font-black text-[#1a110b]"
                               >
                                 Kaydet
                               </button>
@@ -2741,7 +2855,7 @@ export default function AdminDashboardPage() {
                               <p className="text-sm font-black text-[#fdf8f5]">
                                 {srv.name}
                               </p>
-                              <p className="text-xs font-bold text-[#c88a53]">
+                              <p className="text-xs font-bold text-[#dfc39e]">
                                 {srv.price} TL • {srv.duration} dk
                               </p>
                             </div>
@@ -2749,7 +2863,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => startEditService(srv)}
-                                className="rounded-xl border border-white/15 bg-[#110e0c] px-3 py-1.5 text-xs font-bold text-stone-200"
+                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-200"
                               >
                                 Düzenle
                               </button>
@@ -2773,9 +2887,9 @@ export default function AdminDashboardPage() {
             {/* 3D: SAATLER, TATİL GÜNLERİ VE KAPORA */}
             {otherSubTab === "schedule" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-white/10 bg-[#161311] p-4">
+                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                    <Clock className="h-4 w-4 text-[#c88a53]" />
+                    <Clock className="h-4 w-4 text-[#dfc39e]" />
                     <span>Açılış & Kapanış Saatleri</span>
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
@@ -2788,7 +2902,7 @@ export default function AdminDashboardPage() {
                         onChange={(e) =>
                           updateShopSettings({ openTime: e.target.value })
                         }
-                        className="w-full rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
+                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
                       >
                         {[
                           "08:00",
@@ -2813,7 +2927,7 @@ export default function AdminDashboardPage() {
                         onChange={(e) =>
                           updateShopSettings({ closeTime: e.target.value })
                         }
-                        className="w-full rounded-xl border border-white/15 bg-[#110e0c] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
+                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
                       >
                         {[
                           "19:00",
@@ -2832,10 +2946,10 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#161311] p-4">
+                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                      <Coffee className="h-4 w-4 text-[#c88a53]" />
+                      <Coffee className="h-4 w-4 text-[#dfc39e]" />
                       Öğle Molası ({shopSettings.breakStart} -{" "}
                       {shopSettings.breakEnd})
                     </span>
@@ -2857,7 +2971,7 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#161311] p-4">
+                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
                     <CalendarOff className="h-4 w-4 text-rose-400" />
                     <span>Haftalık Tatil Günleri</span>
@@ -2885,7 +2999,7 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#161311] p-4">
+                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
                   <h3 className="mb-2 text-sm font-black text-[#fdf8f5]">
                     Kara Liste Ön Kapora Tutarı (TL)
                   </h3>
@@ -2902,8 +3016,8 @@ export default function AdminDashboardPage() {
                         }
                         className={`rounded-xl border px-4 py-2 text-xs font-black ${
                           currentShop.depositAmount === amt
-                            ? "border-[#e6ccb2] bg-[#c88a53] text-[#1a110b]"
-                            : "border-white/15 bg-[#110e0c] text-[#e6ccb2]"
+                            ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
+                            : "border-white/15 bg-[#101012] text-[#f3e8dc]"
                         }`}
                       >
                         {amt} TL
@@ -2924,7 +3038,7 @@ export default function AdminDashboardPage() {
         {/* ===================================================================== */}
         <nav
           aria-label="Berber Alt Menü"
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-[#c88a53]/35 bg-[#0e0b09]/95 px-3 py-2 backdrop-blur-xl"
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-[#dfc39e]/35 bg-[#0e0b09]/95 px-3 py-2 backdrop-blur-xl"
         >
           <div className="mx-auto grid max-w-xl grid-cols-3 gap-2">
             <button
@@ -2932,7 +3046,7 @@ export default function AdminDashboardPage() {
               onClick={() => setBottomTab("appointments")}
               className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2.5 text-xs font-black transition ${
                 bottomTab === "appointments"
-                  ? "bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                  ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
                   : "text-stone-400 hover:text-[#fdf8f5]"
               }`}
             >
@@ -2958,7 +3072,7 @@ export default function AdminDashboardPage() {
               onClick={() => setBottomTab("other")}
               className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2.5 text-xs font-black transition ${
                 bottomTab === "other"
-                  ? "bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                  ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
                   : "text-stone-400 hover:text-[#fdf8f5]"
               }`}
             >
@@ -3005,7 +3119,7 @@ export default function AdminDashboardPage() {
                       depositAmount: Math.max(0, Number(e.target.value) || 0),
                     }))
                   }
-                  className="mt-3 w-full rounded-xl border border-white/20 bg-[#14100d] px-3.5 py-2.5 text-sm font-bold text-[#fdf8f5]"
+                  className="mt-3 w-full rounded-xl border border-white/20 bg-[#131316] px-3.5 py-2.5 text-sm font-bold text-[#fdf8f5]"
                 />
                 <div className="mt-5 flex justify-end gap-2">
                   <button
@@ -3079,7 +3193,7 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={handleConfirmRemoveBlacklist}
-                    className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-[#14100d]"
+                    className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-[#131316]"
                   >
                     Evet, Çıkar
                   </button>

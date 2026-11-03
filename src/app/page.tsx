@@ -68,6 +68,7 @@ export default function CustomerBookingPage() {
     services,
     shopSettings,
     addAppointment,
+    confirmAppointment,
     checkHasActiveAppointmentForDay,
     isPhoneBlacklisted,
     getSlotsForDay,
@@ -401,7 +402,7 @@ export default function CustomerBookingPage() {
           <h1 className="mt-4 text-2xl font-extrabold text-[#fdf8f5]">
             Salon Bulunamadı
           </h1>
-          <p className="mt-2 text-sm text-[#e6ccb2]/80">
+          <p className="mt-2 text-sm text-[#f3e8dc]/80">
             Aradığınız berber salonu sistemde kayıtlı değil veya hesabı kapatılmış.
           </p>
         </div>
@@ -418,7 +419,7 @@ export default function CustomerBookingPage() {
           <h1 className="mt-4 text-xl font-extrabold text-[#fdf8f5]">
             Bu salonun online randevu sistemi geçici olarak kapalıdır
           </h1>
-          <p className="mt-2 text-sm text-[#e6ccb2]/80">
+          <p className="mt-2 text-sm text-[#f3e8dc]/80">
             <strong>{currentShop.name}</strong> ({currentShop.phone}) ile doğrudan
             iletişime geçebilirsiniz.
           </p>
@@ -436,7 +437,7 @@ export default function CustomerBookingPage() {
   return (
     <div className="mx-auto max-w-xl px-2.5 pb-20 pt-2 sm:px-4 sm:pt-4">
       {/* EN ÜSTTE DOĞRUDAN ADIM ADIM RANDEVU ALMA KUTUSU */}
-      <div className="overflow-hidden rounded-2xl border border-[#c88a53]/35 bg-[#161210] p-3 sm:p-5 shadow-xl">
+      <div className="overflow-hidden rounded-2xl border border-[#dfc39e]/35 bg-[#141416] p-3 sm:p-5 shadow-xl">
         {/* 3 Adım Göstergesi */}
         {stage !== "confirmed" && (
           <div className="mb-3.5 grid grid-cols-3 gap-1.5">
@@ -451,10 +452,10 @@ export default function CustomerBookingPage() {
                   onClick={() => isDone && setStep(item.num)}
                   className={`flex items-center justify-center gap-1 rounded-xl border px-1.5 py-2 text-center text-[11px] font-extrabold transition sm:text-xs ${
                     isActive
-                      ? "border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
+                      ? "border-[#f3e8dc]/70 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b]"
                       : isDone
                       ? "cursor-pointer border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20"
-                      : "cursor-default border-white/10 bg-[#120f0d] text-stone-500"
+                      : "cursor-default border-white/10 bg-[#111113] text-stone-500"
                   }`}
                 >
                   {isDone && <Check className="h-3 w-3 shrink-0 stroke-[3]" />}
@@ -478,8 +479,8 @@ export default function CustomerBookingPage() {
             >
               {/* Dükkan Seçimi */}
               <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
-                  <Store className="h-3.5 w-3.5 text-[#c88a53]" />
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
+                  <Store className="h-3.5 w-3.5 text-[#dfc39e]" />
                   <span>Berber Dükkanı Seçimi</span>
                 </label>
 
@@ -494,8 +495,8 @@ export default function CustomerBookingPage() {
                           onClick={() => setCurrentShopSlug(shop.slug)}
                           className={`flex flex-col items-start justify-between rounded-xl border-2 p-2.5 text-left transition ${
                             isCurrent
-                              ? "border-[#e6ccb2] bg-[#241a14] text-[#fdf8f5]"
-                              : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/20"
+                              ? "border-[#f3e8dc] bg-[#1a191d] text-[#fdf8f5]"
+                              : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/20"
                           }`}
                         >
                           <div className="flex w-full items-center justify-between gap-1">
@@ -508,7 +509,7 @@ export default function CustomerBookingPage() {
                               </span>
                             )}
                           </div>
-                          <span className="mt-0.5 truncate text-[10px] font-semibold text-[#c88a53]">
+                          <span className="mt-0.5 truncate text-[10px] font-semibold text-[#dfc39e]">
                             {shop.district}
                           </span>
                         </button>
@@ -516,12 +517,12 @@ export default function CustomerBookingPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between rounded-xl border border-[#c88a53]/35 bg-[#14110f] px-3 py-2">
+                  <div className="flex items-center justify-between rounded-xl border border-[#dfc39e]/35 bg-[#141417] px-3 py-2">
                     <div>
                       <p className="text-sm font-black text-[#fdf8f5]">
                         {currentShop.name}
                       </p>
-                      <p className="text-[11px] font-semibold text-[#c88a53]">
+                      <p className="text-[11px] font-semibold text-[#dfc39e]">
                         {currentShop.district} • {shopSettings.openTime} -{" "}
                         {shopSettings.closeTime}
                       </p>
@@ -536,8 +537,8 @@ export default function CustomerBookingPage() {
               {/* Usta / Koltuk Seçimi (Kompakt Grid) */}
               {barbers.length > 1 && (
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
-                    <User className="h-3.5 w-3.5 text-[#c88a53]" />
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
+                    <User className="h-3.5 w-3.5 text-[#dfc39e]" />
                     <span>Usta / Koltuk Seçin</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -550,15 +551,15 @@ export default function CustomerBookingPage() {
                           onClick={() => setSelectedBarberId(barber.id)}
                           className={`flex items-center justify-between gap-2 rounded-xl border-2 p-2.5 text-left transition ${
                             isSelected
-                              ? "border-[#e6ccb2] bg-[#241a14] text-[#fdf8f5]"
-                              : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/20"
+                              ? "border-[#f3e8dc] bg-[#1a191d] text-[#fdf8f5]"
+                              : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/20"
                           }`}
                         >
                           <div className="min-w-0">
                             <p className="truncate text-xs font-black text-[#fdf8f5]">
                               {barber.name}
                             </p>
-                            <p className="truncate text-[10px] font-semibold text-[#c88a53]">
+                            <p className="truncate text-[10px] font-semibold text-[#dfc39e]">
                               {barber.chairName}
                             </p>
                           </div>
@@ -583,11 +584,11 @@ export default function CustomerBookingPage() {
               {/* Hizmet Seçimi (SIKI KOMPAKT IZGARA - METRELERCE KAYDIRMA BİTTİ) */}
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
-                    <Scissors className="h-3.5 w-3.5 text-[#c88a53]" />
+                  <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
+                    <Scissors className="h-3.5 w-3.5 text-[#dfc39e]" />
                     <span>İşlem Seçin</span>
                   </label>
-                  <span className="rounded-lg bg-[#c88a53]/20 px-2 py-0.5 text-xs font-black text-[#e6ccb2]">
+                  <span className="rounded-lg bg-[#dfc39e]/20 px-2 py-0.5 text-xs font-black text-[#f3e8dc]">
                     Toplam: {totalPrice} TL
                   </span>
                 </div>
@@ -608,7 +609,7 @@ export default function CustomerBookingPage() {
                         className={`flex flex-col justify-between rounded-xl border-2 p-2.5 text-left transition ${
                           isSelected
                             ? "border-emerald-400 bg-emerald-950/30 text-[#fdf8f5]"
-                            : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/25"
+                            : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/25"
                         }`}
                       >
                         <div className="flex w-full items-start justify-between gap-1">
@@ -629,7 +630,7 @@ export default function CustomerBookingPage() {
                           <span className="text-[10px] text-stone-400">
                             {service.duration} dk
                           </span>
-                          <span className="text-xs font-black text-[#c88a53] sm:text-sm">
+                          <span className="text-xs font-black text-[#dfc39e] sm:text-sm">
                             {effectivePrice} TL
                           </span>
                         </div>
@@ -643,7 +644,7 @@ export default function CustomerBookingPage() {
                 type="button"
                 disabled={selectedServices.length === 0}
                 onClick={() => setStep(2)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               >
                 <span>Gün & Saat Seçimine Geç</span>
                 <ChevronRight className="h-4 w-4 stroke-[3]" />
@@ -665,7 +666,7 @@ export default function CustomerBookingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-[#14110f] px-2.5 py-1.5 text-xs font-bold text-[#e6ccb2] hover:border-white/30"
+                  className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-[#141417] px-2.5 py-1.5 text-xs font-bold text-[#f3e8dc] hover:border-white/30"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   <span>Geri</span>
@@ -673,15 +674,15 @@ export default function CustomerBookingPage() {
                 <span className="text-xs font-black text-[#fdf8f5] sm:text-sm">
                   Gün ve Boş Saat Seçin
                 </span>
-                <span className="rounded-lg bg-[#c88a53]/20 px-2 py-0.5 text-xs font-bold text-[#e6ccb2]">
+                <span className="rounded-lg bg-[#dfc39e]/20 px-2 py-0.5 text-xs font-bold text-[#f3e8dc]">
                   {selectedDay.fullDate}
                 </span>
               </div>
 
               {/* Gün Seçimi — Bugünden Başlayan 7 Gerçek Gün */}
               <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
-                  <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" />
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
+                  <CalendarDays className="h-3.5 w-3.5 text-[#dfc39e]" />
                   <span>1. Günü Seçin</span>
                 </label>
                 <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
@@ -732,10 +733,10 @@ export default function CustomerBookingPage() {
                         }}
                         className={`flex min-w-[96px] shrink-0 flex-col items-center justify-between rounded-xl border-2 px-2.5 py-2 transition ${
                           isSelected
-                            ? "border-[#e6ccb2] bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
+                            ? "border-[#f3e8dc] bg-gradient-to-b from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b]"
                             : isDayClosed
-                            ? "border-white/5 bg-[#120f0d] text-stone-500 opacity-60"
-                            : "border-white/10 bg-[#14110f] text-[#fdf8f5] hover:border-white/30"
+                            ? "border-white/5 bg-[#111113] text-stone-500 opacity-60"
+                            : "border-white/10 bg-[#141417] text-[#fdf8f5] hover:border-white/30"
                         }`}
                       >
                         <span className="whitespace-nowrap text-xs font-black tracking-tight">
@@ -754,7 +755,7 @@ export default function CustomerBookingPage() {
 
               {/* Saat Seçimi — SADECE GERÇEKTEN ALINABİLİR BOŞ SAATLER (GEÇMİŞLER TAMAMEN GİZLİ) */}
               <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
                   <Clock className="h-3.5 w-3.5 text-emerald-400" />
                   <span>2. Boş Saati Seçin ({validAvailableSlots.length} Müsait Saat)</span>
                 </label>
@@ -777,7 +778,7 @@ export default function CustomerBookingPage() {
                         ? "Bugün İçin Alınabilir Saat Kalmadı"
                         : "Bu Gün İçin Boş Saat Kalmadı"}
                     </p>
-                    <p className="mt-0.5 text-xs text-[#e6ccb2]/80">
+                    <p className="mt-0.5 text-xs text-[#f3e8dc]/80">
                       {isSelectedDayToday
                         ? "Mesai sona ermiştir. Yarına randevu alabilirsiniz."
                         : "Lütfen diğer günlerden birini seçiniz."}
@@ -789,7 +790,7 @@ export default function CustomerBookingPage() {
                           setSelectedDay(tomorrowMeta);
                           setSelectedSlot(null);
                         }}
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-4 py-2 text-xs font-extrabold text-[#1a110b]"
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] px-4 py-2 text-xs font-extrabold text-[#1a110b]"
                       >
                         <span>👉 Yarının Saatlerini Gör</span>
                       </button>
@@ -836,7 +837,7 @@ export default function CustomerBookingPage() {
                     isSlotPassedOrImminent(selectedSlot.time, true))
                 }
                 onClick={() => selectedSlot && setStep(3)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               >
                 <span>
                   {selectedSlot
@@ -867,7 +868,7 @@ export default function CustomerBookingPage() {
                         setStage("idle");
                         setStep(2);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#14110f] px-3.5 py-2 text-xs font-extrabold text-[#e6ccb2] hover:border-white/30"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#141417] px-3.5 py-2 text-xs font-extrabold text-[#f3e8dc] hover:border-white/30"
                     >
                       <ChevronLeft className="h-4 w-4" />
                       <span>Saat Değiştir</span>
@@ -878,10 +879,10 @@ export default function CustomerBookingPage() {
                   </div>
 
                   {/* Seçilen Randevu Özeti Kutusu */}
-                  <div className="rounded-xl border border-[#c88a53]/35 bg-[#14110f] p-3">
+                  <div className="rounded-xl border border-[#dfc39e]/35 bg-[#141417] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#c88a53]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#dfc39e]">
                           {currentShop.name} • {selectedBarber?.name}
                         </p>
                         <p className="mt-0.5 text-xs font-black text-[#fdf8f5] sm:text-sm">
@@ -892,7 +893,7 @@ export default function CustomerBookingPage() {
                         <span className="inline-block rounded-lg bg-emerald-500/20 px-2 py-0.5 text-xs font-black text-emerald-300">
                           {selectedDay.chipLabel} • Saat {selectedSlot?.time}
                         </span>
-                        <p className="mt-0.5 text-xs font-black text-[#e6ccb2] sm:text-sm">
+                        <p className="mt-0.5 text-xs font-black text-[#f3e8dc] sm:text-sm">
                           Toplam: {totalPrice} TL
                         </p>
                       </div>
@@ -905,21 +906,21 @@ export default function CustomerBookingPage() {
               {stage === "idle" && (
                 <form
                   onSubmit={handleCompleteBookingSubmit}
-                  className="space-y-3 rounded-xl border border-white/10 bg-[#14110f] p-3.5 sm:p-4"
+                  className="space-y-3 rounded-xl border border-white/10 bg-[#141417] p-3.5 sm:p-4"
                 >
                   <div>
                     <label className="mb-1 block text-xs font-bold text-[#fdf8f5]">
                       Adınız Soyadınız *
                     </label>
                     <div className="relative">
-                      <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#c88a53]" />
+                      <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#dfc39e]" />
                       <input
                         type="text"
                         required
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Örn: Ahmet Yılmaz"
-                        className="w-full rounded-xl border border-white/15 bg-[#0e0c0a] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-[#c88a53]"
+                        className="w-full rounded-xl border border-white/15 bg-[#0d0d10] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-[#dfc39e]"
                       />
                     </div>
                   </div>
@@ -936,7 +937,7 @@ export default function CustomerBookingPage() {
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         placeholder="05XX XXX XX XX"
-                        className="w-full rounded-xl border border-white/15 bg-[#0e0c0a] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
+                        className="w-full rounded-xl border border-white/15 bg-[#0d0d10] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
                       />
                     </div>
                   </div>
@@ -947,7 +948,7 @@ export default function CustomerBookingPage() {
                     className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-2.5 transition select-none ${
                       canComeEarly
                         ? "border-amber-400/60 bg-gradient-to-r from-amber-950/40 via-[#241a12] to-[#16120f] shadow-sm"
-                        : "border-white/10 bg-[#120f0d] opacity-75 hover:border-white/20"
+                        : "border-white/10 bg-[#111113] opacity-75 hover:border-white/20"
                     }`}
                   >
                     <div
@@ -963,7 +964,7 @@ export default function CustomerBookingPage() {
                       <p className="flex items-center gap-1 text-xs font-black text-[#fdf8f5]">
                         <span>⚡ Daha erken bir saat boşalırsa haber ver (Yedek Liste)</span>
                       </p>
-                      <p className="mt-0.5 text-[10px] leading-snug text-[#e6ccb2]/80">
+                      <p className="mt-0.5 text-[10px] leading-snug text-[#f3e8dc]/80">
                         Sizin saatinizden önce bir iptal olursa salonumuz sizi arayarak daha erken bir saate alabilir.
                       </p>
                     </div>
@@ -987,7 +988,7 @@ export default function CustomerBookingPage() {
               {/* Kara Liste / Ön Kapora Durumu */}
               {(stage === "deposit_required" ||
                 stage === "processing_deposit") && (
-                <div className="rounded-3xl border-2 border-[#c88a53] bg-[#181310] p-5">
+                <div className="rounded-3xl border-2 border-[#dfc39e] bg-[#151518] p-5">
                   <div className="flex items-start gap-3">
                     <ShieldAlert className="h-7 w-7 shrink-0 text-rose-400" />
                     <div>
@@ -996,7 +997,7 @@ export default function CustomerBookingPage() {
                           ? "Online Randevu Oluşturulamadı"
                           : `Randevu Onayı İçin ${requiredDepositAmount} TL Ön Kapora Gerekmektedir`}
                       </h3>
-                      <p className="mt-1 text-xs text-[#e6ccb2]/85">
+                      <p className="mt-1 text-xs text-[#f3e8dc]/85">
                         {isBlockedByShopPolicy
                           ? `${currentShop.name} salon politikası gereği bu numara ile online randevu alınamamaktadır.`
                           : `Randevunuzu garantilemek için ${requiredDepositAmount} TL ön kapora ödemeniz gerekmektedir.`}
@@ -1008,16 +1009,16 @@ export default function CustomerBookingPage() {
                     <button
                       type="button"
                       onClick={() => setStage("idle")}
-                      className="mt-4 w-full rounded-xl border border-white/20 bg-[#110e0c] py-3 text-xs font-bold text-[#e6ccb2]"
+                      className="mt-4 w-full rounded-xl border border-white/20 bg-[#101012] py-3 text-xs font-bold text-[#f3e8dc]"
                     >
                       Geri Dön
                     </button>
                   ) : (
                     <>
-                      <div className="mt-4 rounded-xl border border-white/10 bg-[#110e0c] p-3">
+                      <div className="mt-4 rounded-xl border border-white/10 bg-[#101012] p-3">
                         <div className="mb-2 flex items-center justify-between text-xs text-[#fdf8f5]">
                           <span className="flex items-center gap-1 font-bold">
-                            <CreditCard className="h-4 w-4 text-[#c88a53]" />
+                            <CreditCard className="h-4 w-4 text-[#dfc39e]" />
                             Kapora Ödemesi ({requiredDepositAmount} TL)
                           </span>
                           <span className="flex items-center gap-1 text-emerald-400">
@@ -1028,7 +1029,7 @@ export default function CustomerBookingPage() {
                           type="text"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
-                          className="w-full rounded-lg border border-white/15 bg-[#181310] px-3 py-2 font-mono text-xs text-[#fdf8f5]"
+                          className="w-full rounded-lg border border-white/15 bg-[#151518] px-3 py-2 font-mono text-xs text-[#fdf8f5]"
                         />
                       </div>
 
@@ -1036,7 +1037,7 @@ export default function CustomerBookingPage() {
                         <button
                           type="button"
                           onClick={() => setStage("idle")}
-                          className="rounded-xl border border-white/15 bg-[#110e0c] px-4 py-3 text-xs font-bold text-[#e6ccb2]"
+                          className="rounded-xl border border-white/15 bg-[#101012] px-4 py-3 text-xs font-bold text-[#f3e8dc]"
                         >
                           Geri
                         </button>
@@ -1044,7 +1045,7 @@ export default function CustomerBookingPage() {
                           type="button"
                           disabled={stage === "processing_deposit"}
                           onClick={handleCompleteDepositBooking}
-                          className="flex-1 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-sm font-black text-[#1a110b]"
+                          className="flex-1 rounded-xl bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] py-3 text-sm font-black text-[#1a110b]"
                         >
                           {stage === "processing_deposit"
                             ? "Onaylanıyor..."
@@ -1056,31 +1057,51 @@ export default function CustomerBookingPage() {
                 </div>
               )}
 
-              {/* WHATSAPP ONAY KODU VE DOĞRULAMA EKRANI */}
+              {/* WHATSAPP ONAY KODU VE DOĞRULAMA EKRANI (OTOMATİK ONAY) */}
               {stage === "confirmed" && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="rounded-3xl border-2 border-amber-500/70 bg-gradient-to-b from-amber-950/40 via-[#181411] to-[#120f0d] p-5 text-center shadow-2xl sm:p-7"
+                  className={`rounded-3xl border-2 p-5 text-center shadow-2xl sm:p-7 transition-all ${
+                    confirmedAppointment?.status === "confirmed"
+                      ? "border-emerald-500/70 bg-gradient-to-b from-emerald-950/40 via-[#141517] to-[#0f1012]"
+                      : "border-amber-500/70 bg-gradient-to-b from-amber-950/40 via-[#181513] to-[#111113]"
+                  }`}
                 >
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
-                    <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
-                  </div>
+                  {confirmedAppointment?.status === "confirmed" ? (
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
+                      <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+                    </div>
+                  ) : (
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
+                      <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
+                    </div>
+                  )}
 
-                  <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
-                    ⏳ ONAY BEKLİYOR • WHATSAPP DOĞRULAMASI
-                  </span>
+                  {confirmedAppointment?.status === "confirmed" ? (
+                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
+                      ✅ ONAYLANDI • RANDEVUNUZ KESİNLEŞTİ
+                    </span>
+                  ) : (
+                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
+                      ⏳ ONAY BEKLİYOR • WHATSAPP İLE GÖNDERİN
+                    </span>
+                  )}
 
                   <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
-                    Randevunuz Alındı, {customerName}!
+                    {confirmedAppointment?.status === "confirmed"
+                      ? `Harika, Randevunuz Onaylandı ${customerName}!`
+                      : `Randevunuz Alındı, ${customerName}!`}
                   </h3>
                   <p className="mt-1 text-xs text-stone-300">
-                    Sahte randevuları önlemek için randevunuz şu an <strong>Onay Bekliyor</strong> durumundadır.
+                    {confirmedAppointment?.status === "confirmed"
+                      ? "Onay kodunuz berberinize iletildi. Randevunuz sistem tarafından otomatik olarak onaylandı."
+                      : "WhatsApp butonuna bastığınızda onay kodunuz berbere iletilecek ve randevunuz anında onaylanacaktır."}
                   </p>
 
                   {/* 4 HANELİ ONAY KODU VURGULU KART */}
                   {confirmedAppointment && (
-                    <div className="mx-auto my-4 max-w-sm rounded-2xl border-2 border-dashed border-amber-400/80 bg-gradient-to-b from-amber-500/15 via-[#1c1611] to-[#120f0d] p-4 text-center shadow-xl shadow-amber-500/10">
+                    <div className="mx-auto my-4 max-w-sm rounded-2xl border-2 border-dashed border-amber-400/80 bg-gradient-to-b from-amber-500/15 via-[#1a1715] to-[#111113] p-4 text-center shadow-xl shadow-amber-500/10">
                       <span className="block text-[11px] font-black uppercase tracking-wider text-amber-300">
                         ONAY KODUNUZ
                       </span>
@@ -1102,12 +1123,14 @@ export default function CustomerBookingPage() {
                         </button>
                       </div>
                       <p className="mt-2 text-xs font-bold leading-relaxed text-amber-200/95">
-                        Randevunuzun kesinleşmesi için aşağıdaki butona basarak onay kodunuzu WhatsApp üzerinden berberinize gönderin.
+                        {confirmedAppointment?.status === "confirmed"
+                          ? "Onay kodunuz berberinize iletildi. Randevunuz listede onaylı olarak yer almaktadır."
+                          : "Randevunuzun anında kesinleşmesi için aşağıdaki butona basarak onay kodunuzu WhatsApp üzerinden gönderin."}
                       </p>
                     </div>
                   )}
 
-                  {/* BÜYÜK YEŞİL WHATSAPP İLE ONAYLA BUTONU */}
+                  {/* BÜYÜK YEŞİL WHATSAPP İLE ONAYLA BUTONU (OTOMATİK ONAY TETİKLER) */}
                   {(() => {
                     const vCode =
                       confirmedAppointment?.verificationCode || "#4829";
@@ -1117,12 +1140,23 @@ export default function CustomerBookingPage() {
                       confirmedAppointment?.time || selectedSlot?.time || "";
                     const client =
                       confirmedAppointment?.customerName || customerName.trim();
-                    const waMessage = `Merhaba, viprandevusistemi.com.tr üzerinden ${cleanDate} saat ${cleanTime} için randevu oluşturdum. Onay Kodum: ${vCode} - Adım: ${client}`;
+                    const waMessage = `Merhaba, viprandevusistemi.com.tr randevu onay kodum: ${vCode} - ${client}`;
                     const waHref = buildWhatsAppUrl(
                       currentShop?.phone,
                       waMessage,
                       DEFAULT_SHOP_WHATSAPP_PHONE
                     );
+
+                    const handleWhatsAppClick = () => {
+                      if (confirmedAppointment?.id) {
+                        confirmAppointment(confirmedAppointment.id);
+                        setConfirmedAppointment((prev) =>
+                          prev ? { ...prev, status: "confirmed" } : prev
+                        );
+                      }
+                    };
+
+                    const isConfirmed = confirmedAppointment?.status === "confirmed";
 
                     return (
                       <div className="mt-4 space-y-3">
@@ -1130,17 +1164,22 @@ export default function CustomerBookingPage() {
                           href={waHref}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={handleWhatsAppClick}
                           className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
                         >
                           <MessageSquare className="h-5 w-5 fill-[#081510]" />
-                          <span>💬 WhatsApp ile Onay Kodunu Gönder</span>
+                          <span>
+                            {isConfirmed
+                              ? "💬 WhatsApp Açıldı • Randevunuz Onaylandı ✅"
+                              : "💬 WhatsApp ile Onay Kodunu Gönder"}
+                          </span>
                         </a>
                       </div>
                     );
                   })()}
 
                   {/* Randevu Detay Özeti */}
-                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#120f0d] p-3.5 text-left text-xs sm:text-sm">
+                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#111113] p-3.5 text-left text-xs sm:text-sm">
                     <div className="flex justify-between border-b border-white/10 pb-2">
                       <span className="text-stone-400">Dükkan / Usta:</span>
                       <span className="font-bold text-[#fdf8f5]">
@@ -1160,10 +1199,10 @@ export default function CustomerBookingPage() {
                       </span>
                     </div>
                     <div className="flex justify-between pt-1">
-                      <span className="font-bold text-[#e6ccb2]">
+                      <span className="font-bold text-[#f3e8dc]">
                         Toplam Tutar:
                       </span>
-                      <span className="text-base font-black text-[#c88a53]">
+                      <span className="text-base font-black text-[#dfc39e]">
                         {totalPrice} TL
                       </span>
                     </div>
@@ -1173,7 +1212,7 @@ export default function CustomerBookingPage() {
                     <button
                       type="button"
                       onClick={handleResetWizard}
-                      className="w-full rounded-2xl border border-white/15 bg-[#14100d] py-3 text-xs font-bold text-[#e6ccb2] transition hover:border-[#c88a53]"
+                      className="w-full rounded-2xl border border-white/15 bg-[#131316] py-3 text-xs font-bold text-[#f3e8dc] transition hover:border-[#dfc39e]"
                     >
                       Yeni Randevu Oluştur
                     </button>
