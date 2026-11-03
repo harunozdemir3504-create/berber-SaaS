@@ -111,6 +111,11 @@ interface BarberContextType {
     entry: Omit<WaitlistEntry, "id" | "createdAt" | "notified">
   ) => WaitlistEntry;
   markAppointmentCompleted: (id: string) => void;
+  confirmAppointment: (id: string) => void;
+  checkHasActiveAppointmentForDay: (
+    phone: string,
+    dayId: string
+  ) => Appointment | undefined;
   markAppointmentNoShow: (
     id: string,
     customDeposit?: number
@@ -246,6 +251,80 @@ export function generateAppointmentCode(shopSlug?: string): string {
     : "BRB";
   const randomNum = Math.floor(1000 + Math.random() * 9000);
   return `#${prefix}-${randomNum}`;
+}
+
+export function generateVerificationCode(): string {
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  return `#${randomNum}`;
+}
+
+export function validateTurkishMobilePhone(phone: string): {
+  isValid: boolean;
+  error?: string;
+  cleanPhone: string;
+  formattedPhone: string;
+} {
+  const digits = phone.replace(/\D/g, "");
+  let normalized = digits;
+  if (normalized.startsWith("90") && normalized.length === 12) {
+    normalized = normalized.substring(2);
+  }
+  if (normalized.length === 10 && normalized.startsWith("5")) {
+    normalized = "0" + normalized;
+  }
+
+  if (normalized.length !== 11 || !normalized.startsWith("05")) {
+    return {
+      isValid: false,
+      error: "Lütfen 05XX XXX XX XX formatında geçerli bir cep telefonu numarası giriniz.",
+      cleanPhone: normalized,
+      formattedPhone: phone,
+    };
+  }
+
+  const prefix3 = normalized.substring(0, 3);
+  const validMobilePrefixes = ["050", "051", "052", "053", "054", "055", "056"];
+  if (!validMobilePrefixes.includes(prefix3)) {
+    return {
+      isValid: false,
+      error: "Geçersiz operatör kodu. Numaranız 053X, 054X, 055X veya 050X ile başlamalıdır.",
+      cleanPhone: normalized,
+      formattedPhone: phone,
+    };
+  }
+
+  const restOfNumber = normalized.substring(2);
+  const last7 = normalized.substring(4);
+  const isAllSameLast7 = /^(\d)\1{6}$/.test(last7);
+  const isAllSame9 = /^(\d)\1{8}$/.test(restOfNumber);
+  const sequentialAsc = "0123456789012345";
+  const sequentialDesc = "9876543210987654";
+  const isSequential =
+    sequentialAsc.includes(last7) || sequentialDesc.includes(last7);
+
+  if (
+    isAllSameLast7 ||
+    isAllSame9 ||
+    isSequential ||
+    last7 === "0000000" ||
+    restOfNumber === "5551234567" ||
+    last7 === "1234567"
+  ) {
+    return {
+      isValid: false,
+      error: "Lütfen gerçek bir cep telefonu numarası giriniz (Sahte veya tekrarlı numara tespit edildi).",
+      cleanPhone: normalized,
+      formattedPhone: phone,
+    };
+  }
+
+  const formatted = `${normalized.substring(0, 4)} ${normalized.substring(4, 7)} ${normalized.substring(7, 9)} ${normalized.substring(9, 11)}`;
+
+  return {
+    isValid: true,
+    cleanPhone: normalized,
+    formattedPhone: formatted,
+  };
 }
 
 function deduplicateServices(list: Service[]): Service[] {
@@ -1238,12 +1317,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const addAppointment = useCallback(
     (newAptData: Omit<Appointment, "id" | "appointmentCode">): Appointment => {
       const resolvedDay = resolveDayMetadata(newAptData.dayId);
+      const vCode =
+        newAptData.verificationCode ||
+        (newAptData.status === "pending" ? generateVerificationCode() : undefined);
       const newApt: Appointment = {
         ...newAptData,
         dayId: resolvedDay.id,
         dateLabel: resolvedDay.chipLabel,
         id: `apt-${Date.now()}`,
         appointmentCode: generateAppointmentCode(currentShop.slug),
+        verificationCode: vCode,
       };
 
       const servicesSummary = newApt.services.map((s) => s.name).join(" + ");
@@ -1263,7 +1346,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             ? [
                 {
                   id: `alert-booking-${newApt.id}`,
-                  title: `🔔 YENİ RANDEVU GELDİ: ${newApt.customerName} - ${newApt.time}`,
+                  title:
+                    newApt.status === "pending"
+                      ? `🔔 YENİ RANDEVU (${vCode || "Onay Bekliyor"}): ${newApt.customerName} - ${newApt.time}`
+                      : `🔔 YENİ RANDEVU GELDİ: ${newApt.customerName} - ${newApt.time}`,
                   message: `${newApt.dateLabel} saat ${newApt.time} • ${servicesSummary} (${newApt.totalPrice} TL) • Tel: ${newApt.customerPhone}`,
                   timestamp: timeStampStr,
                   type: "new_booking" as const,
@@ -1440,6 +1526,38 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       }));
     },
     [updateCurrentShop]
+  );
+
+  // Confirm Appointment (WhatsApp Onay Kodu Doğrulandı -> status: "confirmed")
+  const confirmAppointment = useCallback(
+    (id: string) => {
+      updateCurrentShop((shop) => ({
+        ...shop,
+        appointments: shop.appointments.map((apt) =>
+          apt.id === id ? { ...apt, status: "confirmed" as const } : apt
+        ),
+      }));
+    },
+    [updateCurrentShop]
+  );
+
+  // Check if a customer phone already has an active / pending appointment on target day
+  const checkHasActiveAppointmentForDay = useCallback(
+    (phone: string, dayId: string): Appointment | undefined => {
+      const cleanPhone = normalizePhone(phone);
+      const targetDay = resolveDayMetadata(dayId).id;
+      return currentShop.appointments.find((apt) => {
+        if (apt.isBlockedSlot) return false;
+        const sameDay = resolveDayMetadata(apt.dayId).id === targetDay;
+        const samePhone = normalizePhone(apt.customerPhone) === cleanPhone;
+        const isLive =
+          apt.status === "pending" ||
+          apt.status === "confirmed" ||
+          apt.status === "upcoming";
+        return sameDay && samePhone && isLive;
+      });
+    },
+    [currentShop.appointments]
   );
 
   // Mark Appointment No-Show -> Adds to GLOBAL BLACKLIST NETWORK + Notifies Current Shop Waitlist
@@ -2030,6 +2148,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         removeAppointmentOrBlock,
         addWaitlistEntry,
         markAppointmentCompleted,
+        confirmAppointment,
+        checkHasActiveAppointmentForDay,
         markAppointmentNoShow,
         removeFromBlacklist,
         sendWhatsAppReminder,

@@ -20,6 +20,7 @@ import {
   Ban,
   Store,
   CalendarDays,
+  MessageSquare,
 } from "lucide-react";
 import {
   PWA_INSTALL_ROLE_KEY,
@@ -37,6 +38,8 @@ import {
 import {
   useBarber,
   normalizePhone,
+  validateTurkishMobilePhone,
+  generateVerificationCode,
   formatPhoneForWhatsApp,
   buildWhatsAppUrl,
   DEFAULT_SHOP_WHATSAPP_PHONE,
@@ -65,6 +68,7 @@ export default function CustomerBookingPage() {
     services,
     shopSettings,
     addAppointment,
+    checkHasActiveAppointmentForDay,
     isPhoneBlacklisted,
     getSlotsForDay,
     getServicePriceForBarber,
@@ -284,6 +288,9 @@ export default function CustomerBookingPage() {
     const fallbackRealBarber =
       barbers.find((b) => !b.isAnyOption) || selectedBarber;
 
+    // 4 Haneli WhatsApp Onay Kodu (Örn: #4829)
+    const verificationCode = generateVerificationCode();
+
     const created = addAppointment({
       dayId: selectedDay.id,
       dateLabel: selectedDay.chipLabel,
@@ -308,9 +315,10 @@ export default function CustomerBookingPage() {
       trustBadge: withDeposit ? "deposit_paid" : "first_time",
       trustDetail: withDeposit
         ? `${requiredDepositAmount} TL Kapora Alındı`
-        : "Online Hızlı Randevu",
+        : "WhatsApp Onay Kodu Doğrulaması",
       depositAmount: withDeposit ? requiredDepositAmount : undefined,
-      status: "upcoming",
+      status: "pending", // WhatsApp onayı bekleniyor
+      verificationCode,
       reminderSent: false,
       bookingSource: "online",
       canComeEarly,
@@ -329,10 +337,25 @@ export default function CustomerBookingPage() {
       return;
     }
 
-    const cleanDigits = normalizePhone(customerPhone);
-    if (cleanDigits.length < 10) {
+    // 1. Telefon Numarası Formatı ve Sahte/Tekrarlı Numara Doğrulaması (Anti-Spam)
+    const phoneValidation = validateTurkishMobilePhone(customerPhone);
+    if (!phoneValidation.isValid) {
       setFormError(
-        "Lütfen geçerli bir telefon numarası yazınız (Örn: 0555 000 00 00)."
+        phoneValidation.error ||
+          "Lütfen 05XX XXX XX XX formatında geçerli bir cep telefonu numarası giriniz."
+      );
+      return;
+    }
+
+    // 4. Tek Aktif Randevu Sınırı:
+    // Aynı telefon numarasıyla aynı gün içinde birden fazla aktif/bekleyen randevu alınmasını engelle
+    const existingActive = checkHasActiveAppointmentForDay(
+      phoneValidation.cleanPhone,
+      selectedDay.id
+    );
+    if (existingActive) {
+      setFormError(
+        `Bu telefon numarasıyla ${selectedDay.chipLabel} için zaten aktif/bekleyen bir randevunuz var (Saat: ${existingActive.time}). Aynı gün içinde sadece tek bir randevu oluşturabilirsiniz.`
       );
       return;
     }
@@ -342,7 +365,7 @@ export default function CustomerBookingPage() {
       return;
     }
 
-    // Doğrudan kaydet ve arka planda berbere otomatik bildirim gönder
+    // Doğrudan 'pending' (Onay Bekliyor) statüsü ve 4 haneli kod ile kaydet
     createFinalAppointment(false);
   };
 
@@ -1033,53 +1056,91 @@ export default function CustomerBookingPage() {
                 </div>
               )}
 
-              {/* RANDEVU ALINDI BAŞARI EKRANI */}
+              {/* WHATSAPP ONAY KODU VE DOĞRULAMA EKRANI */}
               {stage === "confirmed" && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="rounded-3xl border-2 border-emerald-500/60 bg-gradient-to-b from-emerald-950/40 via-[#181411] to-[#120f0d] p-5 text-center shadow-2xl sm:p-6"
+                  className="rounded-3xl border-2 border-amber-500/70 bg-gradient-to-b from-amber-950/40 via-[#181411] to-[#120f0d] p-5 text-center shadow-2xl sm:p-7"
                 >
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 text-[#06150f] shadow-lg shadow-emerald-500/30">
-                    <CheckCircle2 className="h-10 w-10 stroke-[2.5]" />
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
+                    <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
                   </div>
 
-                  <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
-                    RANDEVUNUZ ALINDI • BERBERE OTOMATİK BİLDİRİLDİ 🔔
+                  <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
+                    ⏳ ONAY BEKLİYOR • WHATSAPP DOĞRULAMASI
                   </span>
 
-                  <h3 className="mt-2 text-2xl font-black text-[#fdf8f5]">
-                    Teşekkürler, {customerName}!
+                  <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
+                    Randevunuz Alındı, {customerName}!
                   </h3>
                   <p className="mt-1 text-xs text-stone-300">
-                    Randevunuz berber ekranına sesli ve anlık bildirim olarak
-                    iletildi.
+                    Sahte randevuları önlemek için randevunuz şu an <strong>Onay Bekliyor</strong> durumundadır.
                   </p>
 
+                  {/* 4 HANELİ ONAY KODU VURGULU KART */}
                   {confirmedAppointment && (
-                    <div className="mx-auto mt-3 max-w-xs rounded-2xl border border-[#c88a53]/40 bg-[#14100d] p-3">
-                      <span className="block text-[10px] font-bold uppercase text-[#e6ccb2]">
-                        Randevu Kodunuz
+                    <div className="mx-auto my-4 max-w-sm rounded-2xl border-2 border-dashed border-amber-400/80 bg-gradient-to-b from-amber-500/15 via-[#1c1611] to-[#120f0d] p-4 text-center shadow-xl shadow-amber-500/10">
+                      <span className="block text-[11px] font-black uppercase tracking-wider text-amber-300">
+                        ONAY KODUNUZ
                       </span>
-                      <div className="mt-1 flex items-center justify-center gap-2">
-                        <span className="font-mono text-lg font-black text-[#e6ccb2]">
-                          {confirmedAppointment.appointmentCode}
+                      <div className="my-2 flex items-center justify-center gap-2.5">
+                        <span className="font-mono text-3xl font-black tracking-widest text-[#fdf8f5] sm:text-4xl drop-shadow-md">
+                          {confirmedAppointment.verificationCode || "#4829"}
                         </span>
                         <button
                           type="button"
                           onClick={() =>
-                            handleCopyCode(confirmedAppointment.appointmentCode)
+                            handleCopyCode(
+                              confirmedAppointment.verificationCode || "#4829"
+                            )
                           }
-                          className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-[#1c1613] px-2 py-1 text-[11px] font-bold text-[#e6ccb2]"
+                          className="inline-flex items-center gap-1 rounded-xl border border-amber-400/30 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30"
                         >
-                          <Copy className="h-3 w-3" />
+                          <Copy className="h-3.5 w-3.5" />
                           <span>{copiedCode ? "Kopyalandı" : "Kopyala"}</span>
                         </button>
                       </div>
+                      <p className="mt-2 text-xs font-bold leading-relaxed text-amber-200/95">
+                        Randevunuzun kesinleşmesi için aşağıdaki butona basarak onay kodunuzu WhatsApp üzerinden berberinize gönderin.
+                      </p>
                     </div>
                   )}
 
-                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#120f0d] p-4 text-left text-sm">
+                  {/* BÜYÜK YEŞİL WHATSAPP İLE ONAYLA BUTONU */}
+                  {(() => {
+                    const vCode =
+                      confirmedAppointment?.verificationCode || "#4829";
+                    const cleanDate =
+                      confirmedAppointment?.dateLabel || selectedDay.chipLabel;
+                    const cleanTime =
+                      confirmedAppointment?.time || selectedSlot?.time || "";
+                    const client =
+                      confirmedAppointment?.customerName || customerName.trim();
+                    const waMessage = `Merhaba, viprandevusistemi.com.tr üzerinden ${cleanDate} saat ${cleanTime} için randevu oluşturdum. Onay Kodum: ${vCode} - Adım: ${client}`;
+                    const waHref = buildWhatsAppUrl(
+                      currentShop?.phone,
+                      waMessage,
+                      DEFAULT_SHOP_WHATSAPP_PHONE
+                    );
+
+                    return (
+                      <div className="mt-4 space-y-3">
+                        <a
+                          href={waHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
+                        >
+                          <MessageSquare className="h-5 w-5 fill-[#081510]" />
+                          <span>💬 WhatsApp ile Onay Kodunu Gönder</span>
+                        </a>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Randevu Detay Özeti */}
+                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-[#120f0d] p-3.5 text-left text-xs sm:text-sm">
                     <div className="flex justify-between border-b border-white/10 pb-2">
                       <span className="text-stone-400">Dükkan / Usta:</span>
                       <span className="font-bold text-[#fdf8f5]">
@@ -1088,7 +1149,7 @@ export default function CustomerBookingPage() {
                     </div>
                     <div className="flex justify-between border-b border-white/10 pb-2">
                       <span className="text-stone-400">Tarih & Saat:</span>
-                      <span className="font-black text-emerald-400">
+                      <span className="font-black text-amber-300">
                         {selectedDay.fullDate} • {selectedSlot?.time}
                       </span>
                     </div>
@@ -1108,38 +1169,7 @@ export default function CustomerBookingPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 space-y-2.5">
-                    <a
-                      href={buildWhatsAppUrl(
-                        currentShop?.phone,
-                        `Merhaba, ben ${
-                          confirmedAppointment?.customerName ||
-                          customerName.trim()
-                        }. ${
-                          confirmedAppointment?.dateLabel ||
-                          selectedDay.fullDate
-                        } saat ${
-                          confirmedAppointment?.time || selectedSlot?.time || ""
-                        } için ${
-                          confirmedAppointment
-                            ? confirmedAppointment.services
-                                .map((s) => s.name)
-                                .join(" + ")
-                            : selectedServices.map((s) => s.name).join(" + ")
-                        } randevusu oluşturdum. Randevu Takip: ${getShopBookingUrl(currentShop?.slug)}`,
-                        DEFAULT_SHOP_WHATSAPP_PHONE
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`+${formatPhoneForWhatsApp(
-                        currentShop?.phone,
-                        DEFAULT_SHOP_WHATSAPP_PHONE
-                      )} numaralı salon hattına WhatsApp mesajı gönder`}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300/70 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 text-sm font-black text-[#081510] shadow-lg shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99] sm:text-base"
-                    >
-                      <span>📲 Berbere WhatsApp&apos;tan Bildir</span>
-                    </a>
-
+                  <div className="mt-4">
                     <button
                       type="button"
                       onClick={handleResetWizard}

@@ -73,11 +73,18 @@ export interface DayMetadata {
 }
 
 export type TrustBadgeType = "trusted" | "first_time" | "deposit_paid";
-export type AppointmentStatus = "upcoming" | "completed" | "no_show" | "cancelled";
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "upcoming"
+  | "completed"
+  | "no_show"
+  | "cancelled";
 
 export interface Appointment {
   id: string;
   appointmentCode: string; // e.g., "#BRB-4829"
+  verificationCode?: string; // 4 haneli WhatsApp onay kodu (Örn: "#4829")
   dayId: string; // Gerçek ISO tarih: "YYYY-MM-DD"
   dateLabel: string; // Örn: "Bugün (2 Kas)"
   time: string;

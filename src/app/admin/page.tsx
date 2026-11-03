@@ -96,6 +96,7 @@ export default function AdminDashboardPage() {
     stats,
     addAppointment,
     markAppointmentCompleted,
+    confirmAppointment,
     markAppointmentNoShow,
     cancelAppointmentByCustomer,
     removeFromBlacklist,
@@ -484,7 +485,11 @@ export default function AdminDashboardPage() {
     const vacatedMinutes = timeToMinutes(vacatedApt.time);
     const candidates = appointments.filter((a) => {
       if (a.id === vacatedApt.id) return false;
-      if (a.status !== "upcoming") return false;
+      const isLive =
+        a.status === "upcoming" ||
+        a.status === "confirmed" ||
+        a.status === "pending";
+      if (!isLive) return false;
       if (!a.canComeEarly) return false;
       if (resolveDayMetadata(a.dayId).id !== aptDayMeta.id) return false;
       return timeToMinutes(a.time) > vacatedMinutes;
@@ -497,6 +502,17 @@ export default function AdminDashboardPage() {
         candidates,
       });
     }
+  };
+
+  const handleCancelAndBlacklist = (apt: Appointment) => {
+    cancelAppointmentByCustomer(apt.id);
+    markAppointmentNoShow(apt.id);
+    triggerToast(
+      `${apt.customerName} — İptal Edildi & Engellendi 🚫`,
+      `${apt.customerPhone} numarası sahte randevu şüphesiyle kara listeye eklendi.`,
+      "warning"
+    );
+    checkAndTriggerEarlyCandidates(apt);
   };
 
   const handleCancelByAdmin = (apt: Appointment) => {
@@ -829,7 +845,12 @@ export default function AdminDashboardPage() {
   const activeAppointments = useMemo(
     () =>
       sortChronologically(
-        appointments.filter((apt) => apt.status === "upcoming")
+        appointments.filter(
+          (apt) =>
+            apt.status === "pending" ||
+            apt.status === "confirmed" ||
+            apt.status === "upcoming"
+        )
       ),
     [appointments, sortChronologically]
   );
@@ -922,7 +943,11 @@ export default function AdminDashboardPage() {
 
   const dayEarlyBackupAppointments = useMemo(() => {
     return dayFilteredActiveAppointments.filter(
-      (apt) => apt.canComeEarly && apt.status === "upcoming"
+      (apt) =>
+        apt.canComeEarly &&
+        (apt.status === "upcoming" ||
+          apt.status === "confirmed" ||
+          apt.status === "pending")
     );
   }, [dayFilteredActiveAppointments]);
 
@@ -1637,12 +1662,32 @@ export default function AdminDashboardPage() {
                               <span className="truncate text-xs font-black text-[#fdf8f5] sm:text-sm">
                                 {apt.customerName}
                               </span>
-                              {apt.canComeEarly && apt.status === "upcoming" && (
-                                <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/60 bg-amber-400/20 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm shadow-amber-400/20">
-                                  <Zap className="h-2.5 w-2.5 fill-amber-300" />
-                                  <span>Erken Gelebilir</span>
+                              {apt.status === "pending" && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/80 bg-amber-500/25 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm animate-pulse">
+                                  <span>
+                                    ⏳ Onay Bekliyor (
+                                    {apt.verificationCode ||
+                                      `#${apt.appointmentCode
+                                        .replace(/\D/g, "")
+                                        .slice(-4)}`}
+                                    )
+                                  </span>
                                 </span>
                               )}
+                              {apt.status === "confirmed" && (
+                                <span className="rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[10px] font-black text-emerald-300">
+                                  Onaylandı ✅
+                                </span>
+                              )}
+                              {apt.canComeEarly &&
+                                (apt.status === "upcoming" ||
+                                  apt.status === "confirmed" ||
+                                  apt.status === "pending") && (
+                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/60 bg-amber-400/20 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm shadow-amber-400/20">
+                                    <Zap className="h-2.5 w-2.5 fill-amber-300" />
+                                    <span>Erken Gelebilir</span>
+                                  </span>
+                                )}
                               {isCompleted && (
                                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">
                                   Geldi
@@ -1703,84 +1748,154 @@ export default function AdminDashboardPage() {
                             </a>
                           </div>
 
+                          {/* ⏳ WhatsApp Onay Kodu Bilgi Şeridi */}
+                          {apt.status === "pending" && (
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-black text-amber-300">
+                                  🔑 Onay Kodu:{" "}
+                                  {apt.verificationCode ||
+                                    `#${apt.appointmentCode
+                                      .replace(/\D/g, "")
+                                      .slice(-4)}`}
+                                </span>
+                                <span className="text-[11px] text-stone-300">
+                                  • Müşteri WhatsApp üzerinden onay kodunu ilettiğinde aşağıdaki yeşil butona basarak onaylayın.
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Aksiyon Butonları Izgarası */}
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-                            <a
-                              href={`tel:${apt.customerPhone}`}
-                              className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/60 bg-emerald-500 px-3 py-2 text-xs font-black text-[#06150f] shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
-                            >
-                              <Phone className="h-3.5 w-3.5 fill-[#06150f]" />
-                              <span>📞 Hemen Ara</span>
-                            </a>
+                          {apt.status === "pending" ? (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  confirmAppointment(apt.id);
+                                  triggerToast(
+                                    `${apt.customerName} — Onaylandı ✅`,
+                                    `WhatsApp onay kodu doğrulandı ve randevu kesinleşti.`,
+                                    "success"
+                                  );
+                                }}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 py-2.5 px-3 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 active:scale-[0.98]"
+                              >
+                                <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                                <span>✅ Randevuyu Onayla</span>
+                              </button>
 
-                            <button
-                              type="button"
-                              disabled={isCompleted}
-                              onClick={() => {
-                                handleComplete(apt);
-                                setExpandedAptId(null);
-                              }}
-                              className={`flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-black transition ${
-                                isCompleted
-                                  ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-50"
-                                  : "bg-emerald-500 text-[#06150f] hover:bg-emerald-400"
-                              }`}
-                            >
-                              <span>Geldi ✅</span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleCancelAndBlacklist(apt);
+                                  setExpandedAptId(null);
+                                }}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/60 bg-rose-600/20 py-2.5 px-3 text-xs font-black text-rose-200 transition hover:bg-rose-600/30"
+                              >
+                                <Ban className="h-4 w-4" />
+                                <span>🚫 İptal Et / Numarayı Engelle</span>
+                              </button>
 
-                            <button
-                              type="button"
-                              disabled={isCancelled}
-                              onClick={() => {
-                                handleCancelByAdmin(apt);
-                                setExpandedAptId(null);
-                              }}
-                              className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
-                                isCancelled
-                                  ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
-                                  : "border-rose-500/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
-                              }`}
-                            >
-                              <span>İptal Et ❌</span>
-                            </button>
+                              <a
+                                href={`tel:${apt.customerPhone}`}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 px-3 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25"
+                              >
+                                <Phone className="h-3.5 w-3.5" />
+                                <span>📞 Hemen Ara</span>
+                              </a>
 
-                            <button
-                              type="button"
-                              disabled={isNoShow}
-                              onClick={() => {
-                                handleNoShow(apt);
-                                setExpandedAptId(null);
-                              }}
-                              className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
-                                isNoShow
-                                  ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
-                                  : "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
-                              }`}
-                            >
-                              <span>Gelmedi</span>
-                            </button>
+                              <a
+                                href={buildWhatsAppUrl(
+                                  apt.customerPhone,
+                                  `Merhaba ${apt.customerName}, ${currentShop.name} randevunuz için onay kodunuzu (${apt.verificationCode || ""}) iletmenizi bekliyoruz.`
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2.5 px-3 text-xs font-bold text-[#e6ccb2] transition hover:bg-[#c88a53]/25"
+                              >
+                                <span>💬 Kod İste</span>
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                              <a
+                                href={`tel:${apt.customerPhone}`}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/60 bg-emerald-500 px-3 py-2 text-xs font-black text-[#06150f] shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
+                              >
+                                <Phone className="h-3.5 w-3.5 fill-[#06150f]" />
+                                <span>📞 Hemen Ara</span>
+                              </a>
 
-                            <a
-                              href={reminderWhatsAppUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => handleSendReminder(apt, "reminder")}
-                              className="flex items-center justify-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-950/40 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
-                            >
-                              <span>💬 Hatırlat</span>
-                            </a>
+                              <button
+                                type="button"
+                                disabled={isCompleted}
+                                onClick={() => {
+                                  handleComplete(apt);
+                                  setExpandedAptId(null);
+                                }}
+                                className={`flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-black transition ${
+                                  isCompleted
+                                    ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-50"
+                                    : "bg-emerald-500 text-[#06150f] hover:bg-emerald-400"
+                                }`}
+                              >
+                                <span>Geldi ✅</span>
+                              </button>
 
-                            <a
-                              href={approvalWhatsAppUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => handleSendReminder(apt, "approval")}
-                              className="flex items-center justify-center gap-1 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2 text-xs font-bold text-[#e6ccb2] hover:bg-[#c88a53]/25"
-                            >
-                              <span>✅ Onay</span>
-                            </a>
-                          </div>
+                              <button
+                                type="button"
+                                disabled={isCancelled}
+                                onClick={() => {
+                                  handleCancelByAdmin(apt);
+                                  setExpandedAptId(null);
+                                }}
+                                className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
+                                  isCancelled
+                                    ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
+                                    : "border-rose-500/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                                }`}
+                              >
+                                <span>İptal Et ❌</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={isNoShow}
+                                onClick={() => {
+                                  handleNoShow(apt);
+                                  setExpandedAptId(null);
+                                }}
+                                className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
+                                  isNoShow
+                                    ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
+                                    : "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                                }`}
+                              >
+                                <span>Gelmedi</span>
+                              </button>
+
+                              <a
+                                href={reminderWhatsAppUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => handleSendReminder(apt, "reminder")}
+                                className="flex items-center justify-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-950/40 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                              >
+                                <span>💬 Hatırlat</span>
+                              </a>
+
+                              <a
+                                href={approvalWhatsAppUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => handleSendReminder(apt, "approval")}
+                                className="flex items-center justify-center gap-1 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2 text-xs font-bold text-[#e6ccb2] hover:bg-[#c88a53]/25"
+                              >
+                                <span>✅ Onay</span>
+                              </a>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
