@@ -14,6 +14,8 @@ import {
   Search,
   Check,
   X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useBarber } from "@/context/BarberContext";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
@@ -70,6 +72,7 @@ export default function AdminPinGate({
   const [isShopDropdownOpen, setIsShopDropdownOpen] = useState<boolean>(false);
   const [checked, setChecked] = useState<boolean>(false);
   const [pin, setPin] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [shake, setShake] = useState<number>(0);
 
@@ -387,39 +390,30 @@ export default function AdminPinGate({
   }
 
   return (
-    <div className="relative mx-auto max-w-sm px-3 pb-12 pt-3 sm:px-4 sm:pb-20 sm:pt-8">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-8 left-1/2 -z-10 h-48 w-full -translate-x-1/2 rounded-full bg-gradient-to-r from-[#b47b48]/20 via-[#c88a53]/15 to-[#9a6334]/20 blur-3xl"
-      />
-
-      {/* PWA Yükleme Bandı (Giriş ekranında da görünür) */}
-      <PwaInstallBanner />
+    <div className="flex min-h-[75vh] flex-col items-center justify-center px-4 py-8">
+      {/* PWA Yükleme Bandı */}
+      <div className="w-full max-w-sm mb-3">
+        <PwaInstallBanner />
+      </div>
 
       <motion.div
         key={shake}
-        initial={shake ? { x: 0 } : { opacity: 0, y: 12 }}
-        animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : { opacity: 1, y: 0 }}
-        transition={{ duration: shake ? 0.35 : 0.2 }}
-        className="rounded-2xl border border-[#e6ccb2]/45 bg-gradient-to-b from-[#241b16] via-[#1c1613] to-[#14100d] p-4 shadow-2xl shadow-black/80 sm:rounded-3xl sm:p-6"
+        initial={shake ? { x: 0 } : { opacity: 0, y: 10 }}
+        animate={shake ? { x: [0, -8, 8, -5, 5, 0] } : { opacity: 1, y: 0 }}
+        transition={{ duration: shake ? 0.3 : 0.18 }}
+        className="w-full max-w-sm rounded-2xl border border-[#c88a53]/40 bg-[#161210] p-5 shadow-2xl shadow-black/80 sm:p-6"
       >
-        <div className="flex items-center gap-3 sm:flex-col sm:text-center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md shadow-[#c88a53]/25 sm:mx-auto sm:h-14 sm:w-14 sm:rounded-2xl">
-            <Scissors className="h-5 w-5 -rotate-45 stroke-[2.3] sm:h-7 sm:w-7" />
+        {/* Ortalanmış VIP İkon ve Başlık */}
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25">
+            <Scissors className="h-6 w-6 -rotate-45 stroke-[2.5]" />
           </div>
-
-          <div className="min-w-0 flex-1 sm:mt-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#e6ccb2]/40 bg-[#c88a53]/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#e6ccb2]">
-              <Lock className="h-2.5 w-2.5 text-[#c88a53]" />
-              BERBER GİRİŞ PANELİ
-            </span>
-            <h1 className="mt-0.5 text-base font-extrabold text-[#fdf8f5] sm:text-xl">
-              Salon Yönetici Girişi
-            </h1>
-            <p className="text-[11px] leading-snug text-[#e6ccb2]/75 sm:text-xs">
-              Dükkanınızı seçip şifrenizi girin; cihazınız sizi otomatik hatırlar.
-            </p>
-          </div>
+          <h1 className="mt-3 text-base font-extrabold text-[#fdf8f5] sm:text-lg">
+            Salon Yönetici Girişi
+          </h1>
+          <p className="mt-0.5 text-xs font-bold text-[#c88a53]">
+            {targetShop ? targetShop.name : "VIP Berber Yönetim Paneli"}
+          </p>
         </div>
 
         <form
@@ -427,156 +421,84 @@ export default function AdminPinGate({
             e.preventDefault();
             tryUnlock(pin);
           }}
+          className="mt-4"
         >
-          {/* 1. DÜKKAN SEÇİMİ */}
-          <div className="relative z-30 mt-3.5 sm:mt-5">
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="flex items-center gap-1.5 text-xs font-bold text-[#e6ccb2]">
-                <Building2 className="h-3.5 w-3.5 text-[#c88a53]" />
-                <span>Dükkanınızı Seçiniz *</span>
+          {/* Dükkan Seçimi (Çoklu Dükkanda Şık Dropdown) */}
+          {shops.length > 1 && (
+            <div>
+              <label className="mb-1 block text-xs font-bold text-[#e6ccb2]">
+                Dükkanınızı Seçiniz *
               </label>
-              {targetShop && (
-                <span className="max-w-[150px] truncate text-[11px] font-extrabold text-[#c88a53]">
-                  {targetShop.name}
-                </span>
-              )}
-            </div>
-
-            {/* Tek Tıkla Dükkan Seçim Kartları */}
-            <div className="mb-2 grid max-h-36 grid-cols-1 gap-1.5 overflow-y-auto pr-0.5">
-              {shops.map((s) => {
-                const isSelected =
-                  s.slug.toLowerCase() === selectedSlug.toLowerCase();
-                return (
-                  <button
-                    key={s.slug}
-                    type="button"
-                    onClick={() => handleSelectShop(s.slug)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs transition ${
-                      isSelected
-                        ? "border-[#e6ccb2] bg-gradient-to-r from-[#b47b48]/30 via-[#c88a53]/25 to-[#9a6334]/20 text-[#fdf8f5] shadow-sm"
-                        : "border-white/10 bg-[#14100d] text-stone-300 hover:border-[#c88a53]/50 hover:text-white"
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <span className="block truncate font-extrabold">
-                        {s.name}
-                      </span>
-                      <span className="block truncate text-[10px] text-stone-400">
-                        {s.district || "Merkez"}
-                      </span>
-                    </div>
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        isSelected
-                          ? "border-[#e6ccb2] bg-[#c88a53] text-[#14100d]"
-                          : "border-white/20 bg-transparent"
-                      }`}
-                    >
-                      {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {shops.length > 3 && (
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#c88a53]" />
-                <input
-                  type="text"
-                  value={shopSearchQuery}
-                  onChange={(e) => {
-                    setShopSearchQuery(e.target.value);
-                    setIsShopDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsShopDropdownOpen(true)}
-                  placeholder="Dükkan adı yazarak filtrele..."
-                  className="w-full rounded-xl border border-[#c88a53]/35 bg-[#14100d] py-2 pl-9 pr-8 text-xs text-[#fdf8f5] placeholder-[#e6ccb2]/50 outline-none focus:border-[#e6ccb2]"
-                />
-                {shopSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setShopSearchQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[#e6ccb2]/60 hover:text-[#fdf8f5]"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {isShopDropdownOpen && shopSearchQuery && (
-              <div className="mt-1 max-h-40 w-full overflow-y-auto rounded-xl border border-[#c88a53]/45 bg-[#1c1613] p-1.5 shadow-2xl">
-                {filteredShops.length === 0 ? (
-                  <div className="p-2 text-center text-xs text-[#e6ccb2]/65">
-                    Eşleşen dükkan bulunamadı.
-                  </div>
-                ) : (
-                  filteredShops.map((s) => (
-                    <button
+                <Building2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#c88a53]" />
+                <select
+                  value={selectedSlug}
+                  onChange={(e) => handleSelectShop(e.target.value)}
+                  className="w-full appearance-none rounded-xl border border-[#c88a53]/35 bg-[#120f0d] py-2.5 pl-9 pr-8 text-xs font-bold text-[#fdf8f5] outline-none transition focus:border-[#e6ccb2] focus:ring-1 focus:ring-[#c88a53]"
+                >
+                  {shops.map((s) => (
+                    <option
                       key={s.slug}
-                      type="button"
-                      onClick={() => handleSelectShop(s.slug)}
-                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs text-[#fdf8f5] hover:bg-[#241b16]"
+                      value={s.slug}
+                      className="bg-[#1a1410] text-[#fdf8f5]"
                     >
-                      <span className="truncate font-bold">{s.name}</span>
-                      <span className="text-[10px] text-[#c88a53]">Seç</span>
-                    </button>
-                  ))
-                )}
+                      {s.name} ({s.district || "Merkez"})
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#c88a53]">
+                  ▾
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* 2. ŞİFRE GİRİŞİ (TEMİZ & İPUÇSUZ) */}
-          <div className="mt-3">
+          {/* Şifre Giriş Alanı (Odaklandığında Altın Sarısı Parlayan) */}
+          <div className={shops.length > 1 ? "mt-3" : "mt-1"}>
             <div className="mb-1 flex items-center justify-between">
               <label className="text-xs font-bold text-[#e6ccb2]">
-                Dükkan Yönetim Şifresi *
+                Yönetim PIN / Şifre *
               </label>
               {pin && (
                 <button
                   type="button"
-                  onClick={() => setPin((p) => p.slice(0, -1))}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#c88a53] hover:text-[#fdf8f5]"
+                  onClick={() => setPin("")}
+                  className="text-[10px] text-stone-400 hover:text-white"
                 >
-                  <Delete className="h-3.5 w-3.5" />
-                  <span>Sil</span>
+                  Temizle
                 </button>
               )}
             </div>
-            <input
-              type="password"
-              maxLength={16}
-              value={pin}
-              onChange={(e) => {
-                setPin(e.target.value);
-                setError("");
-              }}
-              placeholder="Şifrenizi giriniz"
-              className="w-full rounded-xl border border-[#c88a53]/45 bg-[#14100d] py-2.5 text-center font-mono text-lg font-black tracking-[0.35em] text-[#fdf8f5] outline-none placeholder:font-sans placeholder:text-xs placeholder:font-normal placeholder:tracking-normal placeholder:text-[#e6ccb2]/40 focus:border-[#e6ccb2]"
-            />
-          </div>
 
-          {/* Kompakt 5x2 Hızlı Tuş Takımı */}
-          <div className="mt-2 grid grid-cols-5 gap-1.5">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => (
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#c88a53]" />
+              <input
+                type={showPassword ? "text" : "password"}
+                inputMode="numeric"
+                maxLength={16}
+                autoFocus
+                value={pin}
+                onChange={(e) => {
+                  setPin(e.target.value);
+                  setError("");
+                }}
+                placeholder="PIN kodunuzu giriniz"
+                className="w-full rounded-xl border border-[#c88a53]/40 bg-[#120f0d] py-3 pl-10 pr-10 text-center font-mono text-base font-black tracking-widest text-[#fdf8f5] outline-none transition focus:border-[#e6ccb2] focus:ring-2 focus:ring-[#c88a53]/40 placeholder:font-sans placeholder:text-xs placeholder:font-normal placeholder:tracking-normal placeholder:text-stone-500"
+              />
               <button
-                key={d}
                 type="button"
-                onClick={() => pressDigit(d)}
-                className="rounded-xl border border-[#c88a53]/25 bg-[#14100d] py-2 font-mono text-sm font-black text-[#e6ccb2] transition hover:border-[#c88a53] hover:bg-[#241b16] hover:text-[#fdf8f5] active:scale-95"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#e6ccb2]"
+                tabIndex={-1}
+                title={showPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
               >
-                {d}
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
-            ))}
-          </div>
-
-          {/* Beni Hatırla Aktif Rozeti */}
-          <div className="mt-2.5 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-950/20 px-3 py-1.5 text-[11px] font-bold text-emerald-300">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            <span>Beni Hatırla Aktif: Cihazınız oturumu açık tutar</span>
+            </div>
           </div>
 
           {error && (
@@ -585,23 +507,20 @@ export default function AdminPinGate({
             </div>
           )}
 
+          {/* Tam Genişlikte Giriş Yap Butonu */}
           <button
             type="submit"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#e6ccb2]/50 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black uppercase tracking-wider text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-[0.99]"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-xs font-black uppercase tracking-wider text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-[0.99]"
           >
             <KeyRound className="h-4 w-4 stroke-[2.5]" />
-            <span>
-              {targetShop
-                ? `${targetShop.name} Paneline Giriş Yap`
-                : "Panele Giriş Yap"}
-            </span>
+            <span>Giriş Yap</span>
           </button>
         </form>
 
-        <p className="mt-2.5 flex items-center justify-center gap-1 text-[10px] text-[#e6ccb2]/50">
-          <ShieldCheck className="h-3 w-3" />
-          Şifrenizi unuttuysanız sistem yöneticinizle iletişime geçin.
-        </p>
+        <div className="mt-3.5 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-emerald-400/90">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+          <span>Beni Hatırla: Cihazınız oturumu otomatik açık tutar</span>
+        </div>
       </motion.div>
     </div>
   );

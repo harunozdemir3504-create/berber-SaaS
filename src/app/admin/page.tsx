@@ -39,6 +39,7 @@ import {
   Volume2,
   Copy,
   MapPin,
+  ChevronDown,
 } from "lucide-react";
 import {
   useBarber,
@@ -477,6 +478,21 @@ export default function AdminDashboardPage() {
       res.notifiedCount > 0
         ? `Randevu iptal edildi ve yedek listedeki ${res.notifiedCount} müşteriye bildirim gönderildi.`
         : `Saat ${apt.time} tekrar randevuya açıldı.`,
+      "warning"
+    );
+  };
+
+  const [expandedAptId, setExpandedAptId] = useState<string | null>(null);
+
+  const toggleAptAccordion = (id: string) => {
+    setExpandedAptId((prev) => (prev === id ? null : id));
+  };
+
+  const handleNoShow = (apt: Appointment) => {
+    markAppointmentNoShow(apt.id);
+    triggerToast(
+      `${apt.customerName} — Gelmedi (No-Show)`,
+      `Müşteri no-show olarak işaretlendi ve ortak kara liste ağına eklendi.`,
       "warning"
     );
   };
@@ -1422,6 +1438,7 @@ export default function AdminDashboardPage() {
                   const isCompleted = apt.status === "completed";
                   const isCancelled = apt.status === "cancelled";
                   const isNoShow = apt.status === "no_show";
+                  const isExpanded = expandedAptId === apt.id;
                   const servicesSummary = apt.services
                     .map((s) => s.name)
                     .join(" + ");
@@ -1441,122 +1458,165 @@ export default function AdminDashboardPage() {
                   return (
                     <div
                       key={apt.id}
-                      className={`rounded-3xl border-2 p-4 shadow-lg transition sm:p-5 ${
-                        isCompleted
-                          ? "border-emerald-500/35 bg-[#131815]"
+                      className={`overflow-hidden rounded-xl border transition-all ${
+                        isExpanded
+                          ? "border-[#c88a53] bg-[#1a1410] shadow-lg shadow-[#c88a53]/15"
+                          : isCompleted
+                          ? "border-emerald-500/25 bg-[#121614] hover:border-emerald-500/40"
                           : isCancelled || isNoShow
-                          ? "border-rose-500/35 bg-rose-950/15"
-                          : "border-[#c88a53]/45 bg-[#171310]"
+                          ? "border-rose-500/25 bg-[#181212] hover:border-rose-500/40"
+                          : "border-white/10 bg-[#161311] hover:border-[#c88a53]/45"
                       }`}
                     >
-                      {/* Üst Satır: Büyük Saat, Müşteri Adı, Hizmet ve Tutar */}
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#c88a53]/50 bg-[#c88a53]/15 px-3.5 py-2 text-center">
-                            <span className="text-xl font-black leading-none text-[#fdf8f5] sm:text-2xl">
-                              {apt.time}
-                            </span>
-                            <span className="mt-1 whitespace-nowrap text-[11px] font-extrabold text-[#e6ccb2]">
-                              {cleanDateLabel}
-                            </span>
+                      {/* 1. KAPALI (VARSAYILAN) TEK SATIR: SAAT | MÜŞTERİ | HİZMET | DURUM */}
+                      <div
+                        onClick={() => toggleAptAccordion(apt.id)}
+                        className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 select-none"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                          {/* Saat Rozeti */}
+                          <div className="shrink-0 rounded-lg border border-[#c88a53]/40 bg-[#c88a53]/15 px-2 py-1 text-center font-mono text-xs font-black text-[#fdf8f5] sm:text-sm">
+                            {apt.time}
                           </div>
 
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-lg font-black text-[#fdf8f5] sm:text-xl">
+                          {/* İsim ve Hizmet */}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-xs font-black text-[#fdf8f5] sm:text-sm">
                                 {apt.customerName}
-                              </h3>
+                              </span>
                               {isCompleted && (
-                                <span className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-xs font-black text-emerald-300">
-                                  Geldi ✅
+                                <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">
+                                  Geldi
                                 </span>
                               )}
                               {isCancelled && (
-                                <span className="rounded-lg bg-rose-500/20 px-2 py-0.5 text-xs font-black text-rose-300">
-                                  İptal ❌
+                                <span className="rounded bg-rose-500/20 px-1.5 py-0.2 text-[10px] font-black text-rose-300">
+                                  İptal
                                 </span>
                               )}
                               {isNoShow && (
-                                <span className="rounded-lg bg-rose-500/20 px-2 py-0.5 text-xs font-black text-rose-300">
+                                <span className="rounded bg-rose-500/20 px-1.5 py-0.2 text-[10px] font-black text-rose-300">
                                   Gelmedi
                                 </span>
                               )}
                             </div>
-
-                            <p className="mt-1 text-sm font-bold text-[#e6ccb2]">
+                            <p className="truncate text-[11px] font-medium text-stone-400">
                               ✂️ {servicesSummary}
                             </p>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-400">
-                              <span>👤 {apt.barberName}</span>
-                              <span>•</span>
-                              <a
-                                href={`tel:${apt.customerPhone}`}
-                                className="inline-flex items-center gap-1 font-bold text-emerald-400 underline"
-                              >
-                                <Phone className="h-3 w-3" />
-                                {apt.customerPhone}
-                              </a>
-                            </div>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <span className="rounded-xl border border-[#c88a53]/40 bg-[#110e0c] px-3 py-1.5 text-base font-black text-[#e6ccb2]">
+                        {/* Tutar & Accordion Oku */}
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-xs font-black text-[#c88a53] sm:text-sm">
                             {apt.totalPrice} TL
                           </span>
+                          <div
+                            className={`flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-stone-400 transition-transform ${
+                              isExpanded ? "rotate-180 text-[#c88a53]" : ""
+                            }`}
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Doğrudan Tek Tıkla Net Aksiyon Butonları: Geldi ✅ | İptal ❌ | WhatsApp 💬 */}
-                      <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3.5 sm:grid-cols-4">
-                        <button
-                          type="button"
-                          disabled={isCompleted}
-                          onClick={() => handleComplete(apt)}
-                          className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-sm font-black transition ${
-                            isCompleted
-                              ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-50"
-                              : "bg-emerald-500 text-[#06150f] shadow-md hover:bg-emerald-400 active:scale-95"
-                          }`}
-                        >
-                          <span>Geldi ✅</span>
-                        </button>
+                      {/* 2. AÇIK (TIKLANINCA AÇILAN) DETAY & AKSİYON ÇEKMECESİ */}
+                      {isExpanded && (
+                        <div className="border-t border-white/10 bg-[#120f0d] p-3 sm:p-4">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-300">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold text-[#e6ccb2]">
+                                👤 {apt.barberName}
+                              </span>
+                              <span>•</span>
+                              <span className="text-stone-400">
+                                📅 {cleanDateLabel} - {apt.time}
+                              </span>
+                            </div>
 
-                        <button
-                          type="button"
-                          disabled={isCancelled}
-                          onClick={() => handleCancelByAdmin(apt)}
-                          className={`flex items-center justify-center gap-1.5 rounded-2xl border py-3 text-sm font-black transition ${
-                            isCancelled
-                              ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
-                              : "border-rose-500/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 active:scale-95"
-                          }`}
-                        >
-                          <span>İptal ❌</span>
-                        </button>
+                            <a
+                              href={`tel:${apt.customerPhone}`}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+                              <span>{apt.customerPhone}</span>
+                            </a>
+                          </div>
 
-                        <a
-                          href={reminderWhatsAppUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => handleSendReminder(apt, "reminder")}
-                          className="flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-500/55 bg-gradient-to-r from-emerald-950 via-emerald-900/60 to-[#1a1512] py-3 text-xs font-black text-emerald-300 shadow-sm transition hover:border-emerald-400 hover:from-emerald-600 hover:to-emerald-500 hover:text-[#06150f] sm:text-sm"
-                          title="💬 WhatsApp Hatırlat"
-                        >
-                          <span>💬 WhatsApp Hatırlat</span>
-                        </a>
+                          {/* Aksiyon Butonları Izgarası */}
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            <button
+                              type="button"
+                              disabled={isCompleted}
+                              onClick={() => {
+                                handleComplete(apt);
+                                setExpandedAptId(null);
+                              }}
+                              className={`flex items-center justify-center gap-1 rounded-xl py-2 text-xs font-black transition ${
+                                isCompleted
+                                  ? "cursor-default bg-emerald-500/20 text-emerald-400 opacity-50"
+                                  : "bg-emerald-500 text-[#06150f] hover:bg-emerald-400"
+                              }`}
+                            >
+                              <span>Geldi ✅</span>
+                            </button>
 
-                        <a
-                          href={approvalWhatsAppUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => handleSendReminder(apt, "approval")}
-                          className="flex items-center justify-center gap-1.5 rounded-2xl border border-[#c88a53]/65 bg-gradient-to-r from-[#281e18] via-[#1f1914] to-emerald-950/60 py-3 text-xs font-black text-[#e6ccb2] shadow-sm transition hover:border-[#e6ccb2] hover:from-[#b47b48] hover:via-[#c88a53] hover:to-[#9a6334] hover:text-[#1a110b] sm:text-sm"
-                          title="✅ Onay Mesajı Gönder"
-                        >
-                          <span>✅ Onay Mesajı Gönder</span>
-                        </a>
-                      </div>
+                            <button
+                              type="button"
+                              disabled={isCancelled}
+                              onClick={() => {
+                                handleCancelByAdmin(apt);
+                                setExpandedAptId(null);
+                              }}
+                              className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
+                                isCancelled
+                                  ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
+                                  : "border-rose-500/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                              }`}
+                            >
+                              <span>İptal Et ❌</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isNoShow}
+                              onClick={() => {
+                                handleNoShow(apt);
+                                setExpandedAptId(null);
+                              }}
+                              className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
+                                isNoShow
+                                  ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
+                                  : "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                              }`}
+                            >
+                              <span>Gelmedi (No-Show)</span>
+                            </button>
+
+                            <a
+                              href={reminderWhatsAppUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => handleSendReminder(apt, "reminder")}
+                              className="flex items-center justify-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-950/40 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                            >
+                              <span>💬 Hatırlat</span>
+                            </a>
+
+                            <a
+                              href={approvalWhatsAppUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => handleSendReminder(apt, "approval")}
+                              className="flex items-center justify-center gap-1 rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 py-2 text-xs font-bold text-[#e6ccb2] hover:bg-[#c88a53]/25"
+                            >
+                              <span>✅ Onay</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

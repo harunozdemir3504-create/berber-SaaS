@@ -226,6 +226,14 @@ export default function CustomerBookingPage() {
     }
   }, [selectedSlot, isSelectedDayToday, isSlotPassedOrImminent]);
 
+  // Seçili gün Bugün ise ve geçerli boş saat kalmamışsa müşteriyi otomatik Yarına geçir
+  useEffect(() => {
+    if (isSelectedDayToday && validAvailableSlots.length === 0 && tomorrowMeta) {
+      setSelectedDay(tomorrowMeta);
+      setSelectedSlot(null);
+    }
+  }, [isSelectedDayToday, validAvailableSlots.length, tomorrowMeta]);
+
   const isSelectedDayClosed = useMemo(
     () => shopSettings.closedDays.includes(selectedDay.dayOfWeek),
     [shopSettings.closedDays, selectedDay.dayOfWeek]
@@ -401,12 +409,12 @@ export default function CustomerBookingPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-2xl px-3 pb-24 pt-3 sm:px-6 sm:pt-5">
+    <div className="mx-auto max-w-xl px-2.5 pb-20 pt-2 sm:px-4 sm:pt-4">
       {/* EN ÜSTTE DOĞRUDAN ADIM ADIM RANDEVU ALMA KUTUSU */}
-      <div className="overflow-hidden rounded-3xl border border-[#c88a53]/45 bg-gradient-to-b from-[#1e1814] via-[#161210] to-[#110e0c] p-4 shadow-2xl shadow-black/70 sm:p-6">
+      <div className="overflow-hidden rounded-2xl border border-[#c88a53]/35 bg-[#161210] p-3 sm:p-5 shadow-xl">
         {/* 3 Adım Göstergesi */}
         {stage !== "confirmed" && (
-          <div className="mb-5 grid grid-cols-3 gap-2">
+          <div className="mb-3.5 grid grid-cols-3 gap-1.5">
             {stepsBar.map((item) => {
               const isActive = step === item.num;
               const isDone = step > item.num;
@@ -416,15 +424,15 @@ export default function CustomerBookingPage() {
                   type="button"
                   disabled={!isDone}
                   onClick={() => isDone && setStep(item.num)}
-                  className={`flex items-center justify-center gap-1.5 rounded-2xl border px-2 py-3 text-center text-xs font-extrabold transition sm:text-sm ${
+                  className={`flex items-center justify-center gap-1 rounded-xl border px-1.5 py-2 text-center text-[11px] font-extrabold transition sm:text-xs ${
                     isActive
-                      ? "border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                      ? "border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
                       : isDone
-                      ? "cursor-pointer border-emerald-500/45 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                      ? "cursor-pointer border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20"
                       : "cursor-default border-white/10 bg-[#120f0d] text-stone-500"
                   }`}
                 >
-                  {isDone && <Check className="h-4 w-4 shrink-0 stroke-[3]" />}
+                  {isDone && <Check className="h-3 w-3 shrink-0 stroke-[3]" />}
                   <span className="truncate">{item.label}</span>
                 </button>
               );
@@ -433,25 +441,25 @@ export default function CustomerBookingPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {/* ADIM 1: DÜKKAN VE HİZMET SEÇİMİ (BÜYÜK, NET TIKLANABİLİR BUTONLAR) */}
+          {/* ADIM 1: DÜKKAN VE HİZMET SEÇİMİ (KOMPAKT & SIKI IZGARA) */}
           {step === 1 && (
             <motion.div
               key="step-1"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.16 }}
-              className="space-y-5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="space-y-3.5"
             >
-              {/* Dükkan Seçimi (URL'de sabit dükkan yoksa tüm dükkanlar büyük butonlarla, varsa aktif dükkan başlığı) */}
+              {/* Dükkan Seçimi */}
               <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
-                  <Store className="h-4 w-4 text-[#c88a53]" />
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                  <Store className="h-3.5 w-3.5 text-[#c88a53]" />
                   <span>Berber Dükkanı Seçimi</span>
                 </label>
 
                 {!hasShopQueryParam && shops.length > 1 ? (
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {shops.map((shop) => {
                       const isCurrent = shop.slug === currentShop.slug;
                       return (
@@ -459,23 +467,23 @@ export default function CustomerBookingPage() {
                           key={shop.slug}
                           type="button"
                           onClick={() => setCurrentShopSlug(shop.slug)}
-                          className={`flex flex-col items-start justify-between rounded-2xl border-2 p-3.5 text-left transition ${
+                          className={`flex flex-col items-start justify-between rounded-xl border-2 p-2.5 text-left transition ${
                             isCurrent
-                              ? "border-[#e6ccb2] bg-gradient-to-br from-[#332419] via-[#211813] to-[#16120f] shadow-lg shadow-[#c88a53]/25"
-                              : "border-white/10 bg-[#14110f] hover:border-[#c88a53]/50"
+                              ? "border-[#e6ccb2] bg-[#241a14] text-[#fdf8f5]"
+                              : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/20"
                           }`}
                         >
-                          <div className="flex w-full items-center justify-between gap-2">
-                            <span className="truncate text-sm font-black text-[#fdf8f5]">
+                          <div className="flex w-full items-center justify-between gap-1">
+                            <span className="truncate text-xs font-black text-[#fdf8f5]">
                               {shop.name}
                             </span>
                             {isCurrent && (
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[#081510]">
-                                <Check className="h-3.5 w-3.5 stroke-[3]" />
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[#081510]">
+                                <Check className="h-2.5 w-2.5 stroke-[3]" />
                               </span>
                             )}
                           </div>
-                          <span className="mt-1 text-xs font-semibold text-[#c88a53]">
+                          <span className="mt-0.5 truncate text-[10px] font-semibold text-[#c88a53]">
                             {shop.district}
                           </span>
                         </button>
@@ -483,31 +491,31 @@ export default function CustomerBookingPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between rounded-2xl border border-[#c88a53]/40 bg-[#14110f] px-4 py-3">
+                  <div className="flex items-center justify-between rounded-xl border border-[#c88a53]/35 bg-[#14110f] px-3 py-2">
                     <div>
-                      <p className="text-base font-black text-[#fdf8f5]">
+                      <p className="text-sm font-black text-[#fdf8f5]">
                         {currentShop.name}
                       </p>
-                      <p className="text-xs font-semibold text-[#c88a53]">
+                      <p className="text-[11px] font-semibold text-[#c88a53]">
                         {currentShop.district} • {shopSettings.openTime} -{" "}
                         {shopSettings.closeTime}
                       </p>
                     </div>
-                    <span className="rounded-xl bg-emerald-500/20 px-3 py-1 text-xs font-extrabold text-emerald-300">
+                    <span className="rounded-lg bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300">
                       Seçili Salon ✓
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Usta / Koltuk Seçimi (Büyük, sade butonlar) */}
+              {/* Usta / Koltuk Seçimi (Kompakt Grid) */}
               {barbers.length > 1 && (
                 <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
-                    <User className="h-4 w-4 text-[#c88a53]" />
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                    <User className="h-3.5 w-3.5 text-[#c88a53]" />
                     <span>Usta / Koltuk Seçin</span>
                   </label>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {barbers.map((barber) => {
                       const isSelected = selectedBarber?.id === barber.id;
                       return (
@@ -515,31 +523,31 @@ export default function CustomerBookingPage() {
                           key={barber.id}
                           type="button"
                           onClick={() => setSelectedBarberId(barber.id)}
-                          className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition ${
+                          className={`flex items-center justify-between gap-2 rounded-xl border-2 p-2.5 text-left transition ${
                             isSelected
-                              ? "border-[#e6ccb2] bg-gradient-to-r from-[#2e2118] to-[#1a1410] shadow-md shadow-[#c88a53]/20"
-                              : "border-white/10 bg-[#14110f] hover:border-white/25"
+                              ? "border-[#e6ccb2] bg-[#241a14] text-[#fdf8f5]"
+                              : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/20"
                           }`}
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-extrabold text-[#fdf8f5] sm:text-base">
+                            <p className="truncate text-xs font-black text-[#fdf8f5]">
                               {barber.name}
                             </p>
-                            <p className="truncate text-xs font-semibold text-[#c88a53]">
+                            <p className="truncate text-[10px] font-semibold text-[#c88a53]">
                               {barber.chairName}
                             </p>
                           </div>
-                          <div
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                               isSelected
                                 ? "border-emerald-400 bg-emerald-500 text-[#081510]"
-                                : "border-white/25 bg-[#110e0c]"
+                                : "border-white/20 bg-transparent"
                             }`}
                           >
                             {isSelected && (
-                              <Check className="h-4 w-4 stroke-[3]" />
+                              <Check className="h-2.5 w-2.5 stroke-[3]" />
                             )}
-                          </div>
+                          </span>
                         </button>
                       );
                     })}
@@ -547,19 +555,19 @@ export default function CustomerBookingPage() {
                 </div>
               )}
 
-              {/* Hizmet Seçimi (Büyük, net tıklanabilir butonlar) */}
+              {/* Hizmet Seçimi (SIKI KOMPAKT IZGARA - METRELERCE KAYDIRMA BİTTİ) */}
               <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
-                    <Scissors className="h-4 w-4 text-[#c88a53]" />
-                    <span>Yapılacak İşlemi Seçin</span>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                    <Scissors className="h-3.5 w-3.5 text-[#c88a53]" />
+                    <span>İşlem Seçin</span>
                   </label>
-                  <span className="rounded-lg bg-[#c88a53]/20 px-2.5 py-1 text-xs font-extrabold text-[#e6ccb2]">
+                  <span className="rounded-lg bg-[#c88a53]/20 px-2 py-0.5 text-xs font-black text-[#e6ccb2]">
                     Toplam: {totalPrice} TL
                   </span>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {services.map((service: Service) => {
                     const isSelected = selectedServiceIds.includes(service.id);
                     const effectivePrice = getServicePriceForBarber(
@@ -572,34 +580,31 @@ export default function CustomerBookingPage() {
                         key={service.id}
                         type="button"
                         onClick={() => toggleService(service.id)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-2xl border-2 px-4 py-4 text-left transition active:scale-[0.99] ${
+                        className={`flex flex-col justify-between rounded-xl border-2 p-2.5 text-left transition ${
                           isSelected
-                            ? "border-emerald-400/80 bg-gradient-to-r from-emerald-950/60 via-[#241b15] to-[#16120f] shadow-lg shadow-emerald-950/40"
-                            : "border-white/10 bg-[#14110f] hover:border-white/25"
+                            ? "border-emerald-400 bg-emerald-950/30 text-[#fdf8f5]"
+                            : "border-white/10 bg-[#14110f] text-stone-300 hover:border-white/25"
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-3.5">
-                          <div
-                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border-2 transition ${
+                        <div className="flex w-full items-start justify-between gap-1">
+                          <span className="text-xs font-bold leading-snug text-[#fdf8f5]">
+                            {service.name}
+                          </span>
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition ${
                               isSelected
                                 ? "border-emerald-300 bg-emerald-500 text-[#081510]"
-                                : "border-white/25 bg-[#110e0c] text-transparent"
+                                : "border-white/20 bg-transparent text-transparent"
                             }`}
                           >
-                            <Check className="h-4 w-4 stroke-[3]" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
-                              {service.name}
-                            </p>
-                            <p className="text-xs font-semibold text-stone-400">
-                              Süre: {service.duration} dakika
-                            </p>
-                          </div>
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          </span>
                         </div>
-
-                        <div className="shrink-0 text-right">
-                          <span className="rounded-xl border border-[#c88a53]/40 bg-[#c88a53]/15 px-3 py-1.5 text-sm font-black text-[#e6ccb2] sm:text-base">
+                        <div className="mt-2 flex w-full items-baseline justify-between border-t border-white/5 pt-1">
+                          <span className="text-[10px] text-stone-400">
+                            {service.duration} dk
+                          </span>
+                          <span className="text-xs font-black text-[#c88a53] sm:text-sm">
                             {effectivePrice} TL
                           </span>
                         </div>
@@ -613,48 +618,48 @@ export default function CustomerBookingPage() {
                 type="button"
                 disabled={selectedServices.length === 0}
                 onClick={() => setStep(2)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-4 text-base font-black text-[#1a110b] shadow-xl shadow-[#c88a53]/30 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               >
-                <span>Gün ve Saat Seçimine Geç ({totalPrice} TL)</span>
-                <ChevronRight className="h-5 w-5 stroke-[3]" />
+                <span>Gün & Saat Seçimine Geç</span>
+                <ChevronRight className="h-4 w-4 stroke-[3]" />
               </button>
             </motion.div>
           )}
 
-          {/* ADIM 2: GÜN VE SAAT SEÇİMİ (SADECE BOŞ SAATLER BÜYÜK KUTULAR HALİNDE) */}
+          {/* ADIM 2: GÜN VE SAAT SEÇİMİ (KOMPAKT & GEÇMİŞ SAATLER TAMAMEN GİZLİ) */}
           {step === 2 && (
             <motion.div
               key="step-2"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.16 }}
-              className="space-y-5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="space-y-3.5"
             >
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#14110f] px-3.5 py-2 text-xs font-extrabold text-[#e6ccb2] hover:border-white/30"
+                  className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-[#14110f] px-2.5 py-1.5 text-xs font-bold text-[#e6ccb2] hover:border-white/30"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-3.5 w-3.5" />
                   <span>Geri</span>
                 </button>
-                <span className="text-sm font-extrabold text-[#fdf8f5]">
+                <span className="text-xs font-black text-[#fdf8f5] sm:text-sm">
                   Gün ve Boş Saat Seçin
                 </span>
-                <span className="rounded-lg bg-[#c88a53]/20 px-2.5 py-1 text-xs font-bold text-[#e6ccb2]">
+                <span className="rounded-lg bg-[#c88a53]/20 px-2 py-0.5 text-xs font-bold text-[#e6ccb2]">
                   {selectedDay.fullDate}
                 </span>
               </div>
 
-              {/* Gün Seçimi — Bugünden Başlayan 7 Gerçek Gün (Yatay Kaydırılabilir Şık Kutular) */}
+              {/* Gün Seçimi — Bugünden Başlayan 7 Gerçek Gün */}
               <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
-                  <CalendarDays className="h-4 w-4 text-[#c88a53]" />
-                  <span>1. Günü Seçin (7 Günlük Canlı Takvim)</span>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                  <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" />
+                  <span>1. Günü Seçin</span>
                 </label>
-                <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1.5">
+                <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
                   {liveDays.map((day) => {
                     const isSelected = selectedDay.id === day.id;
                     const isDayClosed = shopSettings.closedDays.includes(
@@ -674,14 +679,14 @@ export default function CustomerBookingPage() {
                     const freeCount = validDaySlots.length;
                     const isDayWorkEnded = isDayToday && freeCount === 0;
 
-                    let badgeText = `${freeCount} Boş Saat`;
+                    let badgeText = `${freeCount} Boş`;
                     let badgeClass = "bg-emerald-500/15 text-emerald-400";
 
                     if (isDayClosed) {
                       badgeText = "Kapalı";
                       badgeClass = "bg-rose-500/15 text-rose-400";
                     } else if (isDayWorkEnded) {
-                      badgeText = "Mesai Bitti";
+                      badgeText = "Bitti";
                       badgeClass = "bg-amber-500/15 text-amber-400";
                     } else if (freeCount === 0) {
                       badgeText = "Dolu";
@@ -700,19 +705,19 @@ export default function CustomerBookingPage() {
                           setSelectedDay(day);
                           setSelectedSlot(null);
                         }}
-                        className={`flex min-w-[116px] shrink-0 flex-col items-center justify-between rounded-2xl border-2 px-3.5 py-3 transition ${
+                        className={`flex min-w-[96px] shrink-0 flex-col items-center justify-between rounded-xl border-2 px-2.5 py-2 transition ${
                           isSelected
-                            ? "border-[#e6ccb2] bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25"
+                            ? "border-[#e6ccb2] bg-gradient-to-b from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b]"
                             : isDayClosed
                             ? "border-white/5 bg-[#120f0d] text-stone-500 opacity-60"
                             : "border-white/10 bg-[#14110f] text-[#fdf8f5] hover:border-white/30"
                         }`}
                       >
-                        <span className="whitespace-nowrap text-xs font-black tracking-tight sm:text-sm">
+                        <span className="whitespace-nowrap text-xs font-black tracking-tight">
                           {day.chipLabel}
                         </span>
                         <span
-                          className={`mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${badgeClass}`}
+                          className={`mt-1 rounded-full px-2 py-0.5 text-[9px] font-extrabold ${badgeClass}`}
                         >
                           {badgeText}
                         </span>
@@ -722,98 +727,69 @@ export default function CustomerBookingPage() {
                 </div>
               </div>
 
-              {/* Saat Seçimi — SADECE BOŞ SAATLER BÜYÜK KUTULAR HALİNDE */}
+              {/* Saat Seçimi — SADECE GERÇEKTEN ALINABİLİR BOŞ SAATLER (GEÇMİŞLER TAMAMEN GİZLİ) */}
               <div>
-                <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#e6ccb2]">
-                  <Clock className="h-4 w-4 text-emerald-400" />
-                  <span>2. Boş Saati Seçin (Sadece Müsait Saatler)</span>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#e6ccb2]">
+                  <Clock className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>2. Boş Saati Seçin ({validAvailableSlots.length} Müsait Saat)</span>
                 </label>
 
                 {isSelectedDayClosed ? (
-                  <div className="rounded-2xl border border-rose-500/40 bg-rose-950/20 p-6 text-center">
-                    <CalendarX2 className="mx-auto h-8 w-8 text-rose-400" />
-                    <p className="mt-2 text-base font-extrabold text-[#fdf8f5]">
+                  <div className="rounded-xl border border-rose-500/40 bg-rose-950/20 p-4 text-center">
+                    <CalendarX2 className="mx-auto h-6 w-6 text-rose-400" />
+                    <p className="mt-1.5 text-sm font-extrabold text-[#fdf8f5]">
                       {selectedDay.fullDate} Günü Salon Kapalıdır
                     </p>
-                    <p className="mt-1 text-xs text-stone-300">
+                    <p className="mt-0.5 text-xs text-stone-400">
                       Lütfen yukarıdan başka bir gün seçiniz.
                     </p>
                   </div>
-                ) : isSelectedDayToday && validAvailableSlots.length === 0 ? (
-                  <div className="rounded-3xl border border-amber-500/40 bg-gradient-to-b from-amber-950/30 via-[#181310] to-[#14110f] p-6 text-center shadow-xl sm:p-8">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                      <Clock className="h-7 w-7 stroke-[2.5]" />
-                    </div>
-                    <p className="mt-3 text-base font-black text-[#fdf8f5] sm:text-lg">
-                      Bugün için mesaimiz sona ermiştir.
+                ) : validAvailableSlots.length === 0 ? (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 text-center">
+                    <Clock className="mx-auto h-6 w-6 text-amber-400" />
+                    <p className="mt-1.5 text-sm font-extrabold text-[#fdf8f5]">
+                      {isSelectedDayToday
+                        ? "Bugün İçin Alınabilir Saat Kalmadı"
+                        : "Bu Gün İçin Boş Saat Kalmadı"}
                     </p>
-                    <p className="mt-1 text-xs text-[#e6ccb2]/85 sm:text-sm">
-                      Lütfen yarına veya diğer günlere randevu alınız.
+                    <p className="mt-0.5 text-xs text-[#e6ccb2]/80">
+                      {isSelectedDayToday
+                        ? "Mesai sona ermiştir. Yarına randevu alabilirsiniz."
+                        : "Lütfen diğer günlerden birini seçiniz."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedDay(tomorrowMeta);
-                        setSelectedSlot(null);
-                      }}
-                      className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-6 py-3.5 text-xs font-black text-[#1a110b] shadow-xl shadow-[#c88a53]/25 transition hover:brightness-110 active:scale-95 sm:text-sm"
-                    >
-                      <span>👉 Yarının Saatlerini Gör</span>
-                    </button>
-                  </div>
-                ) : availableDaySlots.length === 0 ? (
-                  <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-6 text-center">
-                    <Clock className="mx-auto h-8 w-8 text-amber-400" />
-                    <p className="mt-2 text-base font-extrabold text-[#fdf8f5]">
-                      Bu Gün İçin Boş Saat Kalmadı
-                    </p>
-                    <p className="mt-1 text-xs text-stone-300">
-                      Lütfen yukarıdaki günlerden bir diğerini seçiniz.
-                    </p>
+                    {isSelectedDayToday && tomorrowMeta && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDay(tomorrowMeta);
+                          setSelectedSlot(null);
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] px-4 py-2 text-xs font-extrabold text-[#1a110b]"
+                      >
+                        <span>👉 Yarının Saatlerini Gör</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
-                    {availableDaySlots.map((slot) => {
-                      const isPast =
-                        isSelectedDayToday &&
-                        isSlotPassedOrImminent(slot.time, true);
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5">
+                    {validAvailableSlots.map((slot) => {
                       const isSelected = selectedSlot?.time === slot.time;
-
-                      if (isPast) {
-                        return (
-                          <button
-                            key={slot.time}
-                            type="button"
-                            disabled
-                            aria-disabled="true"
-                            className="flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-[#120f0d]/80 py-4 text-stone-600 opacity-40 cursor-not-allowed select-none"
-                          >
-                            <span className="text-lg font-black line-through sm:text-xl">
-                              {slot.time}
-                            </span>
-                            <span className="mt-0.5 text-[11px] font-extrabold text-rose-400/80">
-                              Geçti
-                            </span>
-                          </button>
-                        );
-                      }
-
                       return (
                         <button
                           key={slot.time}
                           type="button"
                           onClick={() => setSelectedSlot(slot)}
-                          className={`flex flex-col items-center justify-center rounded-2xl border-2 py-4 transition active:scale-95 ${
+                          className={`flex flex-col items-center justify-center rounded-xl border-2 py-2 sm:py-2.5 transition active:scale-95 ${
                             isSelected
-                              ? "border-emerald-200 bg-gradient-to-r from-emerald-500 to-teal-500 text-[#06150f] shadow-lg shadow-emerald-500/30"
-                              : "border-emerald-500/35 bg-[#131b16] text-[#fdf8f5] hover:border-emerald-400 hover:bg-emerald-950/40"
+                              ? "border-emerald-300 bg-emerald-500 text-[#06150f] font-black shadow-md shadow-emerald-500/20"
+                              : "border-emerald-500/30 bg-[#131b16] text-[#fdf8f5] hover:border-emerald-400"
                           }`}
                         >
-                          <span className="text-lg font-black sm:text-xl">
+                          <span className="text-sm font-black sm:text-base">
                             {slot.time}
                           </span>
                           <span
-                            className={`mt-0.5 text-[11px] font-extrabold ${
+                            className={`text-[9px] font-bold ${
                               isSelected ? "text-[#06150f]" : "text-emerald-400"
                             }`}
                           >
@@ -835,19 +811,19 @@ export default function CustomerBookingPage() {
                     isSlotPassedOrImminent(selectedSlot.time, true))
                 }
                 onClick={() => selectedSlot && setStep(3)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#e6ccb2]/70 bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-4 text-base font-black text-[#1a110b] shadow-xl shadow-[#c88a53]/30 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] py-3 text-sm font-black text-[#1a110b] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               >
                 <span>
                   {selectedSlot
-                    ? `${selectedDay.chipLabel} Saat ${selectedSlot.time} İçin Devam Et`
+                    ? `${selectedDay.chipLabel} ${selectedSlot.time} Randevusuna Devam Et`
                     : "Lütfen Bir Saat Seçin"}
                 </span>
-                <ChevronRight className="h-5 w-5 stroke-[3]" />
+                <ChevronRight className="h-4 w-4 stroke-[3]" />
               </button>
             </motion.div>
           )}
 
-          {/* ADIM 3: İSİM, TELEFON VE KOCAMAN "✅ RANDEVUYU TAMAMLA" BUTONU */}
+          {/* ADIM 3: İSİM, TELEFON VE ONAY (KOMPAKT) */}
           {step === 3 && (
             <motion.div
               key="step-3"
@@ -877,21 +853,21 @@ export default function CustomerBookingPage() {
                   </div>
 
                   {/* Seçilen Randevu Özeti Kutusu */}
-                  <div className="rounded-2xl border border-[#c88a53]/45 bg-[#14110f] p-4">
+                  <div className="rounded-xl border border-[#c88a53]/35 bg-[#14110f] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-[#c88a53]">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#c88a53]">
                           {currentShop.name} • {selectedBarber?.name}
                         </p>
-                        <p className="mt-0.5 text-base font-black text-[#fdf8f5]">
+                        <p className="mt-0.5 text-xs font-black text-[#fdf8f5] sm:text-sm">
                           {selectedServices.map((s) => s.name).join(" + ")}
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className="inline-block rounded-xl bg-emerald-500/20 px-3 py-1 text-sm font-black text-emerald-300">
+                        <span className="inline-block rounded-lg bg-emerald-500/20 px-2 py-0.5 text-xs font-black text-emerald-300">
                           {selectedDay.chipLabel} • Saat {selectedSlot?.time}
                         </span>
-                        <p className="mt-1 text-base font-black text-[#e6ccb2]">
+                        <p className="mt-0.5 text-xs font-black text-[#e6ccb2] sm:text-sm">
                           Toplam: {totalPrice} TL
                         </p>
                       </div>
@@ -904,51 +880,51 @@ export default function CustomerBookingPage() {
               {stage === "idle" && (
                 <form
                   onSubmit={handleCompleteBookingSubmit}
-                  className="space-y-4 rounded-2xl border border-white/10 bg-[#14110f] p-4 sm:p-5"
+                  className="space-y-3 rounded-xl border border-white/10 bg-[#14110f] p-3.5 sm:p-4"
                 >
                   <div>
-                    <label className="mb-1.5 block text-sm font-black text-[#fdf8f5]">
+                    <label className="mb-1 block text-xs font-bold text-[#fdf8f5]">
                       Adınız Soyadınız *
                     </label>
                     <div className="relative">
-                      <User className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#c88a53]" />
+                      <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#c88a53]" />
                       <input
                         type="text"
                         required
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Örn: Ahmet Yılmaz"
-                        className="w-full rounded-2xl border-2 border-white/15 bg-[#0e0c0a] py-3.5 pl-11 pr-4 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-[#c88a53]"
+                        className="w-full rounded-xl border border-white/15 bg-[#0e0c0a] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-[#c88a53]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-black text-[#fdf8f5]">
+                    <label className="mb-1 block text-xs font-bold text-[#fdf8f5]">
                       Cep Telefonu Numaranız *
                     </label>
                     <div className="relative">
-                      <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-400" />
+                      <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400" />
                       <input
                         type="tel"
                         required
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         placeholder="05XX XXX XX XX"
-                        className="w-full rounded-2xl border-2 border-white/15 bg-[#0e0c0a] py-3.5 pl-11 pr-4 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
+                        className="w-full rounded-xl border border-white/15 bg-[#0e0c0a] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
                       />
                     </div>
                   </div>
 
                   {formError && (
-                    <p className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-sm font-bold text-rose-300">
+                    <p className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs font-bold text-rose-300">
                       {formError}
                     </p>
                   )}
 
                   <button
                     type="submit"
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300/80 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 py-4 text-lg font-black text-[#06150f] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99]"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 py-3 text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/20 transition hover:brightness-110 active:scale-[0.99]"
                   >
                     <span>✅ Randevuyu Tamamla</span>
                   </button>
