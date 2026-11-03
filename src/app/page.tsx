@@ -156,6 +156,7 @@ export default function CustomerBookingPage() {
   // Adım 3: İsim, Telefon ve Onay
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
+  const [canComeEarly, setCanComeEarly] = useState<boolean>(true);
   const [stage, setStage] = useState<VerificationStage>("idle");
   const [cardNumber, setCardNumber] = useState<string>("4543 •••• •••• 8890");
   const [formError, setFormError] = useState<string>("");
@@ -312,6 +313,7 @@ export default function CustomerBookingPage() {
       status: "upcoming",
       reminderSent: false,
       bookingSource: "online",
+      canComeEarly,
     });
 
     setConfirmedAppointment(created);
@@ -913,6 +915,34 @@ export default function CustomerBookingPage() {
                         placeholder="05XX XXX XX XX"
                         className="w-full rounded-xl border border-white/15 bg-[#0e0c0a] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] placeholder-stone-500 outline-none transition focus:border-emerald-400"
                       />
+                    </div>
+                  </div>
+
+                  {/* ⚡ Erken Saat Yedek Listesi Seçeneği */}
+                  <div
+                    onClick={() => setCanComeEarly((prev) => !prev)}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-2.5 transition select-none ${
+                      canComeEarly
+                        ? "border-amber-400/60 bg-gradient-to-r from-amber-950/40 via-[#241a12] to-[#16120f] shadow-sm"
+                        : "border-white/10 bg-[#120f0d] opacity-75 hover:border-white/20"
+                    }`}
+                  >
+                    <div
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                        canComeEarly
+                          ? "border-amber-300 bg-amber-500 text-[#1a110b]"
+                          : "border-white/30 bg-transparent text-transparent"
+                      }`}
+                    >
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1 text-xs font-black text-[#fdf8f5]">
+                        <span>⚡ Daha erken bir saat boşalırsa haber ver (Yedek Liste)</span>
+                      </p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-[#e6ccb2]/80">
+                        Sizin saatinizden önce bir iptal olursa salonumuz sizi arayarak daha erken bir saate alabilir.
+                      </p>
                     </div>
                   </div>
 

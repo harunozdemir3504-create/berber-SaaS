@@ -104,6 +104,7 @@ export interface Appointment {
   bookingSource?: "online" | "phone" | "blocked";
   isBlockedSlot?: boolean;
   blockReason?: string;
+  canComeEarly?: boolean; // Erken saat boşalırsa gelebilir (Yedek Liste)
 }
 
 export interface WaitlistEntry {

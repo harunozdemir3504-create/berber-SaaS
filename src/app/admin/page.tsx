@@ -40,6 +40,7 @@ import {
   Copy,
   MapPin,
   ChevronDown,
+  Zap,
 } from "lucide-react";
 import {
   useBarber,
@@ -72,7 +73,7 @@ import {
 } from "@/lib/notifications";
 
 type BottomNavTab = "appointments" | "quick_add" | "other";
-type AppointmentFilterTab = "active" | "history";
+type AppointmentFilterTab = "active" | "early_backup" | "history";
 type AdminDayViewMode = "today" | "tomorrow" | "calendar" | "all";
 type OtherSubTab =
   | "shop_info"
@@ -225,6 +226,13 @@ export default function AdminDashboardPage() {
   // Canlı Yeni Randevu Üst Uyarı State
   const [liveBookingBanner, setLiveBookingBanner] =
     useState<NewBookingNotificationPayload | null>(null);
+
+  // ⚡ Boşalan Saat & Erken Gelebilir Akıllı Öneri Uyarısı
+  const [earlyFillAlert, setEarlyFillAlert] = useState<{
+    vacatedTime: string;
+    dayLabel: string;
+    candidates: Appointment[];
+  } | null>(null);
 
   const [toastMessage, setToastMessage] = useState<{
     title: string;
@@ -471,6 +479,26 @@ export default function AdminDashboardPage() {
     );
   };
 
+  const checkAndTriggerEarlyCandidates = (vacatedApt: Appointment) => {
+    const aptDayMeta = resolveDayMetadata(vacatedApt.dayId);
+    const vacatedMinutes = timeToMinutes(vacatedApt.time);
+    const candidates = appointments.filter((a) => {
+      if (a.id === vacatedApt.id) return false;
+      if (a.status !== "upcoming") return false;
+      if (!a.canComeEarly) return false;
+      if (resolveDayMetadata(a.dayId).id !== aptDayMeta.id) return false;
+      return timeToMinutes(a.time) > vacatedMinutes;
+    });
+
+    if (candidates.length > 0) {
+      setEarlyFillAlert({
+        vacatedTime: vacatedApt.time,
+        dayLabel: aptDayMeta.chipLabel,
+        candidates,
+      });
+    }
+  };
+
   const handleCancelByAdmin = (apt: Appointment) => {
     const res = cancelAppointmentByCustomer(apt.id);
     triggerToast(
@@ -480,6 +508,7 @@ export default function AdminDashboardPage() {
         : `Saat ${apt.time} tekrar randevuya açıldı.`,
       "warning"
     );
+    checkAndTriggerEarlyCandidates(apt);
   };
 
   const [expandedAptId, setExpandedAptId] = useState<string | null>(null);
@@ -495,6 +524,7 @@ export default function AdminDashboardPage() {
       `Müşteri no-show olarak işaretlendi ve ortak kara liste ağına eklendi.`,
       "warning"
     );
+    checkAndTriggerEarlyCandidates(apt);
   };
 
   const handleSendReminder = (
@@ -890,10 +920,22 @@ export default function AdminDashboardPage() {
     );
   }, [historyAppointments, activeTargetDayId]);
 
-  const displayedAppointments =
-    appointmentFilter === "active"
-      ? dayFilteredActiveAppointments
-      : dayFilteredHistoryAppointments;
+  const dayEarlyBackupAppointments = useMemo(() => {
+    return dayFilteredActiveAppointments.filter(
+      (apt) => apt.canComeEarly && apt.status === "upcoming"
+    );
+  }, [dayFilteredActiveAppointments]);
+
+  const displayedAppointments = useMemo(() => {
+    if (appointmentFilter === "active") return dayFilteredActiveAppointments;
+    if (appointmentFilter === "early_backup") return dayEarlyBackupAppointments;
+    return dayFilteredHistoryAppointments;
+  }, [
+    appointmentFilter,
+    dayFilteredActiveAppointments,
+    dayEarlyBackupAppointments,
+    dayFilteredHistoryAppointments,
+  ]);
 
   return (
     <AdminPinGate>
@@ -1021,6 +1063,93 @@ export default function AdminDashboardPage() {
                   </button>
                 </div>
               )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ⚡ BOŞALAN SAAT & ERKEN GELEBİLİR AKILLI ÖNERİ KUTUSU */}
+        <AnimatePresence>
+          {earlyFillAlert && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.97 }}
+              className="mb-4 overflow-hidden rounded-3xl border-2 border-amber-500 bg-gradient-to-r from-amber-950 via-[#1f1710] to-[#16120e] p-4 shadow-2xl shadow-amber-500/20"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400 text-[#1a110b] shadow-lg">
+                    <Zap className="h-6 w-6 fill-[#1a110b]" />
+                  </div>
+                  <div>
+                    <span className="inline-block rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-amber-300">
+                      ⚡ ERKEN SAAT YEDEK LİSTESİ ÖNERİSİ
+                    </span>
+                    <h3 className="mt-1 text-base font-black text-[#fdf8f5] sm:text-lg">
+                      Bu saat boşaldı! ({earlyFillAlert.vacatedTime})
+                    </h3>
+                    <p className="mt-0.5 text-xs font-bold text-amber-200/90">
+                      İleriki saatlerden erken gelebileceğini belirten müşterileriniz var, hemen arayıp saati doldurabilirsiniz:
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEarlyFillAlert(null)}
+                  className="rounded-xl border border-amber-500/40 bg-black/40 p-2 text-stone-300 hover:bg-black/60 hover:text-white"
+                  title="Kapat"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-3.5 space-y-2">
+                {earlyFillAlert.candidates.map((cand) => {
+                  const candWaText = `Merhaba ${cand.customerName}, ${currentShop.name} salonumuzda saat ${earlyFillAlert.vacatedTime} için erken randevu boşluğu oluştu. Normalde saat ${cand.time} olan randevunuzu bu saate çekmek ister misiniz? Detaylar: ${getShopBookingUrl(currentShop.slug)}`;
+                  const candWaUrl = buildWhatsAppUrl(cand.customerPhone, candWaText);
+
+                  return (
+                    <div
+                      key={cand.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-black/50 p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-[#fdf8f5]">
+                            {cand.customerName}
+                          </span>
+                          <span className="rounded-lg bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-xs font-black text-amber-300">
+                            Şu anki Saati: {cand.time}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-stone-400">
+                          ✂️ {cand.services.map((s) => s.name).join(" + ")} • 👤 {cand.barberName}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <a
+                          href={`tel:${cand.customerPhone}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-[#06150f] shadow-md shadow-emerald-500/20 transition hover:bg-emerald-400"
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                          <span>📞 Hemen Ara</span>
+                        </a>
+
+                        <a
+                          href={candWaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/20"
+                        >
+                          <span>💬 WhatsApp</span>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1340,26 +1469,41 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            {/* Sadece "Bekleyenler" ve "Geçmiş" Filtresi */}
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-[#161311] p-1.5">
+            {/* Bekleyenler, Erken Gelebilir ve Geçmiş Filtresi */}
+            <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/10 bg-[#161311] p-1.5">
               <button
                 type="button"
                 onClick={() => setAppointmentFilter("active")}
-                className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-black transition sm:text-base ${
+                className={`flex items-center justify-center gap-1 rounded-xl py-2.5 sm:py-3 text-xs sm:text-sm font-black transition ${
                   appointmentFilter === "active"
                     ? "bg-gradient-to-r from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md"
                     : "text-stone-400 hover:text-[#fdf8f5]"
                 }`}
               >
                 <span>
-                  ⏳ Bekleyenler ({dayFilteredActiveAppointments.length})
+                  ⏳ Bekleyen ({dayFilteredActiveAppointments.length})
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAppointmentFilter("early_backup")}
+                className={`flex items-center justify-center gap-1 rounded-xl py-2.5 sm:py-3 text-xs sm:text-sm font-black transition ${
+                  appointmentFilter === "early_backup"
+                    ? "bg-amber-500/25 text-amber-200 border border-amber-500/50 shadow-md shadow-amber-500/10"
+                    : "text-amber-400/90 hover:text-amber-300"
+                }`}
+              >
+                <Zap className="h-3.5 w-3.5 fill-amber-400" />
+                <span>
+                  ⚡ Yedek / Erken ({dayEarlyBackupAppointments.length})
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setAppointmentFilter("history")}
-                className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-black transition sm:text-base ${
+                className={`flex items-center justify-center gap-1 rounded-xl py-2.5 sm:py-3 text-xs sm:text-sm font-black transition ${
                   appointmentFilter === "history"
                     ? "bg-emerald-500/25 text-emerald-200 border border-emerald-500/40"
                     : "text-stone-400 hover:text-[#fdf8f5]"
@@ -1382,6 +1526,12 @@ export default function AdminDashboardPage() {
                           ? activeTargetDayMeta.chipLabel
                           : "Seçili Gün"
                       } İçin Bekleyen Randevu Yok`
+                    : appointmentFilter === "early_backup"
+                    ? `${
+                        activeTargetDayMeta
+                          ? activeTargetDayMeta.chipLabel
+                          : "Seçili Gün"
+                      } İçin Erken Gelebilecek Müşteri Yok`
                     : `${
                         activeTargetDayMeta
                           ? activeTargetDayMeta.chipLabel
@@ -1389,7 +1539,9 @@ export default function AdminDashboardPage() {
                       } İçin Geçmiş Randevu Yok`}
                 </h3>
                 <p className="mt-1 text-sm text-stone-400">
-                  {appointmentFilter === "active"
+                  {appointmentFilter === "early_backup"
+                    ? "Müşteriler randevu alırken 'Daha erken bir saat boşalırsa haber ver' seçeneğini işaretlediğinde burada listelenir."
+                    : appointmentFilter === "active"
                     ? "Alttaki '➕ Hızlı Ekle' menüsünden 3 saniyede yeni randevu ekleyebilirsiniz."
                     : "Tamamlanan veya iptal edilen randevular burada listelenir."}
                 </p>
@@ -1481,10 +1633,16 @@ export default function AdminDashboardPage() {
 
                           {/* İsim ve Hizmet */}
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span className="truncate text-xs font-black text-[#fdf8f5] sm:text-sm">
                                 {apt.customerName}
                               </span>
+                              {apt.canComeEarly && apt.status === "upcoming" && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/60 bg-amber-400/20 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm shadow-amber-400/20">
+                                  <Zap className="h-2.5 w-2.5 fill-amber-300" />
+                                  <span>Erken Gelebilir</span>
+                                </span>
+                              )}
                               {isCompleted && (
                                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">
                                   Geldi
@@ -1546,7 +1704,15 @@ export default function AdminDashboardPage() {
                           </div>
 
                           {/* Aksiyon Butonları Izgarası */}
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                            <a
+                              href={`tel:${apt.customerPhone}`}
+                              className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/60 bg-emerald-500 px-3 py-2 text-xs font-black text-[#06150f] shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400"
+                            >
+                              <Phone className="h-3.5 w-3.5 fill-[#06150f]" />
+                              <span>📞 Hemen Ara</span>
+                            </a>
+
                             <button
                               type="button"
                               disabled={isCompleted}
@@ -1592,7 +1758,7 @@ export default function AdminDashboardPage() {
                                   : "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
                               }`}
                             >
-                              <span>Gelmedi (No-Show)</span>
+                              <span>Gelmedi</span>
                             </button>
 
                             <a
