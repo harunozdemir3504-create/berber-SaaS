@@ -407,3 +407,32 @@ html.light .admin-page-theme [class*="bg-[#171310]"] {
   border-color: #FCD34D !important;
   color: #92400E !important;
 }
+
+/* ===================================================================== */
+/* 12. TAKVİM ÇİZELGESİ (TIMELINE GRID) AYDINLIK MOD STİLLERİ           */
+/* ===================================================================== */
+html.light .admin-page-theme [class*="bg-[#101712]"] {
+  background-color: #ECFDF5 !important;
+  border-color: #A7F3D0 !important;
+  color: #065F46 !important;
+}
+html.light .admin-page-theme [class*="bg-[#191512]"] {
+  background-color: #FFFBEB !important;
+  border-color: #FDE68A !important;
+  color: #92400E !important;
+}
+html.light .admin-page-theme [class*="bg-[#121114]"] {
+  background-color: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+  color: #1F2937 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
+}
+html.light .admin-page-theme [class*="bg-white/[0.02]"],
+html.light .admin-page-theme [class*="bg-white/[0.04]"] {
+  background-color: #F9FAFB !important;
+  border-color: #E5E7EB !important;
+  color: #4B5563 !important;
+}
+html.light .admin-page-theme [class*="hover:bg-white/[0.04]"]:hover {
+  background-color: #F3F4F6 !important;
+}
