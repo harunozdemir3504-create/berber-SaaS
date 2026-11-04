@@ -13,6 +13,7 @@ import { useSearchParams, usePathname } from "next/navigation";
 import {
   AdminAlert,
   Appointment,
+  AppointmentStatus,
   Barber,
   BlacklistEntry,
   DepositPolicyType,
@@ -26,6 +27,7 @@ import {
   TimeSlot,
   WaitlistEntry,
   resolveDayMetadata,
+  getLiveDaysMetadata,
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { triggerAutomaticBookingNotification } from "@/lib/notifications";
@@ -170,7 +172,7 @@ interface BarberContextType {
 
   // Shop Schedule Settings (Scoped to Current Shop)
   updateShopSettings: (updated: Partial<ShopSettings>) => void;
-  toggleShopBreak: (enabled?: boolean) => void;
+  toggleShopBreak: (targetDayId?: string) => void;
   toggleClosedDay: (dayOfWeek: number) => void;
   getSlotsForDay: (dayId: string, barberId?: string) => TimeSlot[];
 
@@ -1406,11 +1408,17 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const addAppointment = useCallback(
     (newAptData: Omit<Appointment, "id" | "appointmentCode">): Appointment => {
       const resolvedDay = resolveDayMetadata(newAptData.dayId);
+      const isBlacklisted = Boolean(isPhoneBlacklisted(newAptData.customerPhone));
+      // KESİN GÜVENLİK KİLİDİ: Kara listedeki müşteri ASLA confirmed olamaz!
+      const safeStatus: AppointmentStatus = isBlacklisted ? "pending" : newAptData.status;
       const vCode =
         newAptData.verificationCode ||
-        (newAptData.status === "pending" ? generateVerificationCode() : undefined);
+        (safeStatus === "pending" ? generateVerificationCode() : undefined);
       const newApt: Appointment = {
         ...newAptData,
+        status: safeStatus,
+        requiresDeposit: isBlacklisted || newAptData.requiresDeposit,
+        isBlacklisted: isBlacklisted || newAptData.isBlacklisted,
         dayId: resolvedDay.id,
         dateLabel: resolvedDay.chipLabel,
         id: `apt-${Date.now()}`,
@@ -2259,32 +2267,73 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   );
 
   const toggleShopBreak = useCallback(
-    (enabled?: boolean) => {
+    (targetDayId?: string) => {
       setShops((prevShops) => {
         const nextShops = prevShops.map((shop) => {
           if (shop.slug !== currentShop.slug) return shop;
-          const nextState =
-            enabled !== undefined ? enabled : !shop.shopSettings.breakEnabled;
+          const dayIdToUse = targetDayId || getLiveDaysMetadata(1)[0].id;
+
+          // Mola durumunu doğrudan o günkü randevular/kayıtlar dizisinden türet
+          const hasBreakAlready = shop.appointments.some(
+            (a) =>
+              a.isBlockedSlot &&
+              (a.dayId === dayIdToUse || !a.dayId) &&
+              (a.blockReason?.toLowerCase().includes("mola") ||
+                a.blockReason?.toLowerCase().includes("öğle") ||
+                a.blockReason?.toLowerCase().includes("yemek"))
+          );
 
           let nextAppointments = shop.appointments;
-          if (!nextState) {
-            // Mola kapatıldığında hayalet kapalı saatleri appointments'tan tamamen sil (optimistic cleanup)
+
+          if (hasBreakAlready) {
+            // Mola varsa: Tek seferde veritabanından/state'ten sil (DELETE)
             nextAppointments = nextAppointments.filter(
               (a) =>
                 !(
                   a.isBlockedSlot &&
+                  (a.dayId === dayIdToUse || !a.dayId) &&
                   (a.blockReason?.toLowerCase().includes("mola") ||
                     a.blockReason?.toLowerCase().includes("öğle") ||
                     a.blockReason?.toLowerCase().includes("yemek"))
                 )
             );
+          } else {
+            // Mola yoksa: Tek seferde mola saatlerini ekle (INSERT)
+            const resolvedDay = resolveDayMetadata(dayIdToUse);
+            const bStart = shop.shopSettings.breakStart || "13:00";
+            const bEnd = shop.shopSettings.breakEnd || "14:00";
+            const breakBlock: Appointment = {
+              id: `block-break-${dayIdToUse}-${Date.now()}`,
+              appointmentCode: `#MOLA-${Date.now().toString().slice(-4)}`,
+              dayId: resolvedDay.id,
+              dateLabel: resolvedDay.chipLabel,
+              time: bStart,
+              endTime: bEnd,
+              customerName: "Öğle Molası",
+              customerPhone: "",
+              barberId: "all",
+              barberName: "Tüm Salon",
+              chairLabel: "Tüm Koltuklar",
+              services: [],
+              totalPrice: 0,
+              totalDuration: 60,
+              trustBadge: "trusted",
+              trustDetail: "Salon Öğle Molası",
+              status: "confirmed",
+              reminderSent: false,
+              isBlockedSlot: true,
+              blockReason: "Yemek Molası",
+            };
+            nextAppointments = [...nextAppointments, breakBlock];
           }
+
+          const nextBreakEnabled = !hasBreakAlready;
 
           return {
             ...shop,
             shopSettings: {
               ...shop.shopSettings,
-              breakEnabled: nextState,
+              breakEnabled: nextBreakEnabled,
             },
             appointments: nextAppointments,
           };
