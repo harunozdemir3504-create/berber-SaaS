@@ -1,6 +1,6 @@
 /* ===================================================================== */
 /* BERBER YÖNETİM PANELİ (/admin) AYDINLIK / KOYU TEMA SİSTEMİ          */
-/* Light Mode (#F8F9FA, #FFFFFF, #1A1A1A, #333333) Tasarım Dili         */
+/* Light Mode (#F8F9FA, #FFFFFF, #1A1A1A, #374151) Tasarım Dili         */
 /* ===================================================================== */
 
 html.light {
@@ -33,14 +33,16 @@ html.light ::-webkit-scrollbar-thumb:hover {
 /* ===================================================================== */
 /* 1. ÜST BAR & NAVBAR (AYDINLIK MOD)                                   */
 /* ===================================================================== */
-html.light header {
+html.light header,
+html.light .admin-page-theme header {
   background-color: rgba(255, 255, 255, 0.95) !important;
   border-bottom: 1px solid #E5E7EB !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+  color: #1A1A1A !important;
 }
 
 /* ===================================================================== */
-/* 2. ADMIN PANELİ KARTLAR, BLOKLAR VE ARKA PLANLAR (#FFFFFF & #F8F9FA) */
+/* 2. TÜM PANEL KARTLARI, BLOKLARI VE KOYU ZEMİNLER (#FFFFFF & #F8F9FA)   */
 /* ===================================================================== */
 html.light .admin-page-theme [class*="bg-[#141416]"],
 html.light .admin-page-theme [class*="bg-[#101012]"],
@@ -51,45 +53,84 @@ html.light .admin-page-theme [class*="bg-[#161519]"],
 html.light .admin-page-theme [class*="bg-[#181411]"],
 html.light .admin-page-theme [class*="bg-[#120f0d]"],
 html.light .admin-page-theme [class*="bg-[#1a1410]"],
-html.light .admin-page-theme [class*="bg-[#0e0b09]"] {
+html.light .admin-page-theme [class*="bg-[#0e0b09]"],
+html.light .admin-page-theme [class*="bg-[#0d0c0b]"],
+html.light .admin-page-theme [class*="bg-[#06150f]"],
+html.light .admin-page-theme [class*="bg-[#151e18]"],
+html.light .admin-page-theme [class*="bg-[#161c18]"],
+html.light .admin-page-theme [class*="bg-[#1a110b]"],
+html.light .admin-page-theme [class*="bg-[#2a1510]"],
+html.light .admin-page-theme [class*="bg-[#141417]"],
+html.light .admin-page-theme [class*="bg-[#161412]"],
+html.light .admin-page-theme [class*="bg-[#151518]"],
+html.light .admin-page-theme [class*="bg-[#1f1710]"],
+html.light .admin-page-theme [class*="bg-[#16120e]"] {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
   color: #1A1A1A !important;
 }
 
-/* İç gri alanlar ve akordeon çekmeceleri */
+/* Ciro ekranı ve iç rozetler (Bugün & Bu Ay & Toplam Ciro) */
+html.light .admin-page-theme [class*="bg-[#221a14]"],
+html.light .admin-page-theme [class*="bg-[#1c1815]"],
 html.light .admin-page-theme [class*="bg-[#111113]"],
 html.light .admin-page-theme [class*="bg-[#171310]"],
-html.light .admin-page-theme [class*="bg-[#121215]"] {
+html.light .admin-page-theme [class*="bg-[#121215]"],
+html.light .admin-page-theme [class*="bg-[#121614]"],
+html.light .admin-page-theme [class*="bg-black/30"],
+html.light .admin-page-theme [class*="bg-black/40"],
+html.light .admin-page-theme [class*="bg-black/50"],
+html.light .admin-page-theme [class*="bg-black/60"],
+html.light .admin-page-theme [class*="bg-black/20"] {
   background-color: #F8F9FA !important;
   border-color: #E5E7EB !important;
-}
-
-/* Çok ince gri sınırlar */
-html.light .admin-page-theme [class*="border-white/"] {
-  border-color: #E5E7EB !important;
-}
-
-/* Kartların hafif ve estetik gölgeleri */
-html.light .admin-page-theme .rounded-xl,
-html.light .admin-page-theme .rounded-2xl,
-html.light .admin-page-theme .rounded-3xl {
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-}
-
-/* ===================================================================== */
-/* 3. YAZILAR, İKONLAR VE TİPOGRAFİ (#1A1A1A & #333333)                 */
-/* ===================================================================== */
-html.light .admin-page-theme [class*="text-[#fdf8f5]"],
-html.light .admin-page-theme [class*="text-[#fcfbfa]"] {
   color: #1A1A1A !important;
 }
 
-html.light .admin-page-theme [class*="text-stone-300"] {
-  color: #333333 !important;
+/* Taşma veya generic koyu arka planlar */
+html.light .admin-page-theme .bg-zinc-900,
+html.light .admin-page-theme .bg-zinc-950,
+html.light .admin-page-theme .bg-stone-900,
+html.light .admin-page-theme .bg-stone-950,
+html.light .admin-page-theme .bg-slate-900,
+html.light .admin-page-theme .bg-slate-950 {
+  background-color: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+  color: #1A1A1A !important;
 }
 
-html.light .admin-page-theme [class*="text-stone-400"] {
+/* İnce açık sınırlar */
+html.light .admin-page-theme [class*="border-white/"],
+html.light .admin-page-theme [class*="border-stone-800"],
+html.light .admin-page-theme [class*="border-zinc-800"] {
+  border-color: #E5E7EB !important;
+}
+
+/* Kart gölgeleri */
+html.light .admin-page-theme .rounded-xl,
+html.light .admin-page-theme .rounded-2xl,
+html.light .admin-page-theme .rounded-3xl {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* ===================================================================== */
+/* 3. YAZILAR, İKONLAR VE TİPOGRAFİ (#1A1A1A & #4B5563)                 */
+/* ===================================================================== */
+html.light .admin-page-theme [class*="text-[#fdf8f5]"],
+html.light .admin-page-theme [class*="text-[#fcfbfa]"],
+html.light .admin-page-theme .text-white {
+  color: #1A1A1A !important;
+}
+
+html.light .admin-page-theme [class*="text-stone-300"],
+html.light .admin-page-theme [class*="text-zinc-300"],
+html.light .admin-page-theme [class*="text-gray-300"] {
+  color: #374151 !important;
+}
+
+html.light .admin-page-theme [class*="text-stone-400"],
+html.light .admin-page-theme [class*="text-zinc-400"],
+html.light .admin-page-theme [class*="text-gray-400"] {
   color: #6B7280 !important;
 }
 
@@ -99,37 +140,79 @@ html.light .admin-page-theme [class*="text-[#f3e8dc]"] {
 }
 
 /* ===================================================================== */
-/* 4. RANDEVU BLOKLARI (BEYAZ ZEMİN, İNCE SINIR, HAFİF GÖLGE)           */
+/* 4. RANDEVU KARTLARI (BEYAZ ZEMİN, İNCE SINIR, NET KONTRAST)          */
 /* ===================================================================== */
 html.light .admin-page-theme .overflow-hidden.rounded-xl.border {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease-in-out;
 }
 
 html.light .admin-page-theme .overflow-hidden.rounded-xl.border:hover {
   border-color: #D1D5DB !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07) !important;
 }
 
 /* Randevu Saat Rozeti */
 html.light .admin-page-theme [class*="bg-[#dfc39e]/15"] {
-  background-color: #F1F3F5 !important;
-  border-color: #E2E8F0 !important;
-  color: #1A1A1A !important;
-}
-
-/* Randevu Fiyatı */
-html.light .admin-page-theme span[class*="text-[#dfc39e]"] {
+  background-color: #FEF3C7 !important;
+  border-color: #FCD34D !important;
   color: #92400E !important;
 }
 
 /* ===================================================================== */
-/* 5. ROZETLER VE DURUM BUTONLARI (KONTRASTLI, PATLAMAYAN YUMUŞAK TONLAR)*/
+/* 5. CİRO VE İSTATİSTİK KARTLARI (TAM UYUMLU AYDINLIK MOD)             */
 /* ===================================================================== */
+html.light .admin-page-theme .grid .rounded-2xl {
+  background-color: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+}
 
-/* ⏳ Onay Bekliyor (Pending / Bekleyen) */
+html.light .admin-page-theme [class*="border-emerald-500/30"] {
+  background-color: #F0FDF4 !important;
+  border-color: #A7F3D0 !important;
+}
+html.light .admin-page-theme [class*="text-emerald-300"] {
+  color: #065F46 !important;
+}
+
+html.light .admin-page-theme [class*="border-[#dfc39e]/40"] {
+  background-color: #FFFBEB !important;
+  border-color: #FDE68A !important;
+}
+
+html.light .admin-page-theme [class*="border-sky-500/30"] {
+  background-color: #F0F9FF !important;
+  border-color: #BAE6FD !important;
+}
+html.light .admin-page-theme [class*="text-sky-300"] {
+  color: #0369A1 !important;
+}
+
+html.light .admin-page-theme [class*="border-rose-500/30"] {
+  background-color: #FFF1F2 !important;
+  border-color: #FECDD3 !important;
+}
+html.light .admin-page-theme [class*="text-rose-300"] {
+  color: #9F1239 !important;
+}
+
+/* Personel Ciro Takibi Rozetleri */
+html.light .admin-page-theme [class*="bg-[#221a14]"] span,
+html.light .admin-page-theme [class*="bg-[#1c1815]"] span {
+  color: #1A1A1A !important;
+}
+html.light .admin-page-theme [class*="bg-[#221a14]"] .text-emerald-400 {
+  color: #047857 !important;
+}
+html.light .admin-page-theme [class*="bg-[#1c1815]"] .text-amber-300 {
+  color: #B45309 !important;
+}
+
+/* ===================================================================== */
+/* 6. ROZETLER VE DURUM BUTONLARI                                       */
+/* ===================================================================== */
+/* ⏳ Onay Bekliyor */
 html.light .admin-page-theme [class*="bg-amber-500/25"],
 html.light .admin-page-theme [class*="bg-amber-500/20"],
 html.light .admin-page-theme [class*="bg-amber-500/15"],
@@ -143,7 +226,7 @@ html.light .admin-page-theme [class*="text-amber-200"] {
   color: #92400E !important;
 }
 
-/* ✅ Onaylandı (Confirmed) */
+/* ✅ Onaylandı */
 html.light .admin-page-theme [class*="bg-emerald-500/20"],
 html.light .admin-page-theme [class*="bg-emerald-500/25"],
 html.light .admin-page-theme [class*="bg-emerald-500/15"],
@@ -152,29 +235,8 @@ html.light .admin-page-theme [class*="bg-emerald-500/10"] {
   border-color: #6EE7B7 !important;
   color: #065F46 !important;
 }
-html.light .admin-page-theme [class*="text-emerald-300"] {
-  color: #065F46 !important;
-}
 
-/* ⚡ Erken Gelebilir & Yedek Rozetleri */
-html.light .admin-page-theme [class*="bg-amber-400/20"] {
-  background-color: #FEF3C7 !important;
-  border-color: #FCD34D !important;
-  color: #92400E !important;
-  box-shadow: 0 1px 2px rgba(217, 119, 6, 0.15) !important;
-}
-html.light .admin-page-theme [class*="fill-amber-300"] {
-  fill: #92400E !important;
-}
-
-/* Geldi / Tamamlandı */
-html.light .admin-page-theme [class*="bg-[#121614]"],
-html.light .admin-page-theme [class*="border-emerald-500/25"] {
-  background-color: #F0FDF4 !important;
-  border-color: #A7F3D0 !important;
-}
-
-/* İptal / Gelmedi / Kara Liste Rozetleri */
+/* ❌ İptal / Gelmedi / Kara Liste */
 html.light .admin-page-theme [class*="bg-rose-500/20"],
 html.light .admin-page-theme [class*="bg-rose-500/15"],
 html.light .admin-page-theme [class*="bg-rose-500/25"],
@@ -190,41 +252,14 @@ html.light .admin-page-theme [class*="text-rose-400"] {
   color: #9F1239 !important;
 }
 
-/* Müşteri Vitrini & Dış Bağlantı Rozetleri (Sky) */
-html.light .admin-page-theme [class*="bg-sky-500/15"],
-html.light .admin-page-theme [class*="bg-sky-500/10"],
-html.light .admin-page-theme [class*="bg-sky-500/20"] {
-  background-color: #E0F2FE !important;
-  border-color: #BAE6FD !important;
-  color: #0369A1 !important;
-}
-html.light .admin-page-theme [class*="text-sky-200"],
-html.light .admin-page-theme [class*="text-sky-300"],
-html.light .admin-page-theme [class*="text-sky-400"] {
-  color: #0369A1 !important;
-}
-
-/* QR Afiş Mor Butonlar */
-html.light .admin-page-theme [class*="bg-purple-500/15"],
-html.light .admin-page-theme [class*="bg-purple-500/20"] {
-  background-color: #F3E8FF !important;
-  border-color: #E9D5FF !important;
-  color: #6B21A8 !important;
-}
-html.light .admin-page-theme [class*="text-purple-200"],
-html.light .admin-page-theme [class*="text-purple-300"] {
-  color: #6B21A8 !important;
-}
-
 /* ===================================================================== */
-/* 6. GÜN SEÇİCİ ŞERİT & FİLTRE BUTONLARI                                */
+/* 7. GÜN SEÇİCİ ŞERİT & FİLTRE BUTONLARI                                */
 /* ===================================================================== */
 html.light .admin-page-theme .rounded-3xl.border {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
 }
 
-/* Seçilmemiş Gün Butonları */
 html.light .admin-page-theme button[class*="bg-[#101012]"] {
   background-color: #F8F9FA !important;
   border-color: #E5E7EB !important;
@@ -235,24 +270,21 @@ html.light .admin-page-theme button[class*="bg-[#101012]"]:hover {
   border-color: #D1D5DB !important;
 }
 
-/* Seçili Gün Butonu (Bugün) */
-html.light .admin-page-theme button[class*="from-[#d4af7a]"] {
-  color: #1A1A1A !important;
-  box-shadow: 0 4px 12px rgba(212, 175, 122, 0.35) !important;
-}
-
-/* Personel filtre butonları */
 html.light .admin-page-theme [class*="bg-white/5"] {
   background-color: #F1F3F5 !important;
   color: #4B5563 !important;
+  border-color: #E5E7EB !important;
 }
 
 /* ===================================================================== */
-/* 7. FORM ELEMANLARI (INPUT, SELECT, TEXTAREA)                         */
+/* 8. FORM ELEMANLARI (INPUT, SELECT, TEXTAREA)                         */
 /* ===================================================================== */
 html.light .admin-page-theme input,
 html.light .admin-page-theme select,
-html.light .admin-page-theme textarea {
+html.light .admin-page-theme textarea,
+html.light input,
+html.light select,
+html.light textarea {
   background-color: #FFFFFF !important;
   border-color: #D1D5DB !important;
   color: #1A1A1A !important;
@@ -260,26 +292,29 @@ html.light .admin-page-theme textarea {
 
 html.light .admin-page-theme input:focus,
 html.light .admin-page-theme select:focus,
-html.light .admin-page-theme textarea:focus {
+html.light .admin-page-theme textarea:focus,
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
   border-color: #ab8046 !important;
   box-shadow: 0 0 0 2px rgba(171, 128, 70, 0.15) !important;
 }
 
-html.light .admin-page-theme input::placeholder,
-html.light .admin-page-theme textarea::placeholder {
+html.light input::placeholder,
+html.light textarea::placeholder {
   color: #9CA3AF !important;
 }
 
-html.light .admin-page-theme select option {
+html.light select option {
   background-color: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 
 /* ===================================================================== */
-/* 8. SABİT ALT NAVİGASYON BARI (BOTTOM NAVIGATION BAR)                  */
+/* 9. SABİT ALT NAVİGASYON BARI VE ALT MENÜ SEKMELERİ                    */
 /* ===================================================================== */
 html.light nav[aria-label="Berber Alt Menü"] {
-  background-color: rgba(255, 255, 255, 0.96) !important;
+  background-color: rgba(255, 255, 255, 0.98) !important;
   border-top: 1px solid #E5E7EB !important;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05) !important;
 }
@@ -292,19 +327,49 @@ html.light nav[aria-label="Berber Alt Menü"] button[class*="text-stone-400"]:ho
   color: #111827 !important;
 }
 
+/* Alt menü sekmeleri (Ciro & Kara Liste, Personel, Hizmetler butonları) */
+html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl {
+  background-color: #F1F3F5 !important;
+  border-color: #E5E7EB !important;
+}
+
+html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl button {
+  color: #4B5563 !important;
+}
+
+html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl button[class*="bg-[#dfc39e]"] {
+  background-color: #FFFFFF !important;
+  color: #92400E !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+}
+
 /* ===================================================================== */
-/* 9. MODALLAR VE DİYALOGLAR (KARA LİSTE, ŞİFRE KORUMA VB.)             */
+/* 10. MODALLAR VE DİYALOGLAR (TÜM AÇILIR PENCERELER)                    */
 /* ===================================================================== */
-html.light .fixed.inset-0 .relative.w-full.max-w-md,
-html.light .fixed.inset-0 .relative.w-full.max-w-sm {
+html.light .fixed.inset-0 [class*="bg-[#1c1613]"],
+html.light .fixed.inset-0 [class*="bg-[#141416]"],
+html.light .fixed.inset-0 [class*="bg-[#161210]"],
+html.light .fixed.inset-0 [class*="bg-[#161619]"],
+html.light .fixed.inset-0 [class*="bg-[#101012]"],
+html.light .fixed.inset-0 [class*="bg-[#0d0d0f]"],
+html.light .fixed.inset-0 [class*="bg-[#131316]"] {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
   color: #1A1A1A !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Salon PIN / Şifre Giriş Ekranı (AdminPinGate) */
-html.light .min-h-\[75vh\] [class*="bg-[#161210]"] {
+html.light .fixed.inset-0 [class*="text-[#fdf8f5]"] {
+  color: #1A1A1A !important;
+}
+
+html.light .fixed.inset-0 [class*="text-stone-300"] {
+  color: #374151 !important;
+}
+
+/* PIN Ekranı (AdminPinGate) */
+html.light .min-h-\[75vh\] [class*="bg-[#161210]"],
+html.light .min-h-\[75vh\] [class*="bg-[#141416]"] {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08) !important;
@@ -319,7 +384,7 @@ html.light .min-h-\[75vh\] [class*="text-[#fdf8f5]"] {
 }
 
 /* ===================================================================== */
-/* 10. BOŞALAN SAAT & ERKEN GELEBİLİR ÖNERİ KUTUSU                       */
+/* 11. BOŞALAN SAAT & ERKEN GELEBİLİR ÖNERİ KUTUSU                       */
 /* ===================================================================== */
 html.light .admin-page-theme [class*="from-amber-950"] {
   background: linear-gradient(to right, #FFFBEB, #FEF3C7, #FFFBEB) !important;
@@ -334,4 +399,11 @@ html.light .admin-page-theme [class*="from-amber-950"] [class*="bg-black/"] {
   background-color: #FFFFFF !important;
   border-color: #FDE68A !important;
   color: #1A1A1A !important;
+}
+
+/* Kilitli Saat & Mola Kartları */
+html.light .admin-page-theme [class*="bg-[#171310]"] {
+  background-color: #FFFBEB !important;
+  border-color: #FCD34D !important;
+  color: #92400E !important;
 }

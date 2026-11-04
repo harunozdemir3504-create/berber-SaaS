@@ -47,6 +47,8 @@ export interface UpdateShopDetailsInput {
   district?: string;
   monthlyFee?: number;
   subtitle?: string;
+  iban?: string;
+  depositAmount?: number;
 }
 
 interface NewShopInput {
@@ -168,6 +170,7 @@ interface BarberContextType {
 
   // Shop Schedule Settings (Scoped to Current Shop)
   updateShopSettings: (updated: Partial<ShopSettings>) => void;
+  toggleShopBreak: (enabled?: boolean) => void;
   toggleClosedDay: (dayOfWeek: number) => void;
   getSlotsForDay: (dayId: string, barberId?: string) => TimeSlot[];
 
@@ -1138,6 +1141,14 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               details.subtitle !== undefined
                 ? details.subtitle.trim()
                 : s.subtitle,
+            iban:
+              details.iban !== undefined
+                ? details.iban.trim()
+                : s.iban,
+            depositAmount:
+              details.depositAmount !== undefined
+                ? Math.max(0, Number(details.depositAmount) || 0)
+                : s.depositAmount,
           };
         });
 
@@ -2217,14 +2228,67 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const updateShopSettings = useCallback(
     (updated: Partial<ShopSettings>) => {
       setShops((prevShops) => {
-        const nextShops = prevShops.map((shop) =>
-          shop.slug === currentShop.slug
-            ? {
-                ...shop,
-                shopSettings: { ...shop.shopSettings, ...updated },
-              }
-            : shop
-        );
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+          
+          let nextAppointments = shop.appointments;
+          // Eğer mola kapatılıyorsa, mükerrer veya hayalet mola kayıtlarını temizle
+          if (updated.breakEnabled === false) {
+            nextAppointments = nextAppointments.filter(
+              (a) =>
+                !(
+                  a.isBlockedSlot &&
+                  (a.blockReason?.toLowerCase().includes("mola") ||
+                    a.blockReason?.toLowerCase().includes("öğle") ||
+                    a.blockReason?.toLowerCase().includes("yemek"))
+                )
+            );
+          }
+
+          return {
+            ...shop,
+            shopSettings: { ...shop.shopSettings, ...updated },
+            appointments: nextAppointments,
+          };
+        });
+        syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [currentShop.slug, syncDirectlyToCloud]
+  );
+
+  const toggleShopBreak = useCallback(
+    (enabled?: boolean) => {
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (shop.slug !== currentShop.slug) return shop;
+          const nextState =
+            enabled !== undefined ? enabled : !shop.shopSettings.breakEnabled;
+
+          let nextAppointments = shop.appointments;
+          if (!nextState) {
+            // Mola kapatıldığında hayalet kapalı saatleri appointments'tan tamamen sil (optimistic cleanup)
+            nextAppointments = nextAppointments.filter(
+              (a) =>
+                !(
+                  a.isBlockedSlot &&
+                  (a.blockReason?.toLowerCase().includes("mola") ||
+                    a.blockReason?.toLowerCase().includes("öğle") ||
+                    a.blockReason?.toLowerCase().includes("yemek"))
+                )
+            );
+          }
+
+          return {
+            ...shop,
+            shopSettings: {
+              ...shop.shopSettings,
+              breakEnabled: nextState,
+            },
+            appointments: nextAppointments,
+          };
+        });
         syncDirectlyToCloud(nextShops);
         return nextShops;
       });
@@ -2360,6 +2424,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         addService,
         deleteService,
         updateShopSettings,
+        toggleShopBreak,
         toggleClosedDay,
         getSlotsForDay,
         dismissAdminAlert,

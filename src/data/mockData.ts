@@ -175,6 +175,7 @@ export interface TenantShop {
   adminPin: string;
   depositPolicy: DepositPolicyType;
   depositAmount: number;
+  iban?: string;
   barbers: Barber[];
   services: Service[];
   shopSettings: ShopSettings;
@@ -955,6 +956,7 @@ export const INITIAL_SHOPS: TenantShop[] = [
     adminPin: "1234",
     depositPolicy: "require_deposit",
     depositAmount: 100,
+    iban: "TR33 0006 2000 0001 2345 6789 01",
     barbers: INITIAL_BARBERS,
     services: INITIAL_SERVICES,
     shopSettings: INITIAL_SHOP_SETTINGS,
@@ -980,6 +982,7 @@ export const INITIAL_SHOPS: TenantShop[] = [
     adminPin: "1234",
     depositPolicy: "require_deposit",
     depositAmount: 150,
+    iban: "TR56 0006 2000 0001 9876 5432 01",
     barbers: [
       {
         id: "any",
@@ -1181,6 +1184,7 @@ export const INITIAL_SHOPS: TenantShop[] = [
     adminPin: "1234",
     depositPolicy: "require_deposit",
     depositAmount: 100,
+    iban: "TR12 0006 2000 0001 5555 4444 01",
     barbers: [
       {
         id: "any",

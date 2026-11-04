@@ -19,6 +19,7 @@ import {
   Ban,
   Settings,
   Calendar as CalendarIcon,
+  CalendarDays,
   Trash2,
   Edit3,
   Save,
@@ -43,6 +44,7 @@ import {
   Zap,
   Sun,
   Moon,
+  Download,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import {
@@ -117,6 +119,7 @@ export default function AdminDashboardPage() {
     addService,
     deleteService,
     updateShopSettings,
+    toggleShopBreak,
     toggleClosedDay,
     updateCurrentShopDepositPolicy,
     updateCurrentShopPin,
@@ -125,6 +128,7 @@ export default function AdminDashboardPage() {
     dismissAdminAlert,
     clearAllAdminAlerts,
     removeAppointmentOrBlock,
+    addBlockedTimeRange,
   } = useBarber();
   const { theme, toggleTheme } = useTheme();
 
@@ -147,13 +151,58 @@ export default function AdminDashboardPage() {
   const [otherSubTab, setOtherSubTab] =
     useState<OtherSubTab>("shop_info");
 
-  // SALON BİLGİLERİ DÜZENLEME STATE (Dükkan Adı, Telefon, İlçe, Slogan)
+  // Görünüm Modu: "timeline" (Takvim Çizelgesi) veya "list" (Liste Görünümü)
+  const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
+
+  // Hızlı QR Kod Modalı State'leri
+  const [isQuickQrModalOpen, setIsQuickQrModalOpen] = useState<boolean>(false);
+  const [copiedQuickQrLink, setCopiedQuickQrLink] = useState<boolean>(false);
+
+  // Öğle Molası Buton Kilidi (Anti-Bug / Çift Tıklama Engeli)
+  const [isTogglingBreak, setIsTogglingBreak] = useState<boolean>(false);
+
+  // Sürükle - Bırak (Drag & Drop) ve Onay Modalı State'leri
+  const [draggedApt, setDraggedApt] = useState<Appointment | null>(null);
+  const [dragOverSlotTime, setDragOverSlotTime] = useState<string | null>(null);
+  const [dragConfirmModal, setDragConfirmModal] = useState<{
+    isOpen: boolean;
+    appointment: Appointment | null;
+    targetTime: string;
+  }>({
+    isOpen: false,
+    appointment: null,
+    targetTime: "",
+  });
+
+  // Mobil Dokunmatik Saat Değiştirme Modalı
+  const [mobileRescheduleApt, setMobileRescheduleApt] = useState<Appointment | null>(null);
+
+  // SALON BİLGİLERİ DÜZENLEME STATE (Dükkan Adı, Telefon, İlçe, Slogan, IBAN, Kapora)
   const [shopNameInput, setShopNameInput] = useState<string>("");
   const [shopPhoneInput, setShopPhoneInput] = useState<string>("");
   const [shopDistrictInput, setShopDistrictInput] = useState<string>("");
   const [shopSubtitleInput, setShopSubtitleInput] = useState<string>("");
   const [shopPinInput, setShopPinInput] = useState<string>("");
+  const [shopIbanInput, setShopIbanInput] = useState<string>("");
+  const [shopDepositInput, setShopDepositInput] = useState<number>(100);
   const [isCopiedShopUrl, setIsCopiedShopUrl] = useState<boolean>(false);
+
+  // ⛔ Saat Kapat / Mola Ekle Modalı State
+  const [blockModal, setBlockModal] = useState<{
+    isOpen: boolean;
+    barberId: string;
+    dayId: string;
+    startTime: string;
+    endTime: string;
+    reason: string;
+  }>({
+    isOpen: false,
+    barberId: "",
+    dayId: "",
+    startTime: "12:00",
+    endTime: "13:00",
+    reason: "Yemek Molası",
+  });
 
   useEffect(() => {
     if (currentShop) {
@@ -162,6 +211,8 @@ export default function AdminDashboardPage() {
       setShopDistrictInput(currentShop.district || "");
       setShopSubtitleInput(currentShop.subtitle || "");
       setShopPinInput(currentShop.adminPin || "");
+      setShopIbanInput(currentShop.iban || "TR33 0006 2000 0001 2345 6789 01");
+      setShopDepositInput(currentShop.depositAmount || 100);
     }
   }, [
     currentShop?.slug,
@@ -170,6 +221,8 @@ export default function AdminDashboardPage() {
     currentShop?.district,
     currentShop?.subtitle,
     currentShop?.adminPin,
+    currentShop?.iban,
+    currentShop?.depositAmount,
   ]);
 
   const handleSaveShopInfo = (e: React.FormEvent) => {
@@ -201,7 +254,13 @@ export default function AdminDashboardPage() {
       phone: trimmedPhone,
       district: trimmedDistrict || "İstanbul",
       subtitle: shopSubtitleInput.trim(),
+      iban: shopIbanInput.trim(),
+      depositAmount: Math.max(0, Number(shopDepositInput) || 0),
     });
+
+    if (shopDepositInput) {
+      updateCurrentShopDepositPolicy("require_deposit", Math.max(0, Number(shopDepositInput) || 0));
+    }
 
     if (trimmedPin && trimmedPin !== currentShop.adminPin) {
       updateCurrentShopPin(trimmedPin);
@@ -209,7 +268,7 @@ export default function AdminDashboardPage() {
 
     setToastMessage({
       title: "Salon Bilgileri Güncellendi",
-      subtitle: `${trimmedName} salonunun telefon ve profil bilgileri başarıyla kaydedildi.`,
+      subtitle: `${trimmedName} salonunun profil, IBAN ve kapora bilgileri başarıyla kaydedildi.`,
       type: "success",
     });
   };
@@ -710,6 +769,169 @@ export default function AdminDashboardPage() {
       `${apt.customerPhone} numarası ${deposit} TL kapora şartıyla kara listeye eklendi.`,
       "warning"
     );
+  };
+
+  const handleConfirmBlockTime = () => {
+    const barber =
+      barbers.find((b) => b.id === blockModal.barberId) ||
+      barbers.find((b) => !b.isAnyOption) ||
+      barbers[0];
+    const dayMeta = resolveDayMetadata(blockModal.dayId || todayDay.id);
+
+    addBlockedTimeRange({
+      dayId: dayMeta.id,
+      dateLabel: dayMeta.chipLabel,
+      startTime: blockModal.startTime,
+      endTime: blockModal.endTime,
+      barberId: barber?.id || "any",
+      barberName: barber?.name || "Tüm Salon",
+      chairLabel: barber?.chairName || "Tüm Koltuklar",
+      reason: blockModal.reason.trim() || "Mola",
+    });
+
+    setBlockModal((prev) => ({ ...prev, isOpen: false }));
+    triggerToast(
+      "Saat Başarıyla Kapatıldı ⛔",
+      `${barber?.name} için ${blockModal.startTime} - ${blockModal.endTime} kapatıldı. Müşterilere dolu gözükür, ciroya eklenmez.`,
+      "success"
+    );
+  };
+
+  // 30 Dk Aralıklarla Sabit Zaman Çizelgesi Dilimleri (08:30 - 21:30)
+  const timelineSlots = useMemo(() => {
+    const slots: string[] = [];
+    const openM = 8 * 60 + 30; // 08:30
+    const closeM = 21 * 60 + 30; // 21:30
+    for (let m = openM; m <= closeM; m += 30) {
+      slots.push(minutesToTime(m));
+    }
+    return slots;
+  }, []);
+
+  const currentTimelineDayId = useMemo(() => {
+    if (adminDayMode === "today") return todayDay.id;
+    if (adminDayMode === "tomorrow") return tomorrowDay.id;
+    if (adminDayMode === "calendar") return selectedCalendarDayId;
+    return todayDay.id;
+  }, [adminDayMode, todayDay.id, tomorrowDay.id, selectedCalendarDayId]);
+
+  const timelineAppointments = useMemo(() => {
+    return appointments.filter((apt) => {
+      if (apt.status === "cancelled" || apt.status === "no_show") return false;
+      const aptDayId = resolveDayMetadata(apt.dayId).id;
+      if (aptDayId !== currentTimelineDayId) return false;
+      if (
+        adminStaffFilter !== "all" &&
+        !apt.isBlockedSlot &&
+        apt.barberId !== adminStaffFilter
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [appointments, currentTimelineDayId, adminStaffFilter]);
+
+  // Uzun randevuların (60 dk vb.) kapladığı slotları ve saat eşleştirmelerini hesapla
+  const { slotAppointmentsMap, occupiedSlotsSet } = useMemo(() => {
+    const slotMap = new Map<string, Appointment>();
+    const occupied = new Set<string>();
+
+    timelineAppointments.forEach((apt) => {
+      slotMap.set(apt.time, apt);
+      const duration = apt.totalDuration || 30;
+      if (duration > 30) {
+        const startM = timeToMinutes(apt.time);
+        const steps = Math.ceil(duration / 30);
+        for (let i = 1; i < steps; i++) {
+          occupied.add(minutesToTime(startM + i * 30));
+        }
+      }
+    });
+
+    return { slotAppointmentsMap: slotMap, occupiedSlotsSet: occupied };
+  }, [timelineAppointments]);
+
+  // Sürükle-Bırak (Drop) Olayı ve Çakışma Kontrolü
+  const handleDropOnSlot = (targetTime: string) => {
+    setDragOverSlotTime(null);
+    if (!draggedApt) return;
+    if (draggedApt.time === targetTime) {
+      setDraggedApt(null);
+      return;
+    }
+
+    const duration = draggedApt.totalDuration || 30;
+    const startM = timeToMinutes(targetTime);
+    const endM = startM + duration;
+
+    // Hedef saat diliminde çakışma var mı?
+    const hasCollision = timelineAppointments.some((a) => {
+      if (a.id === draggedApt.id) return false;
+      if (
+        draggedApt.barberId !== "any" &&
+        a.barberId !== "any" &&
+        a.barberId !== draggedApt.barberId
+      ) {
+        return false;
+      }
+      const aStartM = timeToMinutes(a.time);
+      const aEndM = timeToMinutes(
+        a.endTime || minutesToTime(aStartM + (a.totalDuration || 30))
+      );
+      return startM < aEndM && endM > aStartM;
+    });
+
+    if (hasCollision) {
+      triggerToast(
+        "Çakışma Uyarısı! ⚠️",
+        `${targetTime} saat dilimi ve randevu süresi (${duration} dk) boyunca başka bir randevu veya mola bulunduğu için bu saate taşınamaz.`,
+        "warning"
+      );
+      setDraggedApt(null);
+      return;
+    }
+
+    setDragConfirmModal({
+      isOpen: true,
+      appointment: draggedApt,
+      targetTime,
+    });
+    setDraggedApt(null);
+  };
+
+  const handleConfirmDragReschedule = () => {
+    if (!dragConfirmModal.appointment || !dragConfirmModal.targetTime) return;
+    const apt = dragConfirmModal.appointment;
+    const newTime = dragConfirmModal.targetTime;
+    const dayMeta = resolveDayMetadata(currentTimelineDayId);
+
+    shiftAppointmentToEarlySlot(apt.id, newTime, dayMeta.id, dayMeta.chipLabel);
+    setDragConfirmModal({ isOpen: false, appointment: null, targetTime: "" });
+
+    triggerToast(
+      "Randevu Saati Güncellendi! ⏰",
+      `${apt.customerName} adlı müşterinin randevusu saat ${newTime} olarak taşındı. Eski saat (${apt.time}) anında boşa çıkarıldı.`,
+      "success"
+    );
+  };
+
+  // Öğle Molası Korumalı Aç-Kapa (Çift Tıklama / Bug Engelli)
+  const handleToggleBreakSecure = async () => {
+    if (isTogglingBreak) return;
+    setIsTogglingBreak(true);
+    try {
+      const nextState = !shopSettings.breakEnabled;
+      toggleShopBreak(nextState);
+      triggerToast(
+        nextState ? "Öğle Molası Açıldı" : "Öğle Molası Kapatıldı",
+        nextState
+          ? `Saat ${shopSettings.breakStart} - ${shopSettings.breakEnd} arası randevulara kapatıldı.`
+          : "Öğle molası kaldırıldı. İlgili saatler takvimde anında tekrar randevuya açıldı.",
+        "success"
+      );
+    } finally {
+      setTimeout(() => setIsTogglingBreak(false), 500);
+    }
   };
 
   const handleOpenRemoveBlacklistModal = (
@@ -1230,13 +1452,25 @@ export default function AdminDashboardPage() {
 
         {/* SADE ÜST BAŞLIK */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#141416] px-4 py-3 shadow-md">
-          <div>
-            <h1 className="text-base font-black text-[#fdf8f5] sm:text-lg">
-              {currentShop.name}
-            </h1>
-            <p className="text-xs font-semibold text-[#dfc39e]">
-              Berber Yönetim Ekranı
-            </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <h1 className="text-base font-black text-[#fdf8f5] sm:text-lg">
+                {currentShop.name}
+              </h1>
+              <p className="text-xs font-semibold text-[#dfc39e]">
+                Berber Yönetim Ekranı
+              </p>
+            </div>
+            {/* 📱 Sol Üst Köşede Her An Erişilebilir Hızlı QR Kod Butonu */}
+            <button
+              type="button"
+              onClick={() => setIsQuickQrModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/50 bg-purple-500/20 px-3 py-1.5 text-xs font-black text-purple-200 hover:bg-purple-500/30 transition active:scale-95 shadow-md shadow-purple-500/10 cursor-pointer"
+              title="Dükkanınızın müşteri randevu karekodunu ekranda anında büyütür"
+            >
+              <QrCode className="h-3.5 w-3.5 text-purple-300" />
+              <span>📱 Hızlı QR Kod</span>
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1616,9 +1850,306 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* Randevu Kartları Listesi */}
-            {displayedAppointments.length === 0 ? (
-              <div className="rounded-3xl border border-white/10 bg-[#141416] p-8 text-center">
+            {/* GÖRÜNÜM SEÇİCİ (TIMELINE vs LİSTE) & HIZLI SAAT KAPAT */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 pb-1">
+              <div className="flex items-center rounded-2xl border border-white/10 bg-[#101012] p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("timeline")}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                    viewMode === "timeline"
+                      ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>📅 Takvim Çizelgesi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                    viewMode === "list"
+                      ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>📋 Liste Görünümü</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const defaultBarber = realBarbers[0]?.id || "";
+                    setBlockModal({
+                      isOpen: true,
+                      barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
+                      dayId: currentTimelineDayId,
+                      startTime: "13:00",
+                      endTime: "14:00",
+                      reason: "Yemek Molası",
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-500/25 transition active:scale-95 cursor-pointer shadow-sm"
+                >
+                  <Lock className="h-3.5 w-3.5 text-amber-300" />
+                  <span>⛔ Saat Kapat / Mola</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ===================================================================== */}
+            {/* GÖRÜNÜM A: 📅 SAATLİK TAKVİM ÇİZELGESİ (TIMELINE GRID - 30 DK ARALIK) */}
+            {/* ===================================================================== */}
+            {viewMode === "timeline" && (
+              <div className="space-y-3 rounded-3xl border border-white/10 bg-[#141416] p-3 sm:p-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-white/10 pb-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-[#dfc39e]">
+                      ⏰ 30 Dakikalık Zaman Çizelgesi
+                    </span>
+                    <span className="rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-[10px] text-stone-300">
+                      {activeTargetDayMeta ? activeTargetDayMeta.chipLabel : "Bugün"}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-amber-300/90 font-bold">
+                    🖐️ Kartı tutup boş bir saate sürükleyip bırakabilirsiniz
+                  </span>
+                </div>
+
+                <div className="divide-y divide-white/5">
+                  {timelineSlots.map((slotTime) => {
+                    // Bu slot daha önceki 60 dk'lık bir randevu tarafından kaplandıysa atla (birleşik blok)
+                    if (occupiedSlotsSet.has(slotTime)) {
+                      return null;
+                    }
+
+                    const apt = slotAppointmentsMap.get(slotTime);
+                    const isDragTarget = dragOverSlotTime === slotTime;
+
+                    // Eğer o saatte başlayan bir randevu varsa:
+                    if (apt) {
+                      const duration = apt.totalDuration || 30;
+                      // 30 dk -> min-h-[76px], 60 dk -> min-h-[156px], 90 dk -> min-h-[236px]
+                      const minHeightClass =
+                        duration >= 75
+                          ? "min-h-[230px]"
+                          : duration >= 45
+                          ? "min-h-[152px]"
+                          : "min-h-[76px]";
+
+                      if (apt.isBlockedSlot) {
+                        return (
+                          <div
+                            key={`timeline-${slotTime}`}
+                            className="flex items-stretch gap-2.5 py-1.5"
+                          >
+                            <div className="w-14 sm:w-16 shrink-0 pt-2 text-right font-mono text-xs font-black text-amber-400">
+                              {slotTime}
+                            </div>
+                            <div
+                              className={`flex-1 rounded-2xl border border-dashed border-amber-500/50 bg-[#171310] p-3.5 flex flex-wrap items-center justify-between gap-3 ${minHeightClass}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                                  <Lock className="h-4 w-4" />
+                                </div>
+                                <div>
+                                  <span className="text-xs font-black text-[#fdf8f5] block">
+                                    ⛔ Saat Kapatıldı: {apt.blockReason}
+                                  </span>
+                                  <span className="text-[11px] text-stone-400">
+                                    {apt.barberName} ({apt.time} - {apt.endTime})
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  removeAppointmentOrBlock(apt.id);
+                                  triggerToast(
+                                    "Saat Kilidi Açıldı",
+                                    `${apt.time} saati tekrar randevuya açıldı.`,
+                                    "success"
+                                  );
+                                }}
+                                className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-3 py-1.5 text-xs font-black text-emerald-300 hover:bg-emerald-500/30 transition cursor-pointer"
+                              >
+                                <Unlock className="h-3.5 w-3.5" />
+                                <span>Kilidi Aç</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isCompleted = apt.status === "completed";
+                      const isPending = apt.status === "pending";
+
+                      return (
+                        <div
+                          key={`timeline-${slotTime}`}
+                          className="flex items-stretch gap-2.5 py-1.5"
+                        >
+                          <div className="w-14 sm:w-16 shrink-0 pt-2 text-right font-mono text-xs font-black text-stone-300">
+                            {slotTime}
+                          </div>
+                          <div
+                            draggable={true}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", apt.id);
+                              setDraggedApt(apt);
+                            }}
+                            onDragEnd={() => setDraggedApt(null)}
+                            className={`flex-1 rounded-2xl border p-3.5 flex flex-col justify-between transition-all cursor-grab active:cursor-grabbing hover:border-amber-400/60 shadow-md ${minHeightClass} ${
+                              isCompleted
+                                ? "border-emerald-500/40 bg-[#101712]"
+                                : isPending
+                                ? "border-amber-500/50 bg-[#191512]"
+                                : "border-white/15 bg-[#121114]"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/5 pb-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-black text-[#fdf8f5]">
+                                    {apt.customerName}
+                                  </span>
+                                  {duration > 30 && (
+                                    <span className="rounded-md bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.2 text-[10px] font-black text-amber-300">
+                                      {duration} dk (1 Saat Blok)
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
+                                      isCompleted
+                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                        : isPending
+                                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                        : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                                    }`}
+                                  >
+                                    {isCompleted
+                                      ? "✅ Geldi"
+                                      : isPending
+                                      ? "⏳ Onay Bekliyor"
+                                      : "Onaylandı"}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-stone-300 truncate">
+                                  ✂️ {apt.services.map((s) => s.name).join(" + ")} • 👤 {apt.barberName}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-black text-[#dfc39e]">
+                                  {apt.totalPrice} TL
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setMobileRescheduleApt(apt)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-200 hover:bg-amber-500/25 transition cursor-pointer"
+                                  title="Saati Değiştir"
+                                >
+                                  <CalendarDays className="h-3 w-3" />
+                                  <span>⇄ Saati Taşı</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                              <span className="font-mono text-[11px] text-stone-400">
+                                📞 {apt.customerPhone} | 🔑 {apt.verificationCode || apt.appointmentCode}
+                              </span>
+
+                              <div className="flex items-center gap-1.5">
+                                {!isCompleted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleComplete(apt)}
+                                    className="rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-black text-[#06150f] hover:bg-emerald-400"
+                                  >
+                                    Geldi ✅
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenNoShowModal(apt)}
+                                  className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2 py-1 text-[11px] font-black text-rose-300 hover:bg-rose-500/25"
+                                  title="Gelmediyse kara listeye alır"
+                                >
+                                  ⚠️ Kara Listeye Al
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Boş Slot (Müsait Slot)
+                    return (
+                      <div
+                        key={`timeline-${slotTime}`}
+                        className="flex items-stretch gap-2.5 py-1"
+                      >
+                        <div className="w-14 sm:w-16 shrink-0 pt-2.5 text-right font-mono text-xs font-bold text-stone-500">
+                          {slotTime}
+                        </div>
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            setDragOverSlotTime(slotTime);
+                          }}
+                          onDragLeave={() => setDragOverSlotTime(null)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            handleDropOnSlot(slotTime);
+                          }}
+                          onClick={() => {
+                            const defaultBarber = realBarbers[0]?.id || "";
+                            setBlockModal({
+                              isOpen: true,
+                              barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
+                              dayId: currentTimelineDayId,
+                              startTime: slotTime,
+                              endTime: minutesToTime(timeToMinutes(slotTime) + 30),
+                              reason: "Yemek Molası",
+                            });
+                          }}
+                          className={`flex-1 min-h-[58px] rounded-xl border border-dashed p-2.5 flex items-center justify-between transition-all cursor-pointer ${
+                            isDragTarget
+                              ? "border-emerald-400 bg-emerald-500/25 scale-[1.01] shadow-lg shadow-emerald-500/20 text-emerald-200"
+                              : "border-white/10 bg-white/[0.02] hover:border-amber-400/40 hover:bg-white/[0.04] text-stone-500 hover:text-stone-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold">
+                              {isDragTarget ? "📍 Buraya Bırakın!" : `⏰ ${slotTime} • Müsait (Boş Slot)`}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-stone-500">
+                            + Mola / Saat Kapat
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================================== */}
+            {/* GÖRÜNÜM B: 📋 LİSTE GÖRÜNÜMÜ                                          */}
+            {/* ===================================================================== */}
+            {viewMode === "list" && (
+              <div className="space-y-3">
+                {displayedAppointments.length === 0 ? (
+                  <div className="rounded-3xl border border-white/10 bg-[#141416] p-8 text-center">
                 <CalendarIcon className="mx-auto h-10 w-10 text-[#dfc39e]" />
                 <h3 className="mt-3 text-lg font-extrabold text-[#fdf8f5]">
                   {appointmentFilter === "active"
@@ -2066,16 +2597,17 @@ export default function AdminDashboardPage() {
                                 type="button"
                                 disabled={isNoShow}
                                 onClick={() => {
-                                  handleNoShow(apt);
+                                  handleOpenNoShowModal(apt);
                                   setExpandedAptId(null);
                                 }}
-                                className={`flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
+                                className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-1 rounded-xl border py-2 text-xs font-black transition ${
                                   isNoShow
                                     ? "cursor-default border-rose-500/20 bg-rose-500/10 text-rose-300 opacity-50"
-                                    : "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                                    : "border-rose-500/50 bg-rose-500/20 text-rose-200 hover:bg-rose-500/35 shadow-sm"
                                 }`}
+                                title="Müşteri gelmediğinde kara listeye alır ve bir sonraki randevusunda kapora şartı koyar"
                               >
-                                <span>Gelmedi</span>
+                                <span>⚠️ Kara Listeye Al (Gelmedi)</span>
                               </button>
 
                               <a
@@ -2104,6 +2636,8 @@ export default function AdminDashboardPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
               </div>
             )}
           </div>
@@ -2465,6 +2999,42 @@ export default function AdminDashboardPage() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-xs font-bold text-[#f3e8dc]">
+                          🏦 Berber IBAN Hesabı (Kapora İçin)
+                        </label>
+                        <input
+                          type="text"
+                          value={shopIbanInput}
+                          onChange={(e) => setShopIbanInput(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          placeholder="TR00 0000 0000 0000 0000 0000 00"
+                        />
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Kara listedeki müşterilerin randevularını kesinleştirmek için göndereceği banka IBAN bilgisi.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                          💰 Kara Liste Kapora Tutarı (TL)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="25"
+                          value={shopDepositInput}
+                          onChange={(e) => setShopDepositInput(Math.max(0, Number(e.target.value) || 0))}
+                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          placeholder="100"
+                        />
+                        <span className="mt-1 block text-[11px] text-stone-400">
+                          Daha önce randevusuna gelmeyen müşterilerden talep edilecek güvence kapora bedeli.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-bold text-[#f3e8dc]">
                           Dükkan Yönetim PIN Şifresi
                         </label>
                         <div className="relative mt-1.5">
@@ -2674,6 +3244,14 @@ export default function AdminDashboardPage() {
 
                 {/* Hızlı Araçlar: QR Afiş, Müşteri Vitrini, Çıkış, Tema */}
                 <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#141416] p-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickQrModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/50 bg-purple-500/25 px-3.5 py-2.5 text-xs font-black text-purple-200 hover:bg-purple-500/35 transition active:scale-95 shadow-sm"
+                  >
+                    <QrCode className="h-4 w-4 text-purple-300" />
+                    <span>📱 Hızlı QR Kod Göster</span>
+                  </button>
                   <button
                     type="button"
                     onClick={toggleTheme}
@@ -3172,18 +3750,21 @@ export default function AdminDashboardPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() =>
-                        updateShopSettings({
-                          breakEnabled: !shopSettings.breakEnabled,
-                        })
-                      }
-                      className={`rounded-xl px-3 py-1.5 text-xs font-black ${
-                        shopSettings.breakEnabled
-                          ? "bg-emerald-500 text-[#06150f]"
-                          : "bg-white/10 text-stone-400"
+                      disabled={isTogglingBreak}
+                      onClick={handleToggleBreakSecure}
+                      className={`rounded-xl px-3.5 py-1.5 text-xs font-black transition active:scale-95 ${
+                        isTogglingBreak
+                          ? "cursor-wait opacity-60 bg-white/10 text-stone-400"
+                          : shopSettings.breakEnabled
+                          ? "bg-emerald-500 text-[#06150f] shadow-md shadow-emerald-500/20"
+                          : "bg-white/10 text-stone-400 hover:text-white"
                       }`}
                     >
-                      {shopSettings.breakEnabled ? "Açık ✓" : "Kapalı"}
+                      {isTogglingBreak
+                        ? "İşleniyor..."
+                        : shopSettings.breakEnabled
+                        ? "Açık ✓"
+                        : "Kapalı"}
                     </button>
                   </div>
                 </div>
@@ -3413,6 +3994,454 @@ export default function AdminDashboardPage() {
                     className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-[#131316]"
                   >
                     Evet, Çıkar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL 3: ⛔ SAAT KAPAT / MOLA EKLE MODALI */}
+        <AnimatePresence>
+          {blockModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div
+                onClick={() => setBlockModal((prev) => ({ ...prev, isOpen: false }))}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="relative w-full max-w-md rounded-2xl border border-amber-500/50 bg-[#1c1613] p-5 sm:p-6 shadow-2xl space-y-4"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-[#fdf8f5]">
+                        ⛔ Saat Kapat / Mola Ekle
+                      </h3>
+                      <p className="text-[11px] text-stone-400">
+                        Bu saat müşteri ekranında dolu görünür, ciroya para olarak eklenmez.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBlockModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="rounded-lg p-1.5 text-stone-400 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Usta / Koltuk Seçimi */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#f3e8dc]">
+                      Usta / Koltuk
+                    </label>
+                    <select
+                      value={blockModal.barberId}
+                      onChange={(e) =>
+                        setBlockModal((prev) => ({ ...prev, barberId: e.target.value }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-[#131316] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5]"
+                    >
+                      {realBarbers.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.chairName || b.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tarih Seçimi */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#f3e8dc]">
+                      Tarih
+                    </label>
+                    <select
+                      value={blockModal.dayId}
+                      onChange={(e) =>
+                        setBlockModal((prev) => ({ ...prev, dayId: e.target.value }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-[#131316] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5]"
+                    >
+                      {liveDays.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullDate || d.chipLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Saat Aralığı */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-[#f3e8dc]">
+                        Başlangıç Saati
+                      </label>
+                      <input
+                        type="time"
+                        value={blockModal.startTime}
+                        onChange={(e) =>
+                          setBlockModal((prev) => ({ ...prev, startTime: e.target.value }))
+                        }
+                        className="mt-1 w-full rounded-xl border border-white/15 bg-[#131316] px-3.5 py-2 text-xs font-black text-[#fdf8f5]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-[#f3e8dc]">
+                        Bitiş Saati
+                      </label>
+                      <input
+                        type="time"
+                        value={blockModal.endTime}
+                        onChange={(e) =>
+                          setBlockModal((prev) => ({ ...prev, endTime: e.target.value }))
+                        }
+                        className="mt-1 w-full rounded-xl border border-white/15 bg-[#131316] px-3.5 py-2 text-xs font-black text-[#fdf8f5]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Kapatma Nedeni */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#f3e8dc]">
+                      Kapatma Nedeni / Mola Türü
+                    </label>
+                    <input
+                      type="text"
+                      value={blockModal.reason}
+                      onChange={(e) =>
+                        setBlockModal((prev) => ({ ...prev, reason: e.target.value }))
+                      }
+                      placeholder="Örn: Yemek Molası"
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-[#131316] px-3.5 py-2 text-xs font-bold text-[#fdf8f5]"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {["🍽️ Yemek Molası", "☕ Dinlenme", "💼 Özel İş", "🧹 Temizlik / Bakım"].map(
+                        (tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() =>
+                              setBlockModal((prev) => ({ ...prev, reason: tag }))
+                            }
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold transition ${
+                              blockModal.reason === tag
+                                ? "border-amber-400 bg-amber-400/20 text-amber-200"
+                                : "border-white/10 bg-white/5 text-stone-400 hover:text-white"
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setBlockModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold text-stone-300 hover:bg-white/5"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmBlockTime}
+                    className="rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-2.5 text-xs font-black text-[#1a110b] shadow-md shadow-amber-500/20 hover:brightness-110 active:scale-95"
+                  >
+                    ⛔ Saati Kapat / Molayı Başlat
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* ===================================================================== */}
+          {/* SÜRÜKLE - BIRAK SAAT DEĞİŞİKLİĞİ ONAY MODALI                         */}
+          {/* ===================================================================== */}
+          {dragConfirmModal.isOpen && dragConfirmModal.appointment && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md rounded-2xl border border-white/20 bg-[#161619] p-5 shadow-2xl text-[#fdf8f5]"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <Clock className="h-6 w-6 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-[#fdf8f5]">
+                      🔄 Saat Değişikliği Onayı
+                    </h3>
+                    <p className="text-xs text-stone-400 font-medium">
+                      Randevu saatini taşımak üzeresiniz
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-[#0d0d0f] p-4 space-y-2.5 mb-5">
+                  <div className="flex items-center justify-between text-xs font-bold text-stone-300">
+                    <span>Müşteri:</span>
+                    <span className="text-sm font-black text-[#fdf8f5]">
+                      {dragConfirmModal.appointment.customerName}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-bold text-stone-300">
+                    <span>İşlem:</span>
+                    <span className="text-xs font-extrabold text-[#dfc39e]">
+                      {dragConfirmModal.appointment.services?.map((s) => s.name).join(", ") || "Hizmet"} ({dragConfirmModal.appointment.totalDuration || 30} dk)
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-center gap-3 rounded-xl bg-white/5 p-3 text-center border border-white/10">
+                    <div className="text-center">
+                      <span className="block text-[10px] font-bold text-stone-400 uppercase">Eski Saat</span>
+                      <span className="text-sm font-black text-rose-300 line-through">
+                        {dragConfirmModal.appointment.time}
+                      </span>
+                    </div>
+                    <span className="text-emerald-400 text-lg font-black">➔</span>
+                    <div className="text-center">
+                      <span className="block text-[10px] font-bold text-stone-400 uppercase">Yeni Saat</span>
+                      <span className="text-base font-black text-emerald-400">
+                        {dragConfirmModal.targetTime}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-stone-400 text-center mb-5">
+                  &quot;{dragConfirmModal.appointment.customerName}&quot; adlı müşterinin randevusu{" "}
+                  <strong className="text-white font-bold">{dragConfirmModal.appointment.time}</strong> saatinden{" "}
+                  ➔ <strong className="text-emerald-300 font-bold">{dragConfirmModal.targetTime}</strong> saatine taşınacaktır. Emin misiniz?
+                </p>
+
+                <div className="flex justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDragConfirmModal({ isOpen: false, appointment: null, targetTime: "" })
+                    }
+                    className="flex-1 rounded-xl border border-white/15 px-4 py-3 text-xs font-bold text-stone-300 hover:bg-white/5 transition"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDragReschedule}
+                    className="flex-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-4 py-3 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition hover:brightness-110 active:scale-95"
+                  >
+                    Evet, Taşı
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* ===================================================================== */}
+          {/* HIZLI QR KOD (KAREKOD) MODALI                                         */}
+          {/* ===================================================================== */}
+          {isQuickQrModalOpen && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 10 }}
+                className="relative w-full max-w-sm rounded-3xl border-2 border-emerald-400/30 bg-[#141416] p-6 shadow-2xl text-center text-[#fdf8f5]"
+              >
+                {/* Kapat Butonu */}
+                <button
+                  type="button"
+                  onClick={() => setIsQuickQrModalOpen(false)}
+                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <QrCode className="h-6 w-6 stroke-[2.5]" />
+                </div>
+
+                <h3 className="text-lg font-black tracking-tight text-[#fdf8f5]">
+                  📱 Hızlı Müşteri QR Kodu
+                </h3>
+                <p className="mt-1 text-xs text-stone-400">
+                  Müşteriniz kamerasını okutarak anında randevu oluşturabilir
+                </p>
+
+                {/* Büyük Net Karekod */}
+                <div className="my-5 flex justify-center">
+                  <div className="rounded-2xl border-4 border-white bg-white p-3 shadow-xl">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=10&ecc=H&color=000000&bgcolor=ffffff&data=${encodeURIComponent(
+                        getShopBookingUrl(currentShop.slug)
+                      )}`}
+                      alt="Berber Randevu QR Kodu"
+                      className="h-56 w-56 object-contain"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-4 rounded-xl border border-white/10 bg-[#0d0d0f] p-3 text-left">
+                  <div className="text-[11px] font-bold text-stone-400">Salon Adı:</div>
+                  <div className="text-sm font-black text-emerald-400 truncate">
+                    {currentShop.name}
+                  </div>
+                  <div className="mt-1 text-[11px] font-bold text-stone-400">Randevu Linki:</div>
+                  <div className="text-xs font-mono text-stone-300 truncate">
+                    {getShopBookingUrl(currentShop.slug)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {/* Karekodu İndir Butonu */}
+                  <a
+                    href={`https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&margin=20&ecc=H&format=png&data=${encodeURIComponent(
+                      getShopBookingUrl(currentShop.slug)
+                    )}`}
+                    download={`${currentShop.slug}-randevu-qr.png`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 py-3 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition hover:brightness-110 active:scale-98"
+                  >
+                    <Download className="h-4 w-4 stroke-[2.5]" />
+                    <span>⬇️ Karekodu İndir (PNG)</span>
+                  </a>
+
+                  {/* Linki Kopyala Butonu */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        navigator.clipboard.writeText(getShopBookingUrl(currentShop.slug));
+                      }
+                      setCopiedQuickQrLink(true);
+                      triggerToast("Link Kopyalandı!", "Müşteri randevu bağlantısı panoya alındı.", "success");
+                      setTimeout(() => setCopiedQuickQrLink(false), 2000);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 py-2.5 text-xs font-bold text-stone-200 hover:bg-white/10 transition"
+                  >
+                    {copiedQuickQrLink ? (
+                      <>
+                        <Check className="h-4 w-4 text-emerald-400" />
+                        <span className="text-emerald-300 font-black">Kopyalandı!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" />
+                        <span>📋 Linki Kopyala</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Şık Afiş Aç */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsQuickQrModalOpen(false);
+                      setIsQrModalOpen(true);
+                    }}
+                    className="w-full text-center text-xs font-bold text-[#dfc39e] hover:underline pt-1"
+                  >
+                    🖨️ Masaüstü / Kapı Afiş Şablonunu Aç
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* ===================================================================== */}
+          {/* MOBİL VE DOKUNMATİK SAAT DEĞİŞTİRME SEÇİCİ MODALI                     */}
+          {/* ===================================================================== */}
+          {mobileRescheduleApt && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md rounded-2xl border border-white/20 bg-[#161619] p-5 shadow-2xl text-[#fdf8f5]"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[#fdf8f5]">
+                        Yeni Saat Seçin
+                      </h3>
+                      <p className="text-[11px] text-stone-400">
+                        {mobileRescheduleApt.customerName} ({mobileRescheduleApt.time})
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileRescheduleApt(null)}
+                    className="rounded-lg p-1.5 text-stone-400 hover:bg-white/10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="py-4">
+                  <p className="text-xs font-bold text-stone-300 mb-3">
+                    Taşımak istediğiniz boş saat dilimine dokunun:
+                  </p>
+
+                  <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+                    {timelineSlots.map((slotTime) => {
+                      const isCurrent = slotTime === mobileRescheduleApt.time;
+                      const isOccupied = occupiedSlotsSet.has(slotTime) && !isCurrent;
+                      return (
+                        <button
+                          key={slotTime}
+                          type="button"
+                          disabled={isOccupied || isCurrent}
+                          onClick={() => {
+                            const targetTime = slotTime;
+                            const aptToMove = mobileRescheduleApt;
+                            setMobileRescheduleApt(null);
+                            setDragConfirmModal({
+                              isOpen: true,
+                              appointment: aptToMove,
+                              targetTime,
+                            });
+                          }}
+                          className={`rounded-xl py-2.5 text-center text-xs font-black transition ${
+                            isCurrent
+                              ? "border border-amber-500/50 bg-amber-500/10 text-amber-300 cursor-default"
+                              : isOccupied
+                              ? "border border-white/5 bg-white/5 text-stone-600 cursor-not-allowed opacity-40"
+                              : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-500/20 active:scale-95"
+                          }`}
+                        >
+                          {slotTime}
+                          {isCurrent && <span className="block text-[9px] font-normal">Şu Anki</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setMobileRescheduleApt(null)}
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-stone-300 hover:bg-white/5"
+                  >
+                    Vazgeç
                   </button>
                 </div>
               </motion.div>
