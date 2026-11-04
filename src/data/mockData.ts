@@ -112,6 +112,8 @@ export interface Appointment {
   isBlockedSlot?: boolean;
   blockReason?: string;
   canComeEarly?: boolean; // Erken saat boşalırsa gelebilir (Yedek Liste)
+  requiresDeposit?: boolean; // Kara liste / kapora onayı zorunlu müşteri
+  isBlacklisted?: boolean; // No-Show kara listesindeki müşteri
 }
 
 export interface WaitlistEntry {

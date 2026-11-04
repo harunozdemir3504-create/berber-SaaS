@@ -361,12 +361,14 @@ export default function CustomerBookingPage() {
       totalDuration,
       trustBadge: isBlacklisted ? "deposit_paid" : withDeposit ? "deposit_paid" : "first_time",
       trustDetail: isBlacklisted
-        ? `${requiredDepositAmount} TL Kapora Zorunlu (Eski No-Show)`
+        ? `${requiredDepositAmount} TL Kapora Zorunlu (Kara Liste - Gelmedi)`
         : withDeposit
         ? `${requiredDepositAmount} TL Kapora Alındı`
         : "WhatsApp Onay Kodu Doğrulaması",
       depositAmount: depositAmountValue,
-      status: "confirmed", // Doğrudan onaylandı olarak kaydedilir
+      status: isBlacklisted ? "pending" : "confirmed", // Kara listedeki müşteri kesinlikle otomatik onaylanmaz; berber onayı bekler
+      requiresDeposit: isBlacklisted,
+      isBlacklisted: isBlacklisted,
       verificationCode,
       reminderSent: false,
       bookingSource: "online",
@@ -1267,96 +1269,121 @@ export default function CustomerBookingPage() {
                     </div>
                   ) : (
                     <>
-                      {confirmedAppointment?.status === "confirmed" ? (
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
-                          <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
-                        </div>
-                      ) : (
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
-                          <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
-                        </div>
-                      )}
-
-                      {confirmedAppointment?.status === "confirmed" ? (
-                        <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
-                          ✅ ONAYLANDI • RANDEVUNUZ KESİNLEŞTİ
-                        </span>
-                      ) : (
-                        <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
-                          ⏳ ONAY BEKLİYOR • WHATSAPP İLE GÖNDERİN
-                        </span>
-                      )}
-
-                      <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
-                        {confirmedAppointment?.status === "confirmed"
-                          ? `Harika, Randevunuz Kesinleşti ${customerName}!`
-                          : `Randevunuz Alındı, ${customerName}!`}
-                      </h3>
-
-                      {/* 1. DİKKAT ÇEKİCİ SARI/TURUNCU UYARI KUTUSU */}
-                      <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-amber-400 bg-amber-500/20 p-3.5 sm:p-4 text-center shadow-lg shadow-amber-500/15">
-                        <p className="text-xs sm:text-sm font-black leading-relaxed text-amber-200">
-                          ⚠️ SON ADIM: Randevunuzun geçerli olması için aşağıdaki yeşil butona basarak randevu fişinizi WhatsApp&apos;tan berberinize göndermeniz ZORUNLUDUR.
-                        </p>
-                      </div>
-
-                      {/* 2. KARA LİSTEDEKİ MÜŞTERİYE ÖZEL KAPORA VE IBAN UYARISI */}
                       {(() => {
                         const checkPhone =
                           confirmedAppointment?.customerPhone || customerPhone || "";
-                        const isBlacklistMatch = Boolean(isPhoneBlacklisted(checkPhone));
-                        if (!isBlacklistMatch) return null;
+                        const isBlacklistMatch =
+                          Boolean(isPhoneBlacklisted(checkPhone)) ||
+                          Boolean(confirmedAppointment?.isBlacklisted) ||
+                          Boolean(confirmedAppointment?.requiresDeposit);
 
                         const shopIban =
                           currentShop.iban || "TR33 0006 2000 0001 2345 6789 01";
 
-                        return (
-                          <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-rose-500 bg-rose-950/40 p-4 text-left shadow-lg shadow-rose-500/20 space-y-3">
-                            <div className="flex items-start gap-3">
-                              <ShieldAlert className="h-6 w-6 shrink-0 text-rose-400" />
-                              <div>
-                                <h4 className="text-sm font-black text-rose-200">
-                                  ⚠️ Kapora Gönderimi Zorunludur
-                                </h4>
-                                <p className="mt-1 text-xs font-bold leading-relaxed text-rose-100">
-                                  Önceki randevunuza gelmediğiniz için randevunuzun geçerli olması adına berberin IBAN hesabına kapora gönderip dekontu WhatsApp&apos;tan iletmeniz zorunludur.
-                                </p>
+                        if (isBlacklistMatch) {
+                          return (
+                            <>
+                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-lg shadow-rose-500/25">
+                                <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
                               </div>
-                            </div>
 
-                            <div className="rounded-xl border border-rose-400/30 bg-black/40 p-3 space-y-2.5">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="font-bold text-stone-300">
-                                  Zorunlu Kapora Tutarı:
-                                </span>
-                                <span className="font-black text-amber-300 text-sm">
-                                  {requiredDepositAmount} TL
-                                </span>
-                              </div>
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-white/10 pt-2">
-                                <div className="min-w-0">
-                                  <span className="block text-[11px] font-bold text-stone-400">
-                                    Berber IBAN Hesabı:
-                                  </span>
-                                  <span className="font-mono text-xs sm:text-sm font-black text-[#fdf8f5] break-all">
-                                    {shopIban}
-                                  </span>
+                              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-rose-500/80 bg-rose-500/25 px-4 py-1.5 text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300 shadow-md shadow-rose-500/20 animate-pulse">
+                                ⏳ RANDEVUNUZ ONAY BEKLİYOR (KAPORA ZORUNLU)
+                              </span>
+
+                              <h3 className="mt-2 text-xl font-black text-rose-100 sm:text-2xl">
+                                Randevunuz Onay Bekliyor, {customerName}!
+                              </h3>
+
+                              <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm font-bold leading-relaxed text-rose-200">
+                                Önceki randevunuza gelmediğiniz için bu randevunuz henüz <u>ONAYLANMAMIŞTIR</u>. Aşağıdaki IBAN&apos;a kapora ücretini gönderip yeşil butona basarak dekontu WhatsApp&apos;tan ilettiğinizde berberiniz randevunuzu onaylayacaktır.
+                              </p>
+
+                              {/* IBAN ve Kapora Kutusu */}
+                              <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-rose-500 bg-rose-950/40 p-4 text-left shadow-lg shadow-rose-500/20 space-y-3">
+                                <div className="flex items-start gap-3">
+                                  <ShieldAlert className="h-6 w-6 shrink-0 text-rose-400" />
+                                  <div>
+                                    <h4 className="text-sm font-black text-rose-200">
+                                      ⚠️ Kapora Gönderimi Zorunludur
+                                    </h4>
+                                    <p className="mt-1 text-xs font-bold leading-relaxed text-rose-100">
+                                      Randevunuzun geçerli olması adına berberin IBAN hesabına kapora gönderip dekontu WhatsApp&apos;tan iletmeniz gerekmektedir.
+                                    </p>
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard?.writeText(shopIban);
-                                    setCopiedIban(true);
-                                    setTimeout(() => setCopiedIban(false), 2000);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-rose-400/50 bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/30 transition cursor-pointer"
-                                >
-                                  <Copy className="h-3.5 w-3.5" />
-                                  <span>{copiedIban ? "Kopyalandı! ✅" : "IBAN'ı Kopyala"}</span>
-                                </button>
+
+                                <div className="rounded-xl border border-rose-400/30 bg-black/40 p-3 space-y-2.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-stone-300">
+                                      Zorunlu Kapora Tutarı:
+                                    </span>
+                                    <span className="font-black text-amber-300 text-sm">
+                                      {requiredDepositAmount} TL
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-white/10 pt-2">
+                                    <div className="min-w-0">
+                                      <span className="block text-[11px] font-bold text-stone-400">
+                                        Berber IBAN Hesabı:
+                                      </span>
+                                      <span className="font-mono text-xs sm:text-sm font-black text-[#fdf8f5] break-all">
+                                        {shopIban}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(shopIban);
+                                        setCopiedIban(true);
+                                        setTimeout(() => setCopiedIban(false), 2000);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-rose-400/50 bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/30 transition cursor-pointer"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                      <span>{copiedIban ? "Kopyalandı! ✅" : "IBAN'ı Kopyala"}</span>
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
+                            </>
+                          );
+                        }
+
+                        return (
+                          <>
+                            {confirmedAppointment?.status === "confirmed" ? (
+                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
+                                <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+                              </div>
+                            ) : (
+                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
+                                <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
+                              </div>
+                            )}
+
+                            {confirmedAppointment?.status === "confirmed" ? (
+                              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
+                                ✅ ONAYLANDI • RANDEVUNUZ KESİNLEŞTİ
+                              </span>
+                            ) : (
+                              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
+                                ⏳ ONAY BEKLİYOR • WHATSAPP İLE GÖNDERİN
+                              </span>
+                            )}
+
+                            <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
+                              {confirmedAppointment?.status === "confirmed"
+                                ? `Harika, Randevunuz Kesinleşti ${customerName}!`
+                                : `Randevunuz Alındı, ${customerName}!`}
+                            </h3>
+
+                            <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-amber-400 bg-amber-500/20 p-3.5 sm:p-4 text-center shadow-lg shadow-amber-500/15">
+                              <p className="text-xs sm:text-sm font-black leading-relaxed text-amber-200">
+                                ⚠️ SON ADIM: Randevunuzun geçerli olması için aşağıdaki yeşil butona basarak randevu fişinizi WhatsApp&apos;tan berberinize göndermeniz ZORUNLUDUR.
+                              </p>
                             </div>
-                          </div>
+                          </>
                         );
                       })()}
 
@@ -1383,26 +1410,30 @@ export default function CustomerBookingPage() {
 
                         const displayPhone =
                           confirmedAppointment?.customerPhone || customerPhone || "";
-                        const isBlacklistUser = Boolean(isPhoneBlacklisted(displayPhone));
+                        const isBlacklistUser =
+                          Boolean(isPhoneBlacklisted(displayPhone)) ||
+                          Boolean(confirmedAppointment?.isBlacklisted) ||
+                          Boolean(confirmedAppointment?.requiresDeposit);
 
-                        // 4. WHATSAPP TAM BİLDİRİM ŞABLONU
-                        const waMessageLines = [
-                          `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
-                          `👤 *Müşteri:* ${customerName.trim()}`,
-                          `📞 *Kayıtlı Numara:* ${displayPhone}`,
-                          `💈 *Usta:* ${barberText}`,
-                          `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
-                          `📋 *İşlem:* ${serviceNamesText}`,
-                        ];
-                        if (isEarlyEligible) {
-                          waMessageLines.push("⚡ Not: Erken boşluk olursa gelebilir.");
-                        }
-                        if (isBlacklistUser) {
-                          waMessageLines.push(
-                            `⚠️ *KAPORA DEKONTU:* Önceki randevuma gelemediğim için ${requiredDepositAmount} TL kapora dekontunu buraya iletiyorum.`
-                          );
-                        }
-                        const waMessage = waMessageLines.join("\n");
+                        // 4. WHATSAPP BİLDİRİM ŞABLONU
+                        const waMessage = isBlacklistUser
+                          ? [
+                              `🚨 *KARA LİSTE / KAPORA ONAY TALEBİ* (${vCode})`,
+                              `👤 *Müşteri:* ${customerName.trim()} (${displayPhone})`,
+                              `📅 *Tarih:* ${dateText} - ${timeText} | *Usta:* ${barberText}`,
+                              `💳 *Not:* Kapora ödemesini yaptım, dekontu iletiyorum. Onayınızı bekliyorum.`,
+                            ].join("\n")
+                          : [
+                              `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
+                              `👤 *Müşteri:* ${customerName.trim()}`,
+                              `📞 *Kayıtlı Numara:* ${displayPhone}`,
+                              `💈 *Usta:* ${barberText}`,
+                              `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
+                              `📋 *İşlem:* ${serviceNamesText}`,
+                              ...(isEarlyEligible
+                                ? ["⚡ Not: Erken boşluk olursa gelebilir."]
+                                : []),
+                            ].join("\n");
 
                         const waHref = buildWhatsAppUrl(
                           currentShop?.phone,

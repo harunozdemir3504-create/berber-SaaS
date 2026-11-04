@@ -1983,42 +1983,45 @@ export default function AdminDashboardPage() {
 
                     const isDragTarget = dragOverSlotTime === slotTime;
 
-                    // Eğer o saatte başlayan randevu veya molalar varsa:
+                    // =====================================================================
+                    // DOLU SAATLER: Sadece içinde randevu olan saat dilimleri renkli parlar
+                    // =====================================================================
                     if (hasAppointments) {
                       return (
                         <div
                           key={`timeline-${slotTime}`}
-                          className="flex items-stretch gap-2 sm:gap-3 py-1.5"
+                          className="flex items-stretch gap-2 sm:gap-3 py-1"
                         >
                           <div className="w-12 sm:w-16 shrink-0 pt-2 text-right font-mono text-xs font-black text-stone-400 dark:text-stone-300 select-none">
                             {slotTime}
                           </div>
-                          <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex-1 min-w-0 space-y-1.5">
                             {apts.map((apt) => {
                               const duration = apt.totalDuration || 30;
-                              // Tek personel seçiliyse ve randevu uzunsa yüksekliği artır
+                              // 30 dk -> min-h-[52px], 60 dk -> min-h-[104px] (tam 2 katı), 90 dk -> min-h-[156px]
                               const minHeightClass =
                                 adminStaffFilter !== "all" && duration >= 75
-                                  ? "min-h-[220px]"
+                                  ? "min-h-[156px]"
                                   : adminStaffFilter !== "all" && duration >= 45
-                                  ? "min-h-[148px]"
-                                  : "min-h-[72px]";
+                                  ? "min-h-[104px]"
+                                  : "min-h-[52px]";
 
+                              // Mola / Kapalı Saat: Gri şeritli sade görünüm
                               if (apt.isBlockedSlot) {
                                 return (
                                   <div
                                     key={apt.id}
-                                    className={`rounded-2xl border border-dashed border-amber-500/50 bg-[#171310] p-3 flex flex-wrap items-center justify-between gap-2.5 ${minHeightClass}`}
+                                    className={`rounded-xl border border-stone-600/50 bg-[#161618] px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm ${minHeightClass}`}
                                   >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
-                                        <Lock className="h-4 w-4" />
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-700/40 text-stone-300 border border-stone-600 shrink-0">
+                                        <Lock className="h-3.5 w-3.5" />
                                       </div>
                                       <div className="min-w-0">
-                                        <span className="text-xs font-black text-[#fdf8f5] block truncate">
-                                          ⛔ Saat Kapatıldı: {apt.blockReason}
+                                        <span className="text-xs font-black text-stone-200 block truncate">
+                                          ⛔ Mola / Kapalı: {apt.blockReason}
                                         </span>
-                                        <span className="text-[11px] text-stone-400 block truncate">
+                                        <span className="text-[10px] text-stone-400 block truncate">
                                           {apt.barberName} ({apt.time} - {apt.endTime})
                                         </span>
                                       </div>
@@ -2033,9 +2036,9 @@ export default function AdminDashboardPage() {
                                           "success"
                                         );
                                       }}
-                                      className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-3 py-1.5 text-xs font-black text-emerald-300 hover:bg-emerald-500/30 transition cursor-pointer"
+                                      className="inline-flex items-center gap-1 rounded-lg border border-stone-600 bg-stone-800/80 px-2.5 py-1 text-[11px] font-black text-stone-300 hover:text-white hover:bg-stone-700 transition cursor-pointer"
                                     >
-                                      <Unlock className="h-3.5 w-3.5" />
+                                      <Unlock className="h-3 w-3" />
                                       <span>Kilidi Aç</span>
                                     </button>
                                   </div>
@@ -2044,6 +2047,22 @@ export default function AdminDashboardPage() {
 
                               const isCompleted = apt.status === "completed";
                               const isPending = apt.status === "pending";
+                              const isBlacklistApt =
+                                Boolean(apt.requiresDeposit) ||
+                                Boolean(apt.isBlacklisted) ||
+                                Boolean(isPhoneBlacklisted(apt.customerPhone));
+
+                              // Kart Renk Teması:
+                              // - Kara Liste / Kapora Bekleyen: Kırmızı / Turuncu parlak kart
+                              // - Onay Bekleyen: Turuncu / Amber kart
+                              // - Onaylı / Geldi: Yeşil / Altın tonlarında belirgin kart
+                              const cardThemeClass = isBlacklistApt && isPending
+                                ? "border-2 border-rose-500 bg-gradient-to-r from-rose-950/70 via-[#1f1013] to-[#170c0f] shadow-md shadow-rose-500/20"
+                                : isPending
+                                ? "border border-amber-500/60 bg-gradient-to-r from-amber-950/50 via-[#1a1410] to-[#16120e] shadow-sm"
+                                : isCompleted
+                                ? "border border-emerald-500/30 bg-[#0e1611]/80 shadow-sm"
+                                : "border border-emerald-500/60 bg-gradient-to-r from-emerald-950/60 via-[#101913] to-[#121c15] shadow-sm";
 
                               return (
                                 <div
@@ -2054,86 +2073,130 @@ export default function AdminDashboardPage() {
                                     setDraggedApt(apt);
                                   }}
                                   onDragEnd={() => setDraggedApt(null)}
-                                  className={`rounded-2xl border p-3 sm:p-3.5 flex flex-col justify-between transition-colors cursor-grab active:cursor-grabbing hover:border-amber-400/60 shadow-sm touch-pan-y select-none ${minHeightClass} ${
-                                    isCompleted
-                                      ? "border-emerald-500/40 bg-[#101712]"
-                                      : isPending
-                                      ? "border-amber-500/50 bg-[#191512]"
-                                      : "border-white/15 bg-[#121114]"
-                                  }`}
+                                  className={`rounded-xl px-3 py-2 flex flex-col justify-between transition-colors cursor-grab active:cursor-grabbing hover:brightness-105 touch-pan-y select-none ${minHeightClass} ${cardThemeClass}`}
                                 >
-                                  <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/5 pb-2">
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="truncate text-sm font-black text-[#fdf8f5]">
-                                          {apt.customerName}
+                                  {/* Üst Satır: İsim, Rozetler, Tutar & Aksiyonlar */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                      <span className="truncate text-xs sm:text-sm font-black text-[#fdf8f5]">
+                                        {apt.customerName}
+                                      </span>
+
+                                      {/* Süre Rozeti */}
+                                      {duration > 30 && (
+                                        <span className="rounded bg-amber-400/20 border border-amber-400/40 px-1 py-0.2 text-[9px] font-black text-amber-300">
+                                          {duration} dk
                                         </span>
-                                        {duration > 30 && (
-                                          <span className="rounded-md bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.2 text-[10px] font-black text-amber-300">
-                                            {duration} dk (1 Saat Blok)
-                                          </span>
-                                        )}
-                                        <span
-                                          className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
-                                            isCompleted
-                                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                              : isPending
-                                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                              : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-                                          }`}
-                                        >
-                                          {isCompleted
-                                            ? "✅ Geldi"
-                                            : isPending
-                                            ? "⏳ Onay Bekliyor"
-                                            : "Onaylandı"}
+                                      )}
+
+                                      {/* Durum Rozeti */}
+                                      {isBlacklistApt && isPending ? (
+                                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-500 text-white px-2 py-0.5 text-[9px] sm:text-[10px] font-black animate-pulse shadow-sm">
+                                          🚨 KARA LİSTE - KAPORA BEKLİYOR
                                         </span>
-                                      </div>
-                                      <p className="mt-0.5 text-xs text-stone-300 truncate">
-                                        ✂️ {apt.services.map((s) => s.name).join(" + ")} • 👤 {apt.barberName}
-                                      </p>
+                                      ) : isPending ? (
+                                        <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-black">
+                                          ⏳ Onay Bekliyor
+                                        </span>
+                                      ) : isCompleted ? (
+                                        <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-black">
+                                          Geldi ✅
+                                        </span>
+                                      ) : (
+                                        <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-black">
+                                          ✅ Onaylandı
+                                        </span>
+                                      )}
+
+                                      <span className="text-[11px] text-stone-300 hidden sm:inline truncate">
+                                        • 👤 {apt.barberName}
+                                      </span>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono text-xs font-black text-[#dfc39e]">
+                                    {/* Sağ Taraf: Fiyat, Taşı & Onay Butonları */}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="font-mono text-xs font-black text-[#dfc39e] mr-1">
                                         {apt.totalPrice} TL
                                       </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => setMobileRescheduleApt(apt)}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-200 hover:bg-amber-500/25 transition cursor-pointer"
-                                        title="Saati Değiştir"
-                                      >
-                                        <CalendarDays className="h-3 w-3" />
-                                        <span>⇄ Saati Taşı</span>
-                                      </button>
-                                    </div>
-                                  </div>
 
-                                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                                    <span className="font-mono text-[11px] text-stone-400">
-                                      📞 {apt.customerPhone} | 🔑 {apt.verificationCode || apt.appointmentCode}
-                                    </span>
-
-                                    <div className="flex items-center gap-1.5">
-                                      {!isCompleted && (
+                                      {/* Kara Liste Kapora Onay Butonu */}
+                                      {isBlacklistApt && isPending && (
                                         <button
                                           type="button"
-                                          onClick={() => handleComplete(apt)}
-                                          className="rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-black text-[#06150f] hover:bg-emerald-400"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            confirmAppointment(apt.id);
+                                            triggerToast(
+                                              `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
+                                              "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
+                                              "success"
+                                            );
+                                          }}
+                                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-2 py-1 text-[11px] font-black text-[#06150f] shadow-md transition active:scale-95 cursor-pointer"
+                                          title="Kapora alındıysa randevuyu onaylayın"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3 stroke-[3]" />
+                                          <span>✅ Kaporayı Aldım, Onayla</span>
+                                        </button>
+                                      )}
+
+                                      {/* Normal Onay Butonu */}
+                                      {!isBlacklistApt && isPending && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            confirmAppointment(apt.id);
+                                            triggerToast(
+                                              `${apt.customerName} — Onaylandı ✅`,
+                                              "WhatsApp onay kodu doğrulandı ve randevu kesinleşti.",
+                                              "success"
+                                            );
+                                          }}
+                                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-2 py-1 text-[11px] font-black text-[#06150f] shadow-sm transition active:scale-95 cursor-pointer"
+                                        >
+                                          <span>Onayla</span>
+                                        </button>
+                                      )}
+
+                                      {/* Geldi Butonu */}
+                                      {!isCompleted && !isPending && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleComplete(apt);
+                                          }}
+                                          className="rounded-lg bg-emerald-500/20 hover:bg-emerald-500 hover:text-[#06150f] border border-emerald-500/40 text-emerald-300 px-2 py-0.5 text-[10px] font-black transition"
                                         >
                                           Geldi ✅
                                         </button>
                                       )}
+
+                                      {/* Saati Taşı Butonu */}
                                       <button
                                         type="button"
-                                        onClick={() => handleOpenNoShowModal(apt)}
-                                        className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2 py-1 text-[11px] font-black text-rose-300 hover:bg-rose-500/25"
-                                        title="Gelmediyse kara listeye alır"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setMobileRescheduleApt(apt);
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-200 hover:bg-amber-500/25 transition cursor-pointer"
+                                        title="Saati Değiştir"
                                       >
-                                        ⚠️ Kara Listeye Al
+                                        <CalendarDays className="h-2.5 w-2.5" />
+                                        <span>⇄ Taşı</span>
                                       </button>
                                     </div>
+                                  </div>
+
+                                  {/* Alt Satır: Hizmet & Telefon Özeti (Kompakt) */}
+                                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[11px] text-stone-400 border-t border-white/5 pt-1">
+                                    <span className="truncate">
+                                      ✂️ {apt.services.map((s) => s.name).join(" + ")}
+                                    </span>
+                                    <span className="font-mono text-[10px] shrink-0">
+                                      📞 {apt.customerPhone} | 🔑 {apt.verificationCode || apt.appointmentCode}
+                                    </span>
                                   </div>
                                 </div>
                               );
@@ -2143,13 +2206,16 @@ export default function AdminDashboardPage() {
                       );
                     }
 
-                    // Boş Slot (Müsait Slot)
+                    // =====================================================================
+                    // BOŞ SAATLER: Kesinlikle renk/kutu dolgusu yok (bg-transparent)
+                    // Sadece sol tarafta saat ve karşısında ince bir kesikli çizgi
+                    // =====================================================================
                     return (
                       <div
                         key={`timeline-${slotTime}`}
-                        className="flex items-stretch gap-2 sm:gap-3 py-1"
+                        className="flex items-stretch gap-2 sm:gap-3 py-0.5 group"
                       >
-                        <div className="w-12 sm:w-16 shrink-0 pt-2.5 text-right font-mono text-xs font-bold text-stone-400 dark:text-stone-500 select-none">
+                        <div className="w-12 sm:w-16 shrink-0 pt-2 text-right font-mono text-xs font-bold text-stone-500 select-none">
                           {slotTime}
                         </div>
                         <div
@@ -2169,19 +2235,25 @@ export default function AdminDashboardPage() {
                             e.preventDefault();
                             handleDropOnSlot(slotTime);
                           }}
-                          className={`flex-1 min-h-[54px] rounded-xl border border-dashed p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-2 transition-colors ${
+                          className={`flex-1 min-h-[46px] sm:min-h-[50px] border-b border-dashed flex items-center justify-between px-2 py-1 transition-colors ${
                             isDragTarget
-                              ? "border-emerald-400 bg-emerald-500/25 scale-[1.01] shadow-lg shadow-emerald-500/20 text-emerald-200"
-                              : "border-white/10 bg-white/[0.02] hover:border-amber-400/40 hover:bg-white/[0.04] text-stone-400 hover:text-stone-200"
+                              ? "border-emerald-400 bg-emerald-500/15 rounded-xl text-emerald-200"
+                              : "border-white/10 bg-transparent text-stone-500 hover:border-amber-400/40"
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold">
-                              {isDragTarget ? "📍 Buraya Bırakın!" : `⏰ ${slotTime} • Müsait (Boş)`}
-                            </span>
+                            {isDragTarget ? (
+                              <span className="text-xs font-black text-emerald-300">
+                                📍 Buraya Bırakın!
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-medium text-stone-500/80 group-hover:text-stone-400 transition-colors">
+                                • Boş
+                              </span>
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
                               onClick={() => {
@@ -2192,10 +2264,10 @@ export default function AdminDashboardPage() {
                                 }
                                 setBottomTab("quick_add");
                               }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-black text-emerald-300 hover:bg-emerald-500/25 transition active:scale-95 cursor-pointer shadow-sm"
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-300 hover:bg-emerald-500/25 transition active:scale-95 cursor-pointer shadow-sm"
                               title="Bu saate müşteri randevusu ekle"
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2.5 w-2.5" />
                               <span>Randevu Ekle</span>
                             </button>
                             <button
@@ -2214,10 +2286,10 @@ export default function AdminDashboardPage() {
                                   reason: "Yemek Molası",
                                 });
                               }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-stone-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
                               title="Saati kapat veya mola ver"
                             >
-                              <Lock className="h-3 w-3" />
+                              <Lock className="h-2.5 w-2.5" />
                               <span>Mola</span>
                             </button>
                           </div>
@@ -2363,16 +2435,22 @@ export default function AdminDashboardPage() {
                                 </span>
                               )}
                               {apt.status === "pending" && (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/80 bg-amber-500/25 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm animate-pulse">
-                                  <span>
-                                    ⏳ Onay Bekliyor (
-                                    {apt.verificationCode ||
-                                      `#${apt.appointmentCode
-                                        .replace(/\D/g, "")
-                                        .slice(-4)}`}
-                                    )
+                                isPhoneBlacklisted(apt.customerPhone) || apt.requiresDeposit || apt.isBlacklisted ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-500 bg-rose-500/30 px-2.5 py-0.5 text-[10px] font-black text-rose-200 shadow-md shadow-rose-500/20 animate-pulse">
+                                    🚨 KARA LİSTE - KAPORA BEKLİYOR
                                   </span>
-                                </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/80 bg-amber-500/25 px-2 py-0.5 text-[10px] font-black text-amber-300 shadow-sm animate-pulse">
+                                    <span>
+                                      ⏳ Onay Bekliyor (
+                                      {apt.verificationCode ||
+                                        `#${apt.appointmentCode
+                                          .replace(/\D/g, "")
+                                          .slice(-4)}`}
+                                      )
+                                    </span>
+                                  </span>
+                                )
                               )}
                               {apt.status === "confirmed" && (
                                 <span className="rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[10px] font-black text-emerald-300">
@@ -2568,22 +2646,49 @@ export default function AdminDashboardPage() {
                             )}
                           </div>
 
-                          {/* ⏳ WhatsApp Onay Kodu Bilgi Şeridi */}
+                          {/* ⏳ WhatsApp Onay Kodu / Kapora Bilgi Şeridi */}
                           {apt.status === "pending" && (
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-sm font-black text-amber-300">
-                                  🔑 Onay Kodu:{" "}
-                                  {apt.verificationCode ||
-                                    `#${apt.appointmentCode
-                                      .replace(/\D/g, "")
-                                      .slice(-4)}`}
-                                </span>
-                                <span className="text-[11px] text-stone-300">
-                                  • Müşteri WhatsApp üzerinden onay kodunu ilettiğinde aşağıdaki yeşil butona basarak onaylayın.
-                                </span>
-                              </div>
-                            </div>
+                            (() => {
+                              const isBlacklistMatch =
+                                Boolean(isPhoneBlacklisted(apt.customerPhone)) ||
+                                Boolean(apt.requiresDeposit) ||
+                                Boolean(apt.isBlacklisted);
+
+                              if (isBlacklistMatch) {
+                                return (
+                                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 border-rose-500 bg-rose-950/40 p-3 text-xs shadow-md shadow-rose-500/20">
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500 text-white px-2.5 py-1 text-xs font-black shadow-sm animate-pulse">
+                                        🚨 KARA LİSTE - KAPORA BEKLİYOR
+                                      </span>
+                                      <span className="text-xs font-bold text-rose-200">
+                                        • Müşteri önceki randevusuna gelmediği için {apt.depositAmount || currentShop.depositAmount || 200} TL kapora dekontu bekleniyor.
+                                      </span>
+                                    </div>
+                                    <span className="font-mono text-xs font-black text-amber-300">
+                                      🔑 Onay Kodu: {apt.verificationCode || `#${apt.appointmentCode.replace(/\D/g, "").slice(-4)}`}
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-sm font-black text-amber-300">
+                                      🔑 Onay Kodu:{" "}
+                                      {apt.verificationCode ||
+                                        `#${apt.appointmentCode
+                                          .replace(/\D/g, "")
+                                          .slice(-4)}`}
+                                    </span>
+                                    <span className="text-[11px] text-stone-300">
+                                      • Müşteri WhatsApp üzerinden onay kodunu ilettiğinde aşağıdaki yeşil butona basarak onaylayın.
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()
                           )}
 
                           {/* Aksiyon Butonları Izgarası */}
@@ -2592,17 +2697,27 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  const isBlacklistMatch =
+                                    Boolean(isPhoneBlacklisted(apt.customerPhone)) ||
+                                    Boolean(apt.requiresDeposit) ||
+                                    Boolean(apt.isBlacklisted);
                                   confirmAppointment(apt.id);
                                   triggerToast(
-                                    `${apt.customerName} — Onaylandı ✅`,
-                                    `WhatsApp onay kodu doğrulandı ve randevu kesinleşti.`,
+                                    `${apt.customerName} — ${isBlacklistMatch ? "Kapora Alındı & Onaylandı ✅" : "Onaylandı ✅"}`,
+                                    isBlacklistMatch
+                                      ? "Kapora ödemesi doğrulandı ve randevu kesinleşti."
+                                      : "WhatsApp onay kodu doğrulandı ve randevu kesinleşti.",
                                     "success"
                                   );
                                 }}
                                 className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 py-2.5 px-3 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 active:scale-[0.98]"
                               >
                                 <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                                <span>✅ Randevuyu Onayla</span>
+                                <span>
+                                  {isPhoneBlacklisted(apt.customerPhone) || apt.requiresDeposit || apt.isBlacklisted
+                                    ? "✅ Kaporayı Aldım, Onayla"
+                                    : "✅ Randevuyu Onayla"}
+                                </span>
                               </button>
 
                               <button

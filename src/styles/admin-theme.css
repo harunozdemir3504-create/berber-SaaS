@@ -411,28 +411,42 @@ html.light .admin-page-theme [class*="bg-[#171310]"] {
 /* ===================================================================== */
 /* 12. TAKVİM ÇİZELGESİ (TIMELINE GRID) AYDINLIK MOD STİLLERİ           */
 /* ===================================================================== */
+html.light .admin-page-theme [class*="from-emerald-950"],
 html.light .admin-page-theme [class*="bg-[#101712]"] {
-  background-color: #ECFDF5 !important;
-  border-color: #A7F3D0 !important;
+  background: linear-gradient(to right, #ECFDF5, #F0FDF4) !important;
+  border-color: #6EE7B7 !important;
   color: #065F46 !important;
+  box-shadow: 0 1px 3px 0 rgba(16, 185, 129, 0.1) !important;
 }
+
+html.light .admin-page-theme [class*="from-rose-950"] {
+  background: linear-gradient(to right, #FFF1F2, #FFE4E6) !important;
+  border-color: #F43F5E !important;
+  color: #9F1239 !important;
+  box-shadow: 0 2px 6px 0 rgba(244, 63, 94, 0.15) !important;
+}
+
+html.light .admin-page-theme [class*="from-amber-950"],
 html.light .admin-page-theme [class*="bg-[#191512]"] {
-  background-color: #FFFBEB !important;
+  background: linear-gradient(to right, #FFFBEB, #FEF3C7) !important;
   border-color: #FDE68A !important;
   color: #92400E !important;
 }
+
+html.light .admin-page-theme [class*="bg-[#161618]"],
+html.light .admin-page-theme [class*="bg-stone-900/40"] {
+  background-color: #F3F4F6 !important;
+  border-color: #D1D5DB !important;
+  color: #374151 !important;
+}
+
 html.light .admin-page-theme [class*="bg-[#121114]"] {
   background-color: #FFFFFF !important;
   border-color: #E5E7EB !important;
   color: #1F2937 !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
 }
-html.light .admin-page-theme [class*="bg-white/[0.02]"],
-html.light .admin-page-theme [class*="bg-white/[0.04]"] {
-  background-color: #F9FAFB !important;
+
+html.light .admin-page-theme .border-dashed {
   border-color: #E5E7EB !important;
-  color: #4B5563 !important;
-}
-html.light .admin-page-theme [class*="hover:bg-white/[0.04]"]:hover {
-  background-color: #F3F4F6 !important;
 }
