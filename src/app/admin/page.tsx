@@ -41,7 +41,10 @@ import {
   MapPin,
   ChevronDown,
   Zap,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 import {
   useBarber,
   formatPhoneForWhatsApp,
@@ -123,6 +126,7 @@ export default function AdminDashboardPage() {
     clearAllAdminAlerts,
     removeAppointmentOrBlock,
   } = useBarber();
+  const { theme, toggleTheme } = useTheme();
 
   // Gerçek Zamanlı Canlı Tarih (new Date() - Türkiye Saati, Bugün + Önümüzdeki 7 Gün)
   const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
@@ -1050,7 +1054,7 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminPinGate>
-      <div className="relative mx-auto max-w-3xl px-3 pb-32 pt-3 sm:px-6 sm:pt-5">
+      <div className="admin-page-theme relative mx-auto max-w-3xl px-3 pb-32 pt-3 sm:px-6 sm:pt-5">
         {/* QR AFİŞ MODALI */}
         <QrPosterModal
           open={isQrModalOpen}
@@ -1236,6 +1240,34 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
+            {/* ☀️ / 🌙 Tema Toggle Butonu */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={
+                theme === "light"
+                  ? "Gece Moduna Geç (Koyu Tema)"
+                  : "Gündüz Moduna Geç (Aydınlık Tema)"
+              }
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-extrabold transition active:scale-95 ${
+                theme === "light"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20"
+                  : "border-amber-400/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+              }`}
+            >
+              {theme === "light" ? (
+                <>
+                  <Moon className="h-3.5 w-3.5 text-indigo-600 fill-indigo-600/20" />
+                  <span>🌙 Gece Modu</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="h-3.5 w-3.5 text-amber-400 fill-amber-400/20" />
+                  <span>☀️ Gündüz Modu</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={handleEnableNotificationsAndSound}
@@ -2640,8 +2672,29 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                {/* Hızlı Araçlar: QR Afiş, Müşteri Vitrini, Çıkış */}
+                {/* Hızlı Araçlar: QR Afiş, Müşteri Vitrini, Çıkış, Tema */}
                 <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#141416] p-4">
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-black transition ${
+                      theme === "light"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20"
+                        : "border-amber-400/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                    }`}
+                  >
+                    {theme === "light" ? (
+                      <>
+                        <Moon className="h-4 w-4 text-indigo-600 fill-indigo-600/20" />
+                        <span>Gece Moduna Geç</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sun className="h-4 w-4 text-amber-400 fill-amber-400/20" />
+                        <span>Gündüz Moduna Geç</span>
+                      </>
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsQrModalOpen(true)}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { BarberProvider } from "@/context/BarberContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import Navbar from "@/components/Navbar";
 
 const inter = Inter({
@@ -55,19 +56,41 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="VIP Randevu" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('vip_barber_admin_theme_mode');
+                  if (t === 'light') {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                  } else {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('light');
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body
         className={`${inter.variable} font-sans min-h-screen bg-[#0d0a08] text-[#fdf8f5] antialiased selection:bg-[#c88a53] selection:text-[#1a110b]`}
       >
-        <BarberProvider>
-          {/* Ambient Warm Bronze & Cognac Leather Glow Behind Header */}
-          <div className="pointer-events-none fixed inset-x-0 top-0 -z-10 overflow-hidden">
-            <div className="mx-auto h-[420px] w-[860px] -translate-y-1/2 rounded-full bg-gradient-to-r from-[#b47b48]/20 via-[#c88a53]/15 to-[#9a6334]/20 blur-[135px]" />
-            <div className="mx-auto -mt-40 h-[260px] w-[520px] rounded-full bg-[#c88a53]/10 blur-[110px]" />
-          </div>
-          <Navbar />
-          <main className="relative z-10">{children}</main>
-        </BarberProvider>
+        <ThemeProvider>
+          <BarberProvider>
+            {/* Ambient Warm Bronze & Cognac Leather Glow Behind Header */}
+            <div className="dark-ambient-glow pointer-events-none fixed inset-x-0 top-0 -z-10 overflow-hidden">
+              <div className="mx-auto h-[420px] w-[860px] -translate-y-1/2 rounded-full bg-gradient-to-r from-[#b47b48]/20 via-[#c88a53]/15 to-[#9a6334]/20 blur-[135px]" />
+              <div className="mx-auto -mt-40 h-[260px] w-[520px] rounded-full bg-[#c88a53]/10 blur-[110px]" />
+            </div>
+            <Navbar />
+            <main className="relative z-10">{children}</main>
+          </BarberProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

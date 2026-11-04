@@ -13,8 +13,11 @@ import {
   ExternalLink,
   Lock,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useBarber } from "@/context/BarberContext";
+import { useTheme } from "@/context/ThemeContext";
 import { lockAdminSession } from "@/components/AdminPinGate";
 
 export default function Navbar() {
@@ -24,12 +27,19 @@ export default function Navbar() {
     currentShop,
     resetDemoData,
   } = useBarber();
+  const { theme, toggleTheme } = useTheme();
 
   const isSuperAdmin = pathname?.startsWith("/super-admin");
   const isShopAdmin = pathname?.startsWith("/admin");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0a09]/90 backdrop-blur-xl print:hidden">
+    <header
+      className={`sticky top-0 z-40 border-b backdrop-blur-xl print:hidden transition-colors duration-200 ${
+        isShopAdmin && theme === "light"
+          ? "border-stone-200 bg-white/95 text-[#1a1a1a] shadow-sm"
+          : "border-white/10 bg-[#0b0a09]/90 text-[#fdf8f5]"
+      }`}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2.5 sm:px-6 sm:py-3">
         {/* Brand Identity — Strictly Isolated by Route (/ vs /admin vs /super-admin) */}
         {isSuperAdmin ? (
@@ -77,23 +87,41 @@ export default function Navbar() {
             </div>
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-xs font-extrabold tracking-wider text-transparent sm:text-base">
+                <span
+                  className={`text-xs font-extrabold tracking-wider sm:text-base ${
+                    isShopAdmin && theme === "light"
+                      ? "text-[#1a1a1a]"
+                      : "bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-transparent"
+                  }`}
+                >
                   {currentShop.name.toUpperCase()}
                 </span>
                 {isShopAdmin && (
-                  <span className="hidden rounded-full border border-sky-400/35 bg-sky-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-sky-300 sm:inline-block">
+                  <span
+                    className={`hidden rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest sm:inline-block ${
+                      theme === "light"
+                        ? "border-sky-300 bg-sky-50 text-sky-800"
+                        : "border-sky-400/35 bg-sky-500/15 text-sky-300"
+                    }`}
+                  >
                     YÖNETİM PANELİ
                   </span>
                 )}
               </div>
-              <p className="flex items-center gap-1.5 text-[10px] text-stone-400 sm:gap-2 sm:text-[11px]">
+              <p
+                className={`flex items-center gap-1.5 text-[10px] sm:gap-2 sm:text-[11px] ${
+                  isShopAdmin && theme === "light"
+                    ? "text-stone-600"
+                    : "text-stone-400"
+                }`}
+              >
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3" />
                   {currentShop.district}
                 </span>
-                <span className="hidden text-stone-600 sm:inline">•</span>
+                <span className="hidden text-stone-400 sm:inline">•</span>
                 <span className="hidden items-center gap-1 sm:inline-flex">
-                  <Phone className="h-3 w-3 text-emerald-400" />
+                  <Phone className="h-3 w-3 text-emerald-500" />
                   {currentShop.phone}
                 </span>
               </p>
@@ -104,11 +132,46 @@ export default function Navbar() {
         {/* Right Side Header Area — Strictly Separated: Zero Admin Links on Customer Route (/) */}
         {isShopAdmin ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* ☀️ / 🌙 Tema Değiştirme Butonu (Gündüz / Gece Modu) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={
+                theme === "light"
+                  ? "Gece Moduna Geç (Koyu Tema)"
+                  : "Gündüz Moduna Geç (Aydınlık Tema)"
+              }
+              aria-label="Tema Değiştir"
+              className={`group inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition active:scale-95 sm:px-3 sm:py-2 sm:text-xs ${
+                theme === "light"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:border-amber-500/60 hover:bg-amber-500/20 shadow-sm"
+                  : "border-amber-400/40 bg-amber-500/15 text-amber-300 hover:border-amber-400/80 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10"
+              }`}
+            >
+              {theme === "light" ? (
+                <>
+                  <Moon className="h-3.5 w-3.5 text-indigo-600 transition-transform group-hover:-rotate-12 fill-indigo-600/20 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Gece Modu</span>
+                  <span className="sm:hidden">Gece</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="h-3.5 w-3.5 text-amber-400 transition-transform group-hover:rotate-45 fill-amber-400/20 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Gündüz Modu</span>
+                  <span className="sm:hidden">Gündüz</span>
+                </>
+              )}
+            </button>
+
             <Link
               href={`/${currentShop.slug}?preview=1`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-200 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-white sm:px-3 sm:py-2 sm:text-xs"
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition sm:px-3 sm:py-2 sm:text-xs ${
+                theme === "light"
+                  ? "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:border-sky-400 shadow-sm"
+                  : "border-sky-500/35 bg-sky-500/10 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
+              }`}
             >
-              <ExternalLink className="h-3.5 w-3.5 text-sky-400" />
+              <ExternalLink className="h-3.5 w-3.5 text-sky-500 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Müşteri Ekranı</span>
               <span className="sm:hidden">Vitrin</span>
             </Link>
@@ -120,9 +183,13 @@ export default function Navbar() {
                 }
               }}
               title="Oturumu Kapat / Çıkış Yap"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/35 bg-rose-500/10 px-2.5 py-1.5 text-[11px] font-bold text-rose-300 transition hover:bg-rose-500/20 sm:px-3 sm:py-2 sm:text-xs"
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition sm:px-3 sm:py-2 sm:text-xs ${
+                theme === "light"
+                  ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400 shadow-sm"
+                  : "border-rose-500/35 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+              }`}
             >
-              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500" />
               <span>Çıkış Yap</span>
             </button>
           </div>
