@@ -1520,11 +1520,11 @@ export default function AdminDashboardPage() {
             <button
               type="button"
               onClick={() => setIsQuickQrModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/50 bg-purple-500/20 px-3 py-1.5 text-xs font-black text-purple-200 hover:bg-purple-500/30 transition active:scale-95 shadow-md shadow-purple-500/10 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/80 bg-emerald-500/25 px-3 py-1.5 text-xs font-black text-white hover:bg-emerald-500/35 transition active:scale-95 shadow-md shadow-emerald-500/15 cursor-pointer"
               title="Dükkanınızın müşteri randevu karekodunu ekranda anında büyütür"
             >
-              <QrCode className="h-3.5 w-3.5 text-purple-300" />
-              <span>📱 Hızlı QR Kod</span>
+              <QrCode className="h-4 w-4 text-emerald-300 stroke-[2.5]" />
+              <span className="text-white font-black tracking-wide">📱 Hızlı QR Kod</span>
             </button>
           </div>
 
@@ -3021,7 +3021,74 @@ export default function AdminDashboardPage() {
         {/* SEKME 3: ⚙️ DİĞER (SALON BİLGİLERİ, KARA LİSTE, İSTATİSTİK & AYARLAR) */}
         {/* ===================================================================== */}
         {bottomTab === "other" && (
-          <div className="space-y-5">
+          <div className="space-y-4">
+            {/* 📱 DİĞER KISMI SOL ÜST: CANLI MÜŞTERİ QR KODU (TIKLAYINCA BÜYÜR) */}
+            <div className="rounded-2xl border border-emerald-400/50 bg-gradient-to-r from-[#141b16] via-[#121614] to-[#141416] p-3.5 sm:p-4 shadow-xl shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+              <div className="flex items-center gap-3.5 min-w-0">
+                {/* Sol Üst Karekod Kutusu - Tıklayınca Büyür */}
+                <button
+                  type="button"
+                  onClick={() => setIsQuickQrModalOpen(true)}
+                  className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-2 border-emerald-400 bg-white p-1.5 shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  title="Karekodu tam ekran büyütmek için dokunun"
+                >
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&margin=0&ecc=H&color=000000&bgcolor=ffffff&data=${encodeURIComponent(
+                      getShopBookingUrl(currentShop.slug)
+                    )}`}
+                    alt="Randevu QR Kodu"
+                    className="h-full w-full object-contain select-none"
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <QrCode className="h-5 w-5 text-emerald-300" />
+                    <span className="text-[10px] font-black text-white mt-0.5">Büyüt 🔍</span>
+                  </div>
+                </button>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-black text-[#fdf8f5] truncate">
+                      Müşteri Randevu QR Kodu
+                    </h3>
+                    <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-black text-emerald-300 shrink-0">
+                      Canlı
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-stone-300 truncate">
+                    Karekoda dokunarak tam ekran büyütebilir ve müşterinize okutabilirsiniz.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickQrModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/25 border border-emerald-400/60 px-3 py-1.5 text-xs font-black text-emerald-200 hover:bg-emerald-500/35 transition active:scale-95 cursor-pointer shadow-sm"
+                    >
+                      <QrCode className="h-3.5 w-3.5 text-emerald-300 stroke-[2.5]" />
+                      <span>🔍 Karekodu Büyüt</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyShopPageUrl}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20 active:scale-95 cursor-pointer"
+                    >
+                      <Share2 className="h-3.5 w-3.5 text-sky-400" />
+                      <span>{isCopiedShopUrl ? "Link Kopyalandı!" : "Randevu Linkini Kopyala"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden lg:flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-3 py-2 text-xs font-black text-[#dfc39e] hover:bg-[#dfc39e]/25 transition cursor-pointer"
+                >
+                  <span>🖨️ Kapı Afiş Şablonu</span>
+                </button>
+              </div>
+            </div>
+
             {/* Alt Kategori Seçici */}
             <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#141416] p-1.5 sm:grid-cols-5">
               <button
@@ -3438,10 +3505,10 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => setIsQuickQrModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/50 bg-purple-500/25 px-3.5 py-2.5 text-xs font-black text-purple-200 hover:bg-purple-500/35 transition active:scale-95 shadow-sm"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/80 bg-emerald-500/25 px-3.5 py-2.5 text-xs font-black text-white hover:bg-emerald-500/35 transition active:scale-95 shadow-sm cursor-pointer"
                   >
-                    <QrCode className="h-4 w-4 text-purple-300" />
-                    <span>📱 Hızlı QR Kod Göster</span>
+                    <QrCode className="h-4 w-4 text-emerald-300 stroke-[2.5]" />
+                    <span className="text-white font-black">📱 Hızlı QR Kod Göster</span>
                   </button>
                   <button
                     type="button"
@@ -4564,47 +4631,53 @@ export default function AdminDashboardPage() {
           {/* HIZLI QR KOD (KAREKOD) MODALI                                         */}
           {/* ===================================================================== */}
           {isQuickQrModalOpen && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div
+              onClick={() => setIsQuickQrModalOpen(false)}
+              className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
+            >
               <motion.div
                 initial={{ opacity: 0, scale: 0.92, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.92, y: 10 }}
-                className="relative w-full max-w-sm rounded-3xl border-2 border-emerald-400/30 bg-[#141416] p-6 shadow-2xl text-center text-[#fdf8f5]"
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-sm max-h-[92vh] overflow-y-auto my-auto rounded-3xl border-2 border-emerald-400/40 bg-[#141416] p-5 sm:p-6 shadow-2xl text-center text-[#fdf8f5]"
               >
-                {/* Kapat Butonu */}
+                {/* Kapat Butonu - Geniş, Yüksek Kontrastlı, Her Ekranda Kesinlikle Erişilebilir */}
                 <button
                   type="button"
                   onClick={() => setIsQuickQrModalOpen(false)}
-                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white transition"
+                  aria-label="Pencereyi Kapat"
+                  className="absolute right-3.5 top-3.5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-stone-800/95 border-2 border-white/30 text-white hover:bg-rose-500 hover:border-rose-500 shadow-xl transition-all active:scale-90 cursor-pointer"
+                  title="Kapat"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5 stroke-[2.5]" />
                 </button>
 
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <QrCode className="h-6 w-6 stroke-[2.5]" />
+                <div className="mx-auto mb-2.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <QrCode className="h-5 w-5 stroke-[2.5]" />
                 </div>
 
-                <h3 className="text-lg font-black tracking-tight text-[#fdf8f5]">
+                <h3 className="text-base sm:text-lg font-black tracking-tight text-[#fdf8f5] pr-6 pl-2">
                   📱 Hızlı Müşteri QR Kodu
                 </h3>
-                <p className="mt-1 text-xs text-stone-400">
+                <p className="mt-0.5 text-xs text-stone-400">
                   Müşteriniz kamerasını okutarak anında randevu oluşturabilir
                 </p>
 
                 {/* Büyük Net Karekod */}
-                <div className="my-5 flex justify-center">
-                  <div className="rounded-2xl border-4 border-white bg-white p-3 shadow-xl">
+                <div className="my-4 flex justify-center">
+                  <div className="rounded-2xl border-4 border-white bg-white p-2.5 shadow-xl">
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=10&ecc=H&color=000000&bgcolor=ffffff&data=${encodeURIComponent(
                         getShopBookingUrl(currentShop.slug)
                       )}`}
                       alt="Berber Randevu QR Kodu"
-                      className="h-56 w-56 object-contain"
+                      className="h-48 w-48 sm:h-52 sm:w-52 object-contain select-none"
                     />
                   </div>
                 </div>
 
-                <div className="mb-4 rounded-xl border border-white/10 bg-[#0d0d0f] p-3 text-left">
+                <div className="mb-3.5 rounded-xl border border-white/10 bg-[#0d0d0f] p-3 text-left">
                   <div className="text-[11px] font-bold text-stone-400">Salon Adı:</div>
                   <div className="text-sm font-black text-emerald-400 truncate">
                     {currentShop.name}
@@ -4624,7 +4697,7 @@ export default function AdminDashboardPage() {
                     download={`${currentShop.slug}-randevu-qr.png`}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 py-3 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition hover:brightness-110 active:scale-98"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 py-2.5 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition hover:brightness-110 active:scale-98"
                   >
                     <Download className="h-4 w-4 stroke-[2.5]" />
                     <span>⬇️ Karekodu İndir (PNG)</span>
@@ -4663,9 +4736,19 @@ export default function AdminDashboardPage() {
                       setIsQuickQrModalOpen(false);
                       setIsQrModalOpen(true);
                     }}
-                    className="w-full text-center text-xs font-bold text-[#dfc39e] hover:underline pt-1"
+                    className="w-full text-center text-xs font-bold text-[#dfc39e] hover:underline pt-0.5"
                   >
                     🖨️ Masaüstü / Kapı Afiş Şablonunu Aç
+                  </button>
+
+                  {/* Net Kapat Butonu */}
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickQrModalOpen(false)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/15 py-2.5 text-xs font-black text-stone-200 transition active:scale-98 cursor-pointer mt-1"
+                  >
+                    <X className="h-4 w-4" />
+                    <span>Pencereyi Kapat</span>
                   </button>
                 </div>
               </motion.div>
@@ -4676,12 +4759,16 @@ export default function AdminDashboardPage() {
           {/* MOBİL VE DOKUNMATİK SAAT DEĞİŞTİRME SEÇİCİ MODALI                     */}
           {/* ===================================================================== */}
           {mobileRescheduleApt && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div
+              onClick={() => setMobileRescheduleApt(null)}
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
+            >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-md rounded-2xl border border-white/20 bg-[#161619] p-5 shadow-2xl text-[#fdf8f5]"
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md max-h-[92vh] overflow-y-auto my-auto rounded-2xl border border-white/20 bg-[#161619] p-5 shadow-2xl text-[#fdf8f5]"
               >
                 <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <div className="flex items-center gap-2">
@@ -4782,20 +4869,26 @@ export default function AdminDashboardPage() {
           {/* 📅 TAKVİM RANDEVU DETAY, NORMAL ARAMA & WHATSAPP MODALI                */}
           {/* ===================================================================== */}
           {activeDetailApt && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div
+              onClick={() => setSelectedDetailApt(null)}
+              className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto"
+            >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="relative w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-b from-[#18181c] to-[#121214] p-5 sm:p-6 shadow-2xl text-[#fdf8f5]"
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-md max-h-[92vh] overflow-y-auto my-auto rounded-3xl border border-white/20 bg-gradient-to-b from-[#18181c] to-[#121214] p-5 sm:p-6 shadow-2xl text-[#fdf8f5]"
               >
                 {/* Kapat Butonu */}
                 <button
                   type="button"
                   onClick={() => setSelectedDetailApt(null)}
-                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white transition cursor-pointer"
+                  aria-label="Kapat"
+                  className="absolute right-3.5 top-3.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-stone-800/90 border border-white/25 text-white hover:bg-rose-500 hover:border-rose-500 shadow-xl transition-all active:scale-90 cursor-pointer"
+                  title="Kapat"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5 stroke-[2.5]" />
                 </button>
 
                 {/* Başlık Alanı */}
