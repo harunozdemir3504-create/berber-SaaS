@@ -62,3 +62,46 @@ export function buildWhatsAppUrl(
   const formattedPhone = formatPhoneForWhatsApp(phone, fallbackPhone);
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
 }
+
+/**
+ * Telefon numarasını küçük ve kompakt alanlarda okunaklı, boşluklu formata çevirir.
+ * Örn:
+ * "05321234567" -> "0532 123 45 67"
+ * "5321234567"  -> "0532 123 45 67"
+ * "905321234567" -> "0532 123 45 67"
+ * "+905321234567" -> "0532 123 45 67"
+ */
+export function formatPhoneDisplay(phone?: string | null): string {
+  if (!phone) return "";
+  let digits = phone.replace(/\D/g, "");
+  if (!digits) return phone;
+
+  // Başta 0090 varsa kaldır
+  if (digits.startsWith("0090")) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith("90") && digits.length === 12) {
+    digits = digits.slice(2);
+  }
+
+  // Başında 0 yoksa ve 10 haneli ise başına 0 koy (örn: 5321234567 -> 05321234567)
+  if (!digits.startsWith("0") && digits.length === 10) {
+    digits = "0" + digits;
+  }
+
+  // 11 haneli standart Türkiye formatı: 05XX XXX XX XX
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)} ${digits.slice(9, 11)}`;
+  }
+
+  // 10 haneli format: 5XX XXX XX XX -> 05XX XXX XX XX
+  if (digits.length === 10) {
+    return `0${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
+  }
+
+  // Başka bir numara uzunluğu varsa okunaklı grupla
+  if (digits.length > 7) {
+    return digits.replace(/(\d{3,4})(?=\d)/g, "$1 ");
+  }
+
+  return phone;
+}

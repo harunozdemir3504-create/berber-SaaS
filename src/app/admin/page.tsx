@@ -45,11 +45,15 @@ import {
   Sun,
   Moon,
   Download,
+  PhoneCall,
+  MessageCircle,
+  Sparkles,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import {
   useBarber,
   formatPhoneForWhatsApp,
+  formatPhoneDisplay,
   buildWhatsAppUrl,
   minutesToTime,
   timeToMinutes,
@@ -176,6 +180,10 @@ export default function AdminDashboardPage() {
 
   // Mobil Dokunmatik Saat Değiştirme Modalı
   const [mobileRescheduleApt, setMobileRescheduleApt] = useState<Appointment | null>(null);
+
+  // Takvim Randevu Tıklama & Bilgi/Aksiyon Modalı
+  const [selectedDetailApt, setSelectedDetailApt] = useState<Appointment | null>(null);
+  const dragMovedRef = useRef<boolean>(false);
 
   // SALON BİLGİLERİ DÜZENLEME STATE (Dükkan Adı, Telefon, İlçe, Slogan, IBAN, Kapora)
   const [shopNameInput, setShopNameInput] = useState<string>("");
@@ -796,6 +804,24 @@ export default function AdminDashboardPage() {
       "success"
     );
   };
+
+  const activeDetailApt = useMemo(() => {
+    if (!selectedDetailApt) return null;
+    return (
+      appointments.find((a) => a.id === selectedDetailApt.id) ||
+      selectedDetailApt
+    );
+  }, [appointments, selectedDetailApt]);
+
+  const detailAptWaUrl = useMemo(() => {
+    if (!activeDetailApt) return "#";
+    const resolvedDay = resolveDayMetadata(activeDetailApt.dayId);
+    const dateLabel = resolvedDay.chipLabel;
+    const srvText = activeDetailApt.services.map((s) => s.name).join(" + ");
+    const bookingLink = getShopBookingUrl(currentShop.slug);
+    const msg = `Merhaba ${activeDetailApt.customerName}, ${currentShop.name} randevunuz hk:\n📅 Tarih: ${dateLabel}\n⏰ Saat: ${activeDetailApt.time}\n💺 Koltuk: ${activeDetailApt.chairLabel || activeDetailApt.barberName}\n✂️ İşlem: ${srvText} (${activeDetailApt.totalPrice} TL)\nTakip: ${bookingLink}\nSizi bekliyoruz!`;
+    return buildWhatsAppUrl(activeDetailApt.customerPhone, msg);
+  }, [activeDetailApt, currentShop.name, currentShop.slug]);
 
   const currentTimelineDayId = useMemo(() => {
     if (adminDayMode === "today") return todayDay.id;
@@ -2093,11 +2119,21 @@ export default function AdminDashboardPage() {
                                     key={apt.id}
                                     draggable={true}
                                     onDragStart={(e) => {
+                                      dragMovedRef.current = true;
                                       e.dataTransfer.setData("text/plain", apt.id);
                                       setDraggedApt(apt);
                                     }}
-                                    onDragEnd={() => setDraggedApt(null)}
-                                    className={`rounded-xl px-2.5 py-1.5 flex flex-col justify-between transition-colors cursor-grab active:cursor-grabbing hover:brightness-105 touch-pan-y select-none shadow-sm ${heightClass} ${cardThemeClass}`}
+                                    onDragEnd={() => {
+                                      setDraggedApt(null);
+                                      setTimeout(() => {
+                                        dragMovedRef.current = false;
+                                      }, 150);
+                                    }}
+                                    onClick={() => {
+                                      if (dragMovedRef.current) return;
+                                      setSelectedDetailApt(apt);
+                                    }}
+                                    className={`rounded-xl px-2.5 py-1.5 flex flex-col justify-between transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e]/60 hover:brightness-110 active:scale-[0.99] touch-pan-y select-none shadow-sm ${heightClass} ${cardThemeClass}`}
                                   >
                                     {/* Üst Satır */}
                                     <div className="flex items-center justify-between gap-1 min-w-0">
@@ -2190,8 +2226,8 @@ export default function AdminDashboardPage() {
                                       <span className="truncate">
                                         ✂️ {apt.services.map((s) => s.name).join(" + ")}
                                       </span>
-                                      <span className="font-mono text-[9px] shrink-0 ml-1">
-                                        📞 {apt.customerPhone}
+                                      <span className="font-mono text-[9px] shrink-0 ml-1 text-stone-300 font-bold">
+                                        📞 {formatPhoneDisplay(apt.customerPhone)}
                                       </span>
                                     </div>
                                   </div>
@@ -2580,7 +2616,7 @@ export default function AdminDashboardPage() {
                                   title="Müşteriyi Ara"
                                 >
                                   <Phone className="h-3.5 w-3.5" />
-                                  <span>{apt.customerPhone}</span>
+                                  <span>{formatPhoneDisplay(apt.customerPhone)}</span>
                                 </a>
 
                                 <button
@@ -3640,35 +3676,143 @@ export default function AdminDashboardPage() {
                         {isEditing ? (
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                              <input
-                                type="text"
-                                value={editBarberName}
-                                onChange={(e) =>
-                                  setEditBarberName(e.target.value)
-                                }
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
-                              />
-                              <input
-                                type="text"
-                                value={editBarberChair}
-                                onChange={(e) =>
-                                  setEditBarberChair(e.target.value)
-                                }
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
-                              />
+                              <div>
+                                <label className="text-[11px] font-bold text-stone-400 block mb-1">Usta / Personel Adı</label>
+                                <input
+                                  type="text"
+                                  value={editBarberName}
+                                  onChange={(e) =>
+                                    setEditBarberName(e.target.value)
+                                  }
+                                  className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-bold text-stone-400 block mb-1">Koltuk Adı</label>
+                                <input
+                                  type="text"
+                                  value={editBarberChair}
+                                  onChange={(e) =>
+                                    setEditBarberChair(e.target.value)
+                                  }
+                                  className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
+                                />
+                              </div>
                             </div>
-                            <div className="flex justify-end gap-2">
+
+                            {/* Koltuğa Özel Fiyatlandırma Bölümü */}
+                            <div className="rounded-xl border border-white/10 bg-[#0d0d0f] p-3.5 space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-white/10 pb-2.5">
+                                <div>
+                                  <h4 className="text-xs font-black text-[#dfc39e] flex items-center gap-1.5">
+                                    <Sparkles className="h-3.5 w-3.5 text-[#dfc39e]" />
+                                    <span>Koltuğa Özel Fiyatlandırma (Opsiyonel / Ekstra)</span>
+                                  </h4>
+                                  <p className="text-[11px] text-stone-400 mt-0.5">
+                                    Varsayılan olarak her koltukta standart salon fiyatları geçerlidir. İsterseniz bu koltuk için özel fiyat tanımlayabilirsiniz.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const resetMap: Record<string, string> = {};
+                                    services.forEach((s) => {
+                                      resetMap[s.id] = String(s.price);
+                                    });
+                                    setEditBarberPrices(resetMap);
+                                  }}
+                                  className="self-start sm:self-auto text-[10px] font-bold text-stone-400 hover:text-[#dfc39e] underline transition cursor-pointer"
+                                >
+                                  Tümünü Standarta Eşitle
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {services.map((srv) => {
+                                  const rawVal = editBarberPrices[srv.id];
+                                  const currentVal = rawVal !== undefined ? rawVal : String(srv.price);
+                                  const numVal = Number(currentVal);
+                                  const isCustom = !Number.isNaN(numVal) && numVal !== srv.price && currentVal.trim() !== "";
+
+                                  return (
+                                    <div
+                                      key={srv.id}
+                                      className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
+                                        isCustom
+                                          ? "border-amber-500/50 bg-gradient-to-r from-amber-950/30 to-[#191512]"
+                                          : "border-white/5 bg-[#141416]"
+                                      }`}
+                                    >
+                                      <div className="min-w-0 pr-2">
+                                        <span className="text-xs font-black text-[#fdf8f5] block truncate">
+                                          {srv.name}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className="text-[10px] text-stone-400">
+                                            Standart: <strong className="text-stone-300 font-mono">{srv.price} TL</strong>
+                                          </span>
+                                          {isCustom && (
+                                            <span className="text-[9px] font-black text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30">
+                                              Özel Fiyat
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={currentVal}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setEditBarberPrices((prev) => ({
+                                              ...prev,
+                                              [srv.id]: val,
+                                            }));
+                                          }}
+                                          className={`w-20 rounded-lg border px-2 py-1 text-right text-xs font-mono font-black focus:outline-none transition ${
+                                            isCustom
+                                              ? "border-amber-400 bg-black/60 text-amber-300"
+                                              : "border-white/15 bg-black/40 text-stone-200 focus:border-[#dfc39e]"
+                                          }`}
+                                          placeholder={String(srv.price)}
+                                        />
+                                        <span className="text-xs font-bold text-stone-400">TL</span>
+                                        {isCustom && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditBarberPrices((prev) => ({
+                                                ...prev,
+                                                [srv.id]: String(srv.price),
+                                              }));
+                                            }}
+                                            className="ml-1 text-[10px] font-bold text-stone-400 hover:text-white px-1.5 py-1 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
+                                            title="Standart fiyata dön"
+                                          >
+                                            Sıfırla
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-1">
                               <button
                                 type="button"
                                 onClick={() => setEditingBarberId(null)}
-                                className="rounded-xl border border-white/15 px-3 py-1.5 text-xs text-stone-300"
+                                className="rounded-xl border border-white/15 px-3.5 py-2 text-xs font-bold text-stone-300 hover:bg-white/5 transition cursor-pointer"
                               >
                                 İptal
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveBarber(barber)}
-                                className="rounded-xl bg-[#dfc39e] px-4 py-1.5 text-xs font-black text-[#1a110b]"
+                                className="rounded-xl bg-[#dfc39e] hover:bg-[#ebd5b8] px-5 py-2 text-xs font-black text-[#1a110b] shadow-md transition active:scale-95 cursor-pointer"
                               >
                                 Kaydet
                               </button>
@@ -3683,6 +3827,18 @@ export default function AdminDashboardPage() {
                               <p className="text-xs text-[#dfc39e]">
                                 {barber.chairName}
                               </p>
+                              <div className="mt-1">
+                                {barber.customPrices && Object.keys(barber.customPrices).length > 0 ? (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                                    <Sparkles className="h-2.5 w-2.5" />
+                                    <span>Koltuğa Özel Fiyat ({Object.keys(barber.customPrices).length} Hizmet)</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-stone-400">
+                                    ✓ Standart Salon Fiyatı Geçerli
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -4617,6 +4773,241 @@ export default function AdminDashboardPage() {
                   >
                     Vazgeç
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* ===================================================================== */}
+          {/* 📅 TAKVİM RANDEVU DETAY, NORMAL ARAMA & WHATSAPP MODALI                */}
+          {/* ===================================================================== */}
+          {activeDetailApt && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="relative w-full max-w-md rounded-3xl border border-white/20 bg-gradient-to-b from-[#18181c] to-[#121214] p-5 sm:p-6 shadow-2xl text-[#fdf8f5]"
+              >
+                {/* Kapat Butonu */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailApt(null)}
+                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                {/* Başlık Alanı */}
+                <div className="flex items-center gap-3 pr-8 pb-3 border-b border-white/10">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#dfc39e]/20 text-[#dfc39e] border border-[#dfc39e]/30 shrink-0">
+                    <CalendarIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black text-[#fdf8f5] truncate">
+                      Randevu Detayları
+                    </h3>
+                    <p className="text-xs text-stone-400 truncate">
+                      📅 {resolveDayMetadata(activeDetailApt.dayId).chipLabel} • ⏰ {activeDetailApt.time} - {activeDetailApt.endTime || minutesToTime(timeToMinutes(activeDetailApt.time) + (activeDetailApt.totalDuration || 30))}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Müşteri Profil Kutusu */}
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[#101012] p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-stone-400 block">Müşteri</span>
+                      <h4 className="text-lg font-black text-[#fdf8f5] truncate">
+                        {activeDetailApt.customerName}
+                      </h4>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      {activeDetailApt.status === "completed" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-black">
+                          Geldi ✅
+                        </span>
+                      ) : activeDetailApt.status === "pending" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 text-xs font-black animate-pulse">
+                          ⏳ Onay Bekliyor
+                        </span>
+                      ) : activeDetailApt.status === "cancelled" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2.5 py-0.5 text-xs font-black">
+                          İptal Edildi
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-black">
+                          ✅ Onaylandı
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Telefon Numarası - Boşluklu Format */}
+                  <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                    <span className="text-xs font-bold text-stone-400">Telefon:</span>
+                    <span className="font-mono text-sm font-black text-[#dfc39e] tracking-wider">
+                      {formatPhoneDisplay(activeDetailApt.customerPhone)}
+                    </span>
+                  </div>
+
+                  {activeDetailApt.canComeEarly && (
+                    <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-400/30 px-2.5 py-1 text-xs font-black text-amber-300">
+                      <Zap className="h-3.5 w-3.5 fill-amber-300" />
+                      <span>Erken Saat Boşalırsa Gelebilir</span>
+                    </div>
+                  )}
+
+                  {(activeDetailApt.requiresDeposit || activeDetailApt.isBlacklisted || isPhoneBlacklisted(activeDetailApt.customerPhone)) && (
+                    <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 px-2.5 py-1 text-xs font-black text-rose-300">
+                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                      <span>🚨 Kapora Bekleyen Müşteri</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* İLETİŞİM BUTONLARI (Normalden Arama & WhatsApp'tan Yazma) */}
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                  <a
+                    href={`tel:${activeDetailApt.customerPhone}`}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 px-3 py-3 text-xs sm:text-sm font-black text-emerald-300 shadow-md shadow-emerald-500/10 transition active:scale-95"
+                  >
+                    <PhoneCall className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                    <span>Normalden Ara</span>
+                  </a>
+
+                  <a
+                    href={detailAptWaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] px-3 py-3 text-xs sm:text-sm font-black text-[#041a0b] shadow-md shadow-[#25D366]/20 transition active:scale-95"
+                  >
+                    <MessageCircle className="h-4 w-4 shrink-0 fill-current" />
+                    <span>WhatsApp'tan Yaz</span>
+                  </a>
+                </div>
+
+                {/* Randevu Ayrıntıları */}
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[#101012] p-3.5 space-y-2.5">
+                  {/* Koltuk & Personel Bilgisi */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-400 flex items-center gap-1.5">
+                      <Armchair className="h-3.5 w-3.5 text-[#dfc39e]" />
+                      <span>Koltuk / Personel:</span>
+                    </span>
+                    <div className="text-right">
+                      <span className="font-black text-[#fdf8f5] block">
+                        {activeDetailApt.chairLabel || activeDetailApt.barberName}
+                      </span>
+                      {activeDetailApt.chairLabel && activeDetailApt.chairLabel !== activeDetailApt.barberName && (
+                        <span className="text-[10px] text-stone-400">
+                          {activeDetailApt.barberName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hizmetler Listesi */}
+                  <div className="border-t border-white/5 pt-2 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-stone-400">
+                      <span className="flex items-center gap-1">
+                        <Scissors className="h-3 w-3 text-[#dfc39e]" />
+                        <span>Seçilen Hizmetler:</span>
+                      </span>
+                      <span>{activeDetailApt.services.length} Hizmet</span>
+                    </div>
+
+                    {activeDetailApt.services.map((s, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs pl-2">
+                        <span className="text-stone-300 font-medium">
+                          • {s.name} ({s.duration} dk)
+                        </span>
+                        <span className="font-mono font-bold text-[#dfc39e]">
+                          {s.price} TL
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Toplam Tutar & Süre */}
+                  <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                    <span className="text-xs font-bold text-stone-400">
+                      Toplam Süre: <strong className="text-stone-200">{activeDetailApt.totalDuration || 30} dk</strong>
+                    </span>
+                    <span className="text-base font-black text-[#dfc39e]">
+                      {activeDetailApt.totalPrice} TL
+                    </span>
+                  </div>
+                </div>
+
+                {/* Alt Hızlı İşlem Butonları */}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {activeDetailApt.status === "pending" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        confirmAppointment(activeDetailApt.id);
+                        triggerToast(
+                          "Randevu Onaylandı ✅",
+                          `${activeDetailApt.customerName} randevusu başarıyla onaylandı.`,
+                          "success"
+                        );
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 px-3 py-2.5 text-xs font-black text-[#06150f] transition active:scale-95 cursor-pointer shadow-md"
+                    >
+                      <Check className="h-4 w-4 stroke-[3]" />
+                      <span>Onayla</span>
+                    </button>
+                  )}
+
+                  {activeDetailApt.status !== "completed" && activeDetailApt.status !== "cancelled" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleComplete(activeDetailApt);
+                        triggerToast(
+                          "Randevu Tamamlandı ✅",
+                          `${activeDetailApt.customerName} geldi ve işlem tamamlandı.`,
+                          "success"
+                        );
+                        setSelectedDetailApt(null);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2.5 text-xs font-black text-emerald-300 transition active:scale-95 cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Geldi</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const aptToMove = activeDetailApt;
+                      setSelectedDetailApt(null);
+                      setMobileRescheduleApt(aptToMove);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-xs font-black text-amber-300 transition active:scale-95 cursor-pointer"
+                  >
+                    <span>⇄ Saati Taşı</span>
+                  </button>
+
+                  {activeDetailApt.status !== "cancelled" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`${activeDetailApt.customerName} randevusunu iptal etmek istediğinize emin misiniz? Saat tekrar boşa çıkarılacaktır.`)) {
+                          handleCancelByAdmin(activeDetailApt);
+                          setSelectedDetailApt(null);
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition active:scale-95 cursor-pointer"
+                      title="Randevuyu İptal Et"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>İptal</span>
+                    </button>
+                  )}
                 </div>
               </motion.div>
             </div>

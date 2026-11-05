@@ -33,6 +33,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { triggerAutomaticBookingNotification } from "@/lib/notifications";
 export {
   formatPhoneForWhatsApp,
+  formatPhoneDisplay,
   buildWhatsAppUrl,
   DEFAULT_SHOP_WHATSAPP_PHONE,
 } from "@/lib/whatsapp";
