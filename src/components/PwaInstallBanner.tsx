@@ -143,11 +143,11 @@ export default function PwaInstallBanner({
   return (
     <>
       {/* BOTTOM SUBTLE & COMPACT PWA INSTALL BAR */}
-      <div className="mt-6 overflow-hidden rounded-xl border border-white/10 bg-[#14100d]/80 px-3 py-2 shadow-sm">
+      <div className="mt-6 overflow-hidden rounded-xl border border-stone-200 bg-white px-3 py-2 shadow-sm dark:border-white/10 dark:bg-[#14100d]/80">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <Smartphone className="h-3.5 w-3.5 shrink-0 text-[#c88a53]" />
-            <p className="truncate text-[11px] font-medium text-stone-400">
+            <Smartphone className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-[#c88a53]" />
+            <p className="truncate text-[11px] font-medium text-stone-600 dark:text-stone-400">
               {isCustomer
                 ? "Uygulamayı ana ekrana ekleyerek hızlı randevu alabilirsiniz"
                 : "Berber panelini telefonunuza uygulama olarak ekleyin"}
@@ -158,15 +158,15 @@ export default function PwaInstallBanner({
             <button
               type="button"
               onClick={handleInstallClick}
-              className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#c88a53]/40 bg-[#c88a53]/15 px-2.5 py-1 text-[11px] font-bold text-[#e6ccb2] transition hover:bg-[#c88a53]/25"
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-amber-600 bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 shadow-sm transition-all duration-150 hover:bg-amber-400 active:scale-95 dark:border-[#c88a53]/40 dark:bg-[#c88a53]/15 dark:text-[#e6ccb2] dark:hover:bg-[#c88a53]/25"
             >
-              <span>📱 Uygulamayı Yükle</span>
+              <span>📲 Uygulamayı Yükle</span>
             </button>
             <button
               type="button"
               onClick={() => setDismissed(true)}
               title="Gizle"
-              className="flex h-6 w-6 items-center justify-center rounded-lg text-stone-500 transition hover:text-stone-300"
+              className="flex h-6 w-6 items-center justify-center rounded-lg text-stone-500 transition hover:text-stone-800 active:scale-95 dark:hover:text-stone-300"
             >
               <X className="h-3.5 w-3.5" />
             </button>

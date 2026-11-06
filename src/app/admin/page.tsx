@@ -64,6 +64,7 @@ import {
 } from "@/context/BarberContext";
 import AdminPinGate, { lockAdminSession } from "@/components/AdminPinGate";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
+import TimelineAppointmentCard from "@/components/TimelineAppointmentCard";
 import QrPosterModal from "@/components/QrPosterModal";
 import {
   Appointment,
@@ -1006,66 +1007,68 @@ export default function AdminDashboardPage() {
     };
   };
 
-  // Gündüz (Light) ve Gece (Dark) Moduna Uyumlu Dinamik Müşteri Kartı Renkleri
-  const getAppointmentCardTheme = (apt: Appointment) => {
-    const isCompleted = apt.status === "completed";
-    const isPending = apt.status === "pending";
-    const isCancelled = apt.status === "cancelled";
-    const isNoShow = apt.status === "no_show";
-    const isBlacklistApt =
-      Boolean(apt.requiresDeposit) ||
-      Boolean(apt.isBlacklisted) ||
-      Boolean(isPhoneBlacklisted(apt.customerPhone));
-
-    if (isBlacklistApt && isPending) {
-      return {
-        container:
-          "bg-rose-50 dark:bg-[#1c0d11] border border-rose-300 dark:border-rose-500 border-l-4 border-l-rose-500 text-stone-900 dark:text-[#fdf8f5] shadow-sm",
-        badge: "bg-rose-500 text-white font-black animate-pulse",
-        title: "text-rose-950 dark:text-rose-200",
-        price: "text-rose-700 dark:text-rose-300",
-      };
-    }
-
-    if (isPending) {
-      return {
-        container:
-          "bg-amber-50 dark:bg-[#1b140f] border border-amber-300 dark:border-amber-500/70 border-l-4 border-l-amber-500 text-stone-900 dark:text-[#fdf8f5] shadow-sm",
-        badge: "bg-amber-100 dark:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 font-black",
-        title: "text-stone-900 dark:text-[#fdf8f5]",
-        price: "text-amber-800 dark:text-[#dfc39e]",
-      };
-    }
-
-    if (isCompleted) {
-      return {
-        container:
-          "bg-stone-50 dark:bg-[#0e1712] border border-stone-200 dark:border-emerald-500/40 border-l-4 border-l-emerald-600 text-stone-900 dark:text-[#fdf8f5] shadow-sm",
-        badge: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 font-black",
-        title: "text-stone-900 dark:text-[#fdf8f5]",
-        price: "text-emerald-700 dark:text-[#dfc39e]",
-      };
-    }
-
-    if (isCancelled || isNoShow) {
-      return {
-        container:
-          "bg-red-50/70 dark:bg-[#181212] border border-red-200 dark:border-rose-500/40 border-l-4 border-l-red-400 text-stone-900 dark:text-[#fdf8f5] shadow-sm",
-        badge: "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 font-black",
-        title: "text-stone-700 dark:text-stone-300 line-through",
-        price: "text-stone-500 dark:text-stone-400",
-      };
-    }
-
-    // Onaylı / Yaklaşan Randevu
+  // Timeline kartı için kapladığı dilim/şerit bilgisi (memo'lu kartlara sadece ilkel değerler geçer)
+  const getTimelineCardGeometry = (id: string, slotTime: string) => {
+    const info = timelineBlockLayout.get(id);
+    const slotM = timeToMinutes(slotTime);
+    const startM = info?.startM ?? slotM;
+    const endM = info?.endM ?? slotM + 30;
     return {
-      container:
-        "bg-white dark:bg-[#121914] border border-emerald-200 dark:border-emerald-500/60 border-l-4 border-l-emerald-500 text-stone-900 dark:text-[#fdf8f5] shadow-sm",
-      badge: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 font-black",
-      title: "text-stone-900 dark:text-[#fdf8f5]",
-      price: "text-emerald-700 dark:text-[#dfc39e]",
+      offsetPx: ((startM - slotM) / 30) * TIMELINE_SLOT_PX,
+      heightPx: ((endM - startM) / 30) * TIMELINE_SLOT_PX,
+      slotCount: Math.max(1, Math.round((endM - startM) / 30)),
+      lane: info?.lane ?? 0,
+      lanes: info?.lanes ?? 1,
     };
   };
+
+  // Memo'lu timeline kartları için SABİT (referansı değişmeyen) aksiyon fonksiyonları.
+  // En güncel bağımlılıklar ref üzerinden okunur; böylece kartlar gereksiz yere yeniden render olmaz.
+  const timelineActionsRef = useRef({ confirmAppointment, handleComplete, triggerToast });
+  timelineActionsRef.current = { confirmAppointment, handleComplete, triggerToast };
+
+  const handleTimelineOpen = useCallback((apt: Appointment) => {
+    if (dragMovedRef.current) return;
+    setSelectedDetailApt(apt);
+  }, []);
+
+  const handleTimelineConfirm = useCallback((apt: Appointment, isBlacklistApt: boolean) => {
+    const { confirmAppointment: confirm, triggerToast: toast } = timelineActionsRef.current;
+    confirm(apt.id);
+    if (isBlacklistApt) {
+      toast(
+        `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
+        "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
+        "success"
+      );
+    } else {
+      toast(`${apt.customerName} — Onaylandı ✅`, "Randevu onaylandı.", "success");
+    }
+  }, []);
+
+  const handleTimelineComplete = useCallback((apt: Appointment) => {
+    const { handleComplete: complete, triggerToast: toast } = timelineActionsRef.current;
+    complete(apt);
+    toast("Randevu Tamamlandı ✅", `${apt.customerName} geldi ve işlem tamamlandı.`, "success");
+  }, []);
+
+  const handleTimelineMove = useCallback((apt: Appointment) => {
+    setMobileRescheduleApt(apt);
+  }, []);
+
+  const handleTimelineDragStart = useCallback((e: React.DragEvent, apt: Appointment) => {
+    dragMovedRef.current = true;
+    e.dataTransfer.setData("text/plain", apt.id);
+    setDraggedApt(apt);
+  }, []);
+
+  const handleTimelineDragEnd = useCallback(() => {
+    setDraggedApt(null);
+    setTimeout(() => {
+      dragMovedRef.current = false;
+    }, 150);
+  }, []);
+
 
   // Sürükle-Bırak (Drop) Olayı ve Çakışma Kontrolü
   const handleDropOnSlot = (targetTime: string) => {
@@ -2241,7 +2244,7 @@ export default function AdminDashboardPage() {
                                 <div
                                   key={blk.id}
                                   style={getTimelineBlockStyle(blk.id, slotTime)}
-                                  className="w-auto max-w-full overflow-hidden box-border rounded-lg px-2.5 py-2 flex items-start justify-between gap-2 bg-stone-100 dark:bg-[#161618] border border-stone-300 dark:border-stone-600/50 shadow-sm"
+                                  className="w-auto max-w-full overflow-hidden box-border rounded-lg px-2.5 py-2 flex items-start justify-between gap-2 transition-all duration-200 bg-stone-100 dark:bg-[#161618] border border-stone-300 dark:border-stone-600/50 shadow-sm"
                                 >
                                   <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                     <Lock className="h-4 w-4 text-stone-500 dark:text-stone-400 shrink-0" />
@@ -2264,7 +2267,7 @@ export default function AdminDashboardPage() {
                                         "success"
                                       );
                                     }}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800/80 px-2 py-1 text-[10px] font-black text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition cursor-pointer shrink-0"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800/80 px-2 py-1 text-[10px] font-black text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition-all duration-150 active:scale-95 cursor-pointer shrink-0"
                                   >
                                     <Unlock className="h-3 w-3" />
                                     <span>Kilidi Aç</span>
@@ -2272,153 +2275,33 @@ export default function AdminDashboardPage() {
                                 </div>
                               ))}
 
-                          {/* 2. Bu Saatte Başlayan Randevular (süresi kadar alt satırları tek parça kaplar) */}
+                          {/* 2. Bu Saatte Başlayan Randevular (süresi kadar alt satırları tek parça kaplar; 30/60/90 dk özel düzen) */}
                           {hasStartingApts &&
-                              slotData.startingApts.map((apt) => {
-                                const duration = apt.totalDuration || 30;
-                                const isCompleted = apt.status === "completed";
-                                const isPending = apt.status === "pending";
-                                const isBlacklistApt =
-                                  Boolean(apt.requiresDeposit) ||
-                                  Boolean(apt.isBlacklisted) ||
-                                  Boolean(isPhoneBlacklisted(apt.customerPhone));
-                                const theme = getAppointmentCardTheme(apt);
-                                const servicesSummary = apt.services.map((s) => s.name).join(" + ");
-
-                                return (
-                                  <div
-                                    key={apt.id}
-                                    style={getTimelineBlockStyle(apt.id, slotTime)}
-                                    draggable={!isPending && !isBlacklistApt}
-                                    onDragStart={(e) => {
-                                      dragMovedRef.current = true;
-                                      e.dataTransfer.setData("text/plain", apt.id);
-                                      setDraggedApt(apt);
-                                    }}
-                                    onDragEnd={() => {
-                                      setDraggedApt(null);
-                                      setTimeout(() => {
-                                        dragMovedRef.current = false;
-                                      }, 150);
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (dragMovedRef.current) return;
-                                      setSelectedDetailApt(apt);
-                                    }}
-                                    className={`max-w-full overflow-hidden box-border rounded-lg px-2.5 py-1.5 flex flex-col justify-between gap-1 transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e] select-none ${theme.container}`}
-                                  >
-                                    {/* Üst Satır */}
-                                    <div className="flex items-center justify-between gap-1.5 min-w-0">
-                                      <div className="flex flex-nowrap items-center gap-1.5 min-w-0 overflow-hidden">
-                                        <span className={`truncate text-xs sm:text-sm font-black ${theme.title}`}>
-                                          {apt.customerName}
-                                        </span>
-
-                                        {duration > 30 && (
-                                          <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1 py-0.2 text-[9px] font-black text-amber-700 dark:text-amber-300">
-                                            ⏱️ {duration} dk
-                                          </span>
-                                        )}
-
-                                        <span className={`shrink-0 px-1.5 py-0.2 rounded text-[9px] ${theme.badge}`}>
-                                          {isBlacklistApt && isPending
-                                            ? "🚨 KAPORA"
-                                            : isPending
-                                            ? "⏳ Onay Bekliyor"
-                                            : isCompleted
-                                            ? "Geldi ✅"
-                                            : "✅ Onaylandı"}
-                                        </span>
-
-                                        <span className="text-[10px] text-stone-500 dark:text-stone-300 hidden md:inline truncate">
-                                          • {apt.barberName}
-                                        </span>
-                                      </div>
-
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <span className={`font-mono text-xs font-black mr-0.5 ${theme.price}`}>
-                                          {apt.totalPrice} TL
-                                        </span>
-                                        {isBlacklistApt && isPending && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              confirmAppointment(apt.id);
-                                              triggerToast(
-                                                `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
-                                                "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-                                                "success"
-                                              );
-                                            }}
-                                            className="rounded bg-emerald-600 hover:bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-white transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
-                                            title="Kaporayı onaylayın"
-                                          >
-                                            ✅ Onayla
-                                          </button>
-                                        )}
-                                        {!isBlacklistApt && isPending && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              confirmAppointment(apt.id);
-                                              triggerToast(
-                                                `${apt.customerName} — Onaylandı ✅`,
-                                                "Randevu onaylandı.",
-                                                "success"
-                                              );
-                                            }}
-                                            className="rounded bg-emerald-600 hover:bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-white transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
-                                          >
-                                            Onayla
-                                          </button>
-                                        )}
-                                        {!isPending && !isCompleted && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleComplete(apt);
-                                              triggerToast(
-                                                "Randevu Tamamlandı ✅",
-                                                `${apt.customerName} geldi ve işlem tamamlandı.`,
-                                                "success"
-                                              );
-                                            }}
-                                            className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer shrink-0"
-                                            title="Müşteri Geldi"
-                                          >
-                                            Geldi
-                                          </button>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMobileRescheduleApt(apt);
-                                          }}
-                                          className="rounded border border-stone-300 dark:border-white/10 bg-stone-100 dark:bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-white/15 transition cursor-pointer shrink-0"
-                                          title="Randevuyu Başka Saate Taşı"
-                                        >
-                                          Taşı
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {/* Alt Satır: Hizmetler & Telefon */}
-                                    <div className="flex items-center justify-between gap-1 min-w-0 text-[11px] text-stone-600 dark:text-stone-300">
-                                      <span className="truncate min-w-0">
-                                        ✂️ {servicesSummary}
-                                      </span>
-                                      <span className="font-mono text-[9px] shrink-0 ml-1 font-bold">
-                                        📞 {formatPhoneDisplay(apt.customerPhone)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                            slotData.startingApts.map((apt) => {
+                              const geo = getTimelineCardGeometry(apt.id, slotTime);
+                              const isBlacklistApt =
+                                Boolean(apt.requiresDeposit) ||
+                                Boolean(apt.isBlacklisted) ||
+                                Boolean(isPhoneBlacklisted(apt.customerPhone));
+                              return (
+                                <TimelineAppointmentCard
+                                  key={apt.id}
+                                  apt={apt}
+                                  isBlacklistApt={isBlacklistApt}
+                                  offsetPx={geo.offsetPx}
+                                  heightPx={geo.heightPx}
+                                  slotCount={geo.slotCount}
+                                  lane={geo.lane}
+                                  lanes={geo.lanes}
+                                  onOpen={handleTimelineOpen}
+                                  onConfirm={handleTimelineConfirm}
+                                  onComplete={handleTimelineComplete}
+                                  onMove={handleTimelineMove}
+                                  onDragStartApt={handleTimelineDragStart}
+                                  onDragEndApt={handleTimelineDragEnd}
+                                />
+                              );
+                            })}
 
                           {/* 4. Tamamen Boş Saat (randevu/mola kaplamıyorsa). Kaplanan alt satırlarda HİÇBİR ŞEY render edilmez. */}
                           {!hasAnyContent && (
