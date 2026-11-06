@@ -797,58 +797,17 @@ export default function CustomerBookingPage() {
                 </span>
               </div>
 
-              {/* Usta / Koltuk Seçimi (1'den Fazla Personel Varsa Şık ve Kompakt Tablar) */}
-              {realBarbers.length > 1 && (
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
-                      <User className="h-3.5 w-3.5 text-[#dfc39e]" />
-                      <span>Berber / Koltuk Seçimi</span>
-                    </label>
-                    <span className="text-[10px] font-semibold text-[#dfc39e]">
-                      {selectedBarber?.chairName}
-                    </span>
+              {/* Seçilen Berber / Usta Bilgisi (İlk Adımda Seçilen Usta Geçerlidir) */}
+              {selectedBarber && (
+                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141417] px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-[#dfc39e]" />
+                    <span className="text-stone-400">Seçilen Berber:</span>
+                    <span className="font-bold text-[#fdf8f5]">{selectedBarber.name}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                    {realBarbers.map((barber) => {
-                      const isSelected = selectedBarber?.id === barber.id;
-                      return (
-                        <button
-                          key={barber.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedBarberId(barber.id);
-                            setSelectedSlot(null); // Usta değişince seçili saati sıfırla
-                          }}
-                          className={`flex items-center justify-between gap-1.5 rounded-xl border-2 px-3 py-2 text-left transition ${
-                            isSelected
-                              ? "border-[#f3e8dc] bg-[#1a191d] text-[#fdf8f5] shadow-lg shadow-[#dfc39e]/15"
-                              : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/20 hover:text-white"
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <span className="block truncate text-xs font-black text-[#fdf8f5]">
-                              {barber.name}
-                            </span>
-                            <span className="block truncate text-[10px] text-[#dfc39e]">
-                              {barber.chairName}
-                            </span>
-                          </div>
-                          <span
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                              isSelected
-                                ? "border-emerald-400 bg-emerald-500 text-[#081510]"
-                                : "border-white/20 bg-transparent"
-                            }`}
-                          >
-                            {isSelected && (
-                              <Check className="h-2.5 w-2.5 stroke-[3]" />
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <span className="rounded-md bg-[#dfc39e]/15 px-2 py-0.5 text-[11px] font-semibold text-[#dfc39e]">
+                    {selectedBarber.chairName}
+                  </span>
                 </div>
               )}
 
