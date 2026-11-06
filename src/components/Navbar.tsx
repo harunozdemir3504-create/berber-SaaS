@@ -73,7 +73,7 @@ export default function Navbar() {
             }
             className="group flex items-center gap-2.5 sm:gap-3"
           >
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-[#e6ccb2]/40 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25 transition-transform duration-300 group-hover:scale-105 sm:h-10 sm:w-10">
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-[#e6ccb2]/40 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] ring-2 ring-amber-500/40 shadow-md transition-transform duration-300 group-hover:scale-105 sm:h-10 sm:w-10">
               <Scissors className="h-4 w-4 -rotate-45 stroke-[2.3] sm:h-5 sm:w-5" />
               <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
                 <span
@@ -88,7 +88,7 @@ export default function Navbar() {
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <span
-                  className={`text-xs font-extrabold tracking-wider sm:text-base ${
+                  className={`text-sm font-extrabold tracking-tight sm:text-base ${
                     isShopAdmin && theme === "light"
                       ? "text-[#1a1a1a]"
                       : "bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-transparent"
@@ -132,7 +132,7 @@ export default function Navbar() {
         {/* Right Side Header Area — Strictly Separated: Zero Admin Links on Customer Route (/) */}
         {isShopAdmin ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* ☀️ / 🌙 Tema Değiştirme Butonu (Gündüz / Gece Modu) */}
+            {/* 1. ☀️ / 🌙 Tema Toggle İkon Butonu (w-9 h-9) */}
             <button
               type="button"
               onClick={toggleTheme}
@@ -142,40 +142,36 @@ export default function Navbar() {
                   : "Gündüz Moduna Geç (Aydınlık Tema)"
               }
               aria-label="Tema Değiştir"
-              className={`group inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition active:scale-95 sm:px-3 sm:py-2 sm:text-xs ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all active:scale-95 cursor-pointer ${
                 theme === "light"
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:border-amber-500/60 hover:bg-amber-500/20 shadow-sm"
-                  : "border-amber-400/40 bg-amber-500/15 text-amber-300 hover:border-amber-400/80 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10"
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20 shadow-sm"
+                  : "border-amber-400/30 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10"
               }`}
             >
               {theme === "light" ? (
-                <>
-                  <Moon className="h-3.5 w-3.5 text-indigo-600 transition-transform group-hover:-rotate-12 fill-indigo-600/20 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">Gece Modu</span>
-                  <span className="sm:hidden">Gece</span>
-                </>
+                <Moon className="h-4 w-4 text-indigo-600 fill-indigo-600/20" />
               ) : (
-                <>
-                  <Sun className="h-3.5 w-3.5 text-amber-400 transition-transform group-hover:rotate-45 fill-amber-400/20 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">Gündüz Modu</span>
-                  <span className="sm:hidden">Gündüz</span>
-                </>
+                <Sun className="h-4 w-4 text-amber-400 fill-amber-400/20" />
               )}
             </button>
 
+            {/* 2. Müşteri Vitrini Butonu (Kompakt ↗️ + Vitrin) */}
             <Link
               href={`/${currentShop.slug}?preview=1`}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition sm:px-3 sm:py-2 sm:text-xs ${
+              title="Müşteri Vitrinini Gör"
+              className={`flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
                 theme === "light"
-                  ? "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:border-sky-400 shadow-sm"
-                  : "border-sky-500/35 bg-sky-500/10 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
+                  ? "border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 shadow-sm"
+                  : "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20 hover:text-white"
               }`}
             >
-              <ExternalLink className="h-3.5 w-3.5 text-sky-500 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Müşteri Ekranı</span>
-              <span className="sm:hidden">Vitrin</span>
+              <ExternalLink className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+              <span className="hidden sm:inline">Vitrin</span>
             </Link>
+
+            {/* 3. Çıkış Butonu (Sadece kırmızımsı şık Logout ikonu - w-9 h-9) */}
             <button
+              type="button"
               onClick={() => {
                 lockAdminSession(currentShop.slug);
                 if (typeof window !== "undefined") {
@@ -183,14 +179,13 @@ export default function Navbar() {
                 }
               }}
               title="Oturumu Kapat / Çıkış Yap"
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition sm:px-3 sm:py-2 sm:text-xs ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all active:scale-95 cursor-pointer ${
                 theme === "light"
-                  ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400 shadow-sm"
-                  : "border-rose-500/35 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                  ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 shadow-sm"
+                  : "border-rose-500/35 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 hover:text-white shadow-sm shadow-rose-950/20"
               }`}
             >
-              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500" />
-              <span>Çıkış Yap</span>
+              <LogOut className="h-4 w-4 text-rose-500" />
             </button>
           </div>
         ) : isSuperAdmin ? (

@@ -1409,6 +1409,26 @@ export default function AdminDashboardPage() {
     });
   }, [realBarbers, appointments, todayDay.id]);
 
+  // Canlı Günlük Özet Şeridi (Mini Dashboard) Metrikleri
+  const todaySummaryMetrics = useMemo(() => {
+    const todayIso = todayDay.id;
+    const todayAllApts = appointments.filter(
+      (a) =>
+        !a.isBlockedSlot &&
+        resolveDayMetadata(a.dayId).id === todayIso &&
+        a.status !== "cancelled"
+    );
+    const revenue = todayAllApts.reduce(
+      (sum, a) => sum + (Number(a.totalPrice) || 0),
+      0
+    );
+    return {
+      revenue,
+      appointmentCount: todayAllApts.length,
+      activeBarbersCount: realBarbers.length,
+    };
+  }, [appointments, todayDay.id, realBarbers.length]);
+
   // Her Gün İçin Bekleyen Randevu Sayısı Rozeti (Badge) Hesaplayıcı
   const getPendingCountForDay = useCallback(
     (targetDayId: string) => {
@@ -1683,6 +1703,30 @@ export default function AdminDashboardPage() {
           )}
         </AnimatePresence>
 
+        {/* 2. CANLI GÜNLÜK ÖZET ŞERİDİ (MINI DASHBOARD) */}
+        <div className="mb-2.5 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar rounded-xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent px-3 py-2 text-xs shadow-sm">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-bold text-amber-700 dark:text-amber-400">💰 Bugün:</span>
+            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
+              {todaySummaryMetrics.revenue.toLocaleString("tr-TR")} ₺
+            </span>
+          </div>
+          <div className="h-3 w-px bg-stone-300 dark:bg-white/15 shrink-0" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-bold text-emerald-700 dark:text-emerald-400">✂️ Randevu:</span>
+            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
+              {todaySummaryMetrics.appointmentCount}
+            </span>
+          </div>
+          <div className="h-3 w-px bg-stone-300 dark:bg-white/15 shrink-0" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-bold text-sky-700 dark:text-sky-400">💺 Aktif:</span>
+            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
+              {todaySummaryMetrics.activeBarbersCount} Koltuk
+            </span>
+          </div>
+        </div>
+
         {/* ===================================================================== */}
         {/* SEKME 1: 📅 RANDEVULAR (VARSAYILAN ANA EKRAN — GÜN GÜN AYRIMLI)      */}
         {/* ===================================================================== */}
@@ -1918,110 +1962,94 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* 4. SIKILAŞTIRILMIŞ GÖRÜNÜM SEÇİCİ & SAAT KAPAT */}
-            <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 mb-1.5">
-              <div className="flex items-center rounded-xl border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#101012] p-0.5 shadow-sm">
+            {/* 4. BİRLEŞTİRİLMİŞ GÖRÜNÜM SEÇİCİ VE SAAT KAPAT SATIRI (TEK SATIR) */}
+            <div className="flex items-center justify-between gap-2 py-0.5 mb-1.5">
+              {/* Sol: Kompakt Geçiş Tuşu ([📅 Takvim | 📋 Liste]) */}
+              <div className="flex items-center rounded-xl border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#101012] p-0.5 shadow-sm shrink-0">
                 <button
                   type="button"
                   onClick={() => setViewMode("timeline")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
                     viewMode === "timeline"
                       ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
                       : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
                   }`}
                 >
                   <CalendarDays className="h-3.5 w-3.5" />
-                  <span>📅 Takvim Çizelgesi</span>
+                  <span>📅 Takvim</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
                     viewMode === "list"
                       ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
                       : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
                   }`}
                 >
                   <Clock className="h-3.5 w-3.5" />
-                  <span>📋 Liste Görünümü</span>
+                  <span>📋 Liste</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const defaultBarber = realBarbers[0]?.id || "";
-                    setBlockModal({
-                      isOpen: true,
-                      barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
-                      dayId: currentTimelineDayId,
-                      startTime: "13:00",
-                      endTime: "14:00",
-                      reason: "Yemek Molası",
-                    });
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-xs font-black text-amber-800 dark:text-amber-200 hover:bg-amber-500/25 transition active:scale-95 cursor-pointer shadow-sm"
-                >
-                  <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
-                  <span>⛔ Saat Kapat / Mola</span>
-                </button>
-              </div>
+              {/* Sağ: ⛔ Saat Kapat / Mola Butonu */}
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultBarber = realBarbers[0]?.id || "";
+                  setBlockModal({
+                    isOpen: true,
+                    barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
+                    dayId: currentTimelineDayId,
+                    startTime: "13:00",
+                    endTime: "14:00",
+                    reason: "Yemek Molası",
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-800 dark:text-amber-200 hover:bg-amber-500/25 transition active:scale-95 cursor-pointer shadow-sm shrink-0"
+              >
+                <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
+                <span>⛔ Saat Kapat / Mola</span>
+              </button>
             </div>
 
             {/* ===================================================================== */}
             {/* GÖRÜNÜM A: 📅 SAATLİK TAKVİM ÇİZELGESİ (TIMELINE SATIRLARI)          */}
             {/* ===================================================================== */}
             {viewMode === "timeline" && (
-              <div className="w-full max-w-full overflow-hidden box-border space-y-3 rounded-3xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-3 sm:p-4 shadow-xl">
-                <div className="flex flex-col gap-2 border-b border-stone-200 dark:border-white/10 pb-3 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-amber-700 dark:text-[#dfc39e]">
-                        ⏰ 30 Dakikalık Zaman Çizelgesi
-                      </span>
-                      <span className="rounded-md bg-stone-100 dark:bg-white/5 border border-stone-300 dark:border-white/10 px-2 py-0.5 text-[10px] text-stone-700 dark:text-stone-300 font-bold">
-                        {resolveDayMetadata(currentTimelineDayId).chipLabel}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-amber-600 dark:text-amber-300/90 font-bold">
-                      🖐️ Kartı tutup boş bir saate sürükleyip bırakabilirsiniz
+              <div className="w-full max-w-full overflow-hidden box-border rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-2 sm:p-3 shadow-xl">
+                {/* Eğer tüm günler seçiliyse çizelge için hızlı gün değiştirici */}
+                {adminDayMode === "all" && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-stone-200 dark:border-white/10">
+                    <span className="shrink-0 text-[10px] font-bold text-stone-500 dark:text-stone-400">
+                      Çizelge Günü:
                     </span>
+                    {liveDays.slice(0, 5).map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          if (d.id === todayDay.id) setAdminDayMode("today");
+                          else if (d.id === tomorrowDay.id) setAdminDayMode("tomorrow");
+                          else {
+                            setAdminDayMode("calendar");
+                            setSelectedCalendarDayId(d.id);
+                          }
+                        }}
+                        className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-black transition cursor-pointer ${
+                          currentTimelineDayId === d.id
+                            ? "bg-[#dfc39e] text-[#1a110b]"
+                            : "bg-stone-100 dark:bg-white/5 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {d.chipLabel}
+                      </button>
+                    ))}
                   </div>
-
-                  {/* Eğer tüm günler seçiliyse çizelge için hızlı gün değiştirici */}
-                  {adminDayMode === "all" && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-                      <span className="shrink-0 text-[10px] font-bold text-stone-500 dark:text-stone-400">
-                        Çizelge Günü:
-                      </span>
-                      {liveDays.slice(0, 5).map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => {
-                            if (d.id === todayDay.id) setAdminDayMode("today");
-                            else if (d.id === tomorrowDay.id) setAdminDayMode("tomorrow");
-                            else {
-                              setAdminDayMode("calendar");
-                              setSelectedCalendarDayId(d.id);
-                            }
-                          }}
-                          className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-black transition ${
-                            currentTimelineDayId === d.id
-                              ? "bg-[#dfc39e] text-[#1a110b]"
-                              : "bg-stone-100 dark:bg-white/5 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-white/10"
-                          }`}
-                        >
-                          {d.chipLabel}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                )}
 
                 {/* Çizelge Satırları - Her saat alt alta dizilen, asla kaymayan standart satır */}
-                <div className="w-full max-w-full box-border border-t border-stone-200 dark:border-white/10">
+                <div className="w-full max-w-full box-border border-stone-200 dark:border-white/10">
                   {timelineSlots.map((slotTime) => {
                     const slotData = timelineSlotMap.get(slotTime) || {
                       startingApts: [],
