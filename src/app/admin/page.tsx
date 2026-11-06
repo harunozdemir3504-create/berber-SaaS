@@ -901,14 +901,17 @@ export default function AdminDashboardPage() {
         const isCovered = slotM < endM && slotM + slotInterval > startM;
         if (!isCovered) return;
 
+        // Randevu bu 30 dk'lık dilimin içinde başlıyorsa "başlangıç satırı" burasıdır
+        const startsHere = startM >= slotM && startM < slotM + slotInterval;
+
         if (apt.isBlockedSlot) {
-          if (startM === slotM) {
+          if (startsHere) {
             startingBlocks.push(apt);
           } else {
             ongoingBlocks.push(apt);
           }
         } else {
-          if (startM === slotM) {
+          if (startsHere) {
             startingApts.push(apt);
           } else {
             ongoingApts.push(apt);
@@ -940,6 +943,68 @@ export default function AdminDashboardPage() {
 
     return map;
   }, [timelineAppointments, timelineSlots, adminStaffFilter, realBarbers]);
+
+  // Kesintisiz tek blok kartlar için yerleşim: her kayıt için başlangıç/bitiş dakikası,
+  // çakışan kayıtlar (farklı berberler) yan yana şeritlere (lane) bölünür.
+  const timelineBlockLayout = useMemo(() => {
+    const items = timelineAppointments
+      .map((apt) => {
+        const startM = timeToMinutes(apt.time);
+        const dur = apt.totalDuration || 30;
+        const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+        return { id: apt.id, startM, endM: Math.max(endM, startM + 30) };
+      })
+      .sort((a, b) => a.startM - b.startM || b.endM - a.endM);
+
+    const layout = new Map<string, { startM: number; endM: number; lane: number; lanes: number }>();
+    let cluster: { id: string; startM: number; endM: number; lane: number }[] = [];
+    let laneEnds: number[] = [];
+    let clusterEnd = -1;
+
+    const flush = () => {
+      const lanes = Math.max(1, laneEnds.length);
+      cluster.forEach((c) => layout.set(c.id, { startM: c.startM, endM: c.endM, lane: c.lane, lanes }));
+      cluster = [];
+      laneEnds = [];
+    };
+
+    items.forEach((it) => {
+      if (cluster.length > 0 && it.startM >= clusterEnd) flush();
+      let lane = laneEnds.findIndex((end) => end <= it.startM);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(it.endM);
+      } else {
+        laneEnds[lane] = it.endM;
+      }
+      cluster.push({ ...it, lane });
+      clusterEnd = Math.max(cluster.length === 1 ? it.endM : clusterEnd, it.endM);
+    });
+    if (cluster.length > 0) flush();
+
+    return layout;
+  }, [timelineAppointments]);
+
+  // 30 dk = 64px (h-16). Kart, başladığı satırdan süresi kadar aşağı tek parça uzanır.
+  const TIMELINE_SLOT_PX = 64;
+  const getTimelineBlockStyle = (id: string, slotTime: string): React.CSSProperties => {
+    const info = timelineBlockLayout.get(id);
+    const slotM = timeToMinutes(slotTime);
+    const startM = info?.startM ?? slotM;
+    const endM = info?.endM ?? slotM + 30;
+    const lane = info?.lane ?? 0;
+    const lanes = info?.lanes ?? 1;
+    const offsetPx = ((startM - slotM) / 30) * TIMELINE_SLOT_PX;
+    const heightPx = ((endM - startM) / 30) * TIMELINE_SLOT_PX;
+    return {
+      position: "absolute",
+      top: `${2 + offsetPx}px`,
+      height: `calc(${heightPx}px - 4px)`,
+      left: lanes > 1 ? `calc(${(lane / lanes) * 100}% + ${lane > 0 ? 2 : 0}px)` : 0,
+      right: lanes > 1 ? `calc(${((lanes - lane - 1) / lanes) * 100}% + ${lane < lanes - 1 ? 2 : 0}px)` : 0,
+      zIndex: 10,
+    };
+  };
 
   // Gündüz (Light) ve Gece (Dark) Moduna Uyumlu Dinamik Müşteri Kartı Renkleri
   const getAppointmentCardTheme = (apt: Appointment) => {
@@ -2070,7 +2135,7 @@ export default function AdminDashboardPage() {
             {/* GÖRÜNÜM A: 📅 SAATLİK TAKVİM ÇİZELGESİ (TIMELINE SATIRLARI)          */}
             {/* ===================================================================== */}
             {viewMode === "timeline" && (
-              <div className="space-y-3 rounded-3xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-3 sm:p-4 shadow-xl">
+              <div className="w-full max-w-full overflow-hidden box-border space-y-3 rounded-3xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-3 sm:p-4 shadow-xl">
                 <div className="flex flex-col gap-2 border-b border-stone-200 dark:border-white/10 pb-3 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -2118,7 +2183,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Çizelge Satırları - Her saat alt alta dizilen, asla kaymayan standart satır */}
-                <div className="divide-y divide-stone-200 dark:divide-white/10 border-t border-stone-200 dark:border-white/10">
+                <div className="w-full max-w-full box-border border-t border-stone-200 dark:border-white/10">
                   {timelineSlots.map((slotTime) => {
                     const slotData = timelineSlotMap.get(slotTime) || {
                       startingApts: [],
@@ -2139,14 +2204,14 @@ export default function AdminDashboardPage() {
                     return (
                       <div
                         key={`timeline-row-${slotTime}`}
-                        className="flex items-center min-h-[56px] py-1 border-b border-stone-200 dark:border-white/10 transition-colors"
+                        className="relative flex items-stretch h-16 w-full max-w-full box-border border-b border-stone-200 dark:border-white/10 transition-colors"
                       >
-                        {/* Sol Sütun (w-16 shrink-0): Saat yazısı tam ortalı ve sabit */}
-                        <div className="w-16 shrink-0 flex items-center justify-center font-mono text-xs font-bold text-stone-500 dark:text-stone-400 select-none">
+                        {/* Sol Sütun (w-16 shrink-0): Saat yazısı her satırda sabit h-16 */}
+                        <div className="w-16 h-16 shrink-0 flex items-center justify-center font-mono text-xs font-bold text-stone-500 dark:text-stone-400 select-none">
                           {slotTime}
                         </div>
 
-                        {/* Sağ Sütun (flex-1 pl-2): Boşsa bg-transparent, doluysa doğrudan içine oturan kart */}
+                        {/* Sağ Sütun: Randevu kartı başladığı satırda absolute olarak yerleşir ve süresi kadar aşağı uzanır */}
                         <div
                           onDragOver={(e) => {
                             e.preventDefault();
@@ -2164,23 +2229,23 @@ export default function AdminDashboardPage() {
                             e.preventDefault();
                             handleDropOnSlot(slotTime);
                           }}
-                          className={`flex-1 pl-2 pr-1 min-h-[48px] flex items-center transition-colors bg-transparent ${
+                          className={`relative flex-1 min-w-0 max-w-full h-16 ml-2 mr-1 box-border flex items-center transition-colors bg-transparent ${
                             isDragTarget
-                              ? "bg-emerald-500/10 border-2 border-dashed border-emerald-500 rounded-lg"
+                              ? "bg-emerald-500/10 outline-2 outline-dashed outline-emerald-500 rounded-lg"
                               : ""
                           }`}
                         >
-                          {/* 1. Kilitli / Mola Saatleri Başlangıcı */}
-                          {hasStartingBlocks && (
-                            <div className="w-full space-y-1.5">
-                              {slotData.startingBlocks.map((blk) => (
+                          {/* 1. Kilitli / Mola Saatleri Başlangıcı (tek parça blok) */}
+                          {hasStartingBlocks &&
+                            slotData.startingBlocks.map((blk) => (
                                 <div
                                   key={blk.id}
-                                  className="w-full rounded-lg p-2.5 flex items-center justify-between gap-2 bg-stone-100 dark:bg-[#161618] border border-stone-300 dark:border-stone-600/50 shadow-sm"
+                                  style={getTimelineBlockStyle(blk.id, slotTime)}
+                                  className="w-auto max-w-full overflow-hidden box-border rounded-lg px-2.5 py-2 flex items-start justify-between gap-2 bg-stone-100 dark:bg-[#161618] border border-stone-300 dark:border-stone-600/50 shadow-sm"
                                 >
-                                  <div className="flex items-center gap-2 min-w-0">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                                     <Lock className="h-4 w-4 text-stone-500 dark:text-stone-400 shrink-0" />
-                                    <div className="min-w-0">
+                                    <div className="min-w-0 flex-1 overflow-hidden">
                                       <span className="text-xs font-black text-stone-800 dark:text-stone-200 block truncate">
                                         ⛔ Mola / Kapalı: {blk.blockReason || "Kapalı Saat"}
                                       </span>
@@ -2206,17 +2271,10 @@ export default function AdminDashboardPage() {
                                   </button>
                                 </div>
                               ))}
-                            </div>
-                          )}
 
-                          {/* 2. Bu Saatte Başlayan Randevular */}
-                          {hasStartingApts && (
-                            <div
-                              className={`w-full grid gap-1.5 ${
-                                slotData.startingApts.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
-                              }`}
-                            >
-                              {slotData.startingApts.map((apt) => {
+                          {/* 2. Bu Saatte Başlayan Randevular (süresi kadar alt satırları tek parça kaplar) */}
+                          {hasStartingApts &&
+                              slotData.startingApts.map((apt) => {
                                 const duration = apt.totalDuration || 30;
                                 const isCompleted = apt.status === "completed";
                                 const isPending = apt.status === "pending";
@@ -2230,6 +2288,7 @@ export default function AdminDashboardPage() {
                                 return (
                                   <div
                                     key={apt.id}
+                                    style={getTimelineBlockStyle(apt.id, slotTime)}
                                     draggable={!isPending && !isBlacklistApt}
                                     onDragStart={(e) => {
                                       dragMovedRef.current = true;
@@ -2247,22 +2306,22 @@ export default function AdminDashboardPage() {
                                       if (dragMovedRef.current) return;
                                       setSelectedDetailApt(apt);
                                     }}
-                                    className={`w-full rounded-lg p-2.5 flex flex-col justify-between gap-1.5 transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e] active:scale-[0.99] select-none ${theme.container}`}
+                                    className={`max-w-full overflow-hidden box-border rounded-lg px-2.5 py-1.5 flex flex-col justify-between gap-1 transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e] select-none ${theme.container}`}
                                   >
                                     {/* Üst Satır */}
                                     <div className="flex items-center justify-between gap-1.5 min-w-0">
-                                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                      <div className="flex flex-nowrap items-center gap-1.5 min-w-0 overflow-hidden">
                                         <span className={`truncate text-xs sm:text-sm font-black ${theme.title}`}>
                                           {apt.customerName}
                                         </span>
 
                                         {duration > 30 && (
-                                          <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1 py-0.2 text-[9px] font-black text-amber-700 dark:text-amber-300">
+                                          <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1 py-0.2 text-[9px] font-black text-amber-700 dark:text-amber-300">
                                             ⏱️ {duration} dk
                                           </span>
                                         )}
 
-                                        <span className={`px-1.5 py-0.2 rounded text-[9px] ${theme.badge}`}>
+                                        <span className={`shrink-0 px-1.5 py-0.2 rounded text-[9px] ${theme.badge}`}>
                                           {isBlacklistApt && isPending
                                             ? "🚨 KAPORA"
                                             : isPending
@@ -2349,8 +2408,8 @@ export default function AdminDashboardPage() {
                                     </div>
 
                                     {/* Alt Satır: Hizmetler & Telefon */}
-                                    <div className="flex items-center justify-between text-[11px] text-stone-600 dark:text-stone-300">
-                                      <span className="truncate">
+                                    <div className="flex items-center justify-between gap-1 min-w-0 text-[11px] text-stone-600 dark:text-stone-300">
+                                      <span className="truncate min-w-0">
                                         ✂️ {servicesSummary}
                                       </span>
                                       <span className="font-mono text-[9px] shrink-0 ml-1 font-bold">
@@ -2360,66 +2419,11 @@ export default function AdminDashboardPage() {
                                   </div>
                                 );
                               })}
-                            </div>
-                          )}
 
-                          {/* 3. Süre 60 dk veya daha uzun olup bu saatte DEVAM EDEN randevular / molalar */}
-                          {!hasStartingApts && !hasStartingBlocks && hasOngoingBlocks && (
-                            <div className="w-full space-y-1">
-                              {slotData.ongoingBlocks.map((blk) => (
-                                <div
-                                  key={`cont-blk-${blk.id}-${slotTime}`}
-                                  className="w-full rounded-lg px-3 py-2 flex items-center justify-between bg-stone-100/70 dark:bg-white/5 border border-dashed border-stone-300 dark:border-white/10 text-xs text-stone-500 dark:text-stone-400"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Lock className="h-3.5 w-3.5 text-stone-400 shrink-0" />
-                                    <span className="font-medium">
-                                      ⏳ Mola Devam Ediyor: {blk.blockReason || "Kapalı"} ({blk.time} - {blk.endTime})
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] font-mono">{blk.barberName}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {!hasStartingApts && !hasStartingBlocks && !hasOngoingBlocks && hasOngoingApts && (
-                            <div className="w-full space-y-1">
-                              {slotData.ongoingApts.map((apt) => (
-                                <div
-                                  key={`cont-apt-${apt.id}-${slotTime}`}
-                                  onClick={() => setSelectedDetailApt(apt)}
-                                  className={`w-full rounded-lg px-3 py-2 flex items-center justify-between border border-dashed border-l-4 cursor-pointer transition hover:opacity-95 ${
-                                    apt.status === "pending"
-                                      ? "bg-amber-50/70 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700/50 border-l-amber-500 text-stone-900 dark:text-amber-200"
-                                      : "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-700/50 border-l-emerald-500 text-stone-900 dark:text-emerald-200"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-xs font-black truncate">
-                                      ⏳ Devam Ediyor: {apt.customerName}
-                                    </span>
-                                    <span className="text-[10px] opacity-80 shrink-0">
-                                      ({apt.time} - {apt.endTime || minutesToTime(timeToMinutes(apt.time) + (apt.totalDuration || 30))})
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
-                                      💈 {apt.barberName}
-                                    </span>
-                                    <span className="text-[11px] font-bold opacity-75">
-                                      Detay &rarr;
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* 4. Tamamen Boş Saat: Kesinlikle arka plan rengi yok (bg-transparent) */}
+                          {/* 4. Tamamen Boş Saat (randevu/mola kaplamıyorsa). Kaplanan alt satırlarda HİÇBİR ŞEY render edilmez. */}
                           {!hasAnyContent && (
-                            <div className="flex items-center justify-between w-full h-full py-1.5 transition-opacity opacity-75 hover:opacity-100 bg-transparent">
-                              <span className="text-[11px] font-medium text-stone-500 dark:text-stone-400">
+                            <div className="flex items-center justify-between gap-2 w-full max-w-full min-w-0 overflow-hidden box-border h-full transition-opacity opacity-75 hover:opacity-100 bg-transparent">
+                              <span className="truncate min-w-0 text-[11px] font-medium text-stone-500 dark:text-stone-400">
                                 {isDragTarget
                                   ? "📍 Buraya Bırakın!"
                                   : adminStaffFilter === "all" && slotData.freeBarbers.length > 0
@@ -2427,7 +2431,7 @@ export default function AdminDashboardPage() {
                                   : "• Boş"}
                               </span>
 
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => {
