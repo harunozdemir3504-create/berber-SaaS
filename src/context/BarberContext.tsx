@@ -1290,15 +1290,22 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
       const slots: TimeSlot[] = [];
 
-      // O güne ait aktif randevular (iptal ve no-show hariç)
-      const dayAppointments = appointments.filter((a) => {
-        const aptDayId = resolveDayMetadata(a.dayId).id;
-        return (
-          aptDayId === targetDayId &&
-          a.status !== "cancelled" &&
-          a.status !== "no_show"
-        );
-      });
+      // O güne ait aktif randevuların dakika aralıklarını bir kere hesapla (Ultra hızlı O(1) karşılaştırma)
+      const dayAppointments = appointments
+        .filter((a) => {
+          const aptDayId = resolveDayMetadata(a.dayId).id;
+          return (
+            aptDayId === targetDayId &&
+            a.status !== "cancelled" &&
+            a.status !== "no_show"
+          );
+        })
+        .map((a) => {
+          const startM = timeToMinutes(a.time);
+          const dur = a.totalDuration || 30;
+          const endM = a.endTime ? timeToMinutes(a.endTime) : startM + dur;
+          return { ...a, startM, endM };
+        });
 
       for (let m = startMins; m + interval <= endMins; m += interval) {
         const timeLabel = minutesToTime(m);
@@ -1327,9 +1334,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           ) {
             return false;
           }
-          const bStart = timeToMinutes(a.time);
-          const bEnd = timeToMinutes(a.endTime);
-          return m >= bStart && m < bEnd;
+          return m < a.endM && m + interval > a.startM;
         });
 
         if (shopBlock) {
@@ -1342,10 +1347,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           continue;
         }
 
-        // 2. Personel / Koltuk Bazlı Doluluk Kontrolü
+        // 2. Personel / Koltuk Bazlı Doluluk Kontrolü (60 dk ve uzun randevuların tüm kapsadığı aralıklar dahil!)
         if (barberId && barberId !== "any") {
-          // Belirli bir berber seçilmişse (Örn: Harun Usta):
-          // SADECE ve SADECE o berberin o saatteki randevusunu kontrol et!
           const activeApt = dayAppointments.find((a) => {
             if (a.isBlockedSlot) return false;
             const matchBarber =
@@ -1353,7 +1356,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               (a.barberName &&
                 a.barberName.toLowerCase().includes(barberId.toLowerCase()));
             if (!matchBarber) return false;
-            return a.time === timeLabel;
+            return m < a.endM && m + interval > a.startM;
           });
 
           if (activeApt) {
@@ -1372,10 +1375,13 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           // "Fark Etmez / Tümü":
-          // Bir saat sadece salondaki TÜM ustalar doluysa "dolu" sayılır; en az 1 usta boşsa saat boştur!
+          // Bir saat sadece salondaki TÜM ustalar meşgulse dolu sayılır; en az 1 usta boşsa saat boştur!
           const bookedBarberIds = new Set(
             dayAppointments
-              .filter((a) => !a.isBlockedSlot && a.time === timeLabel)
+              .filter((a) => {
+                if (a.isBlockedSlot) return false;
+                return m < a.endM && m + interval > a.startM;
+              })
               .map((a) => a.barberId)
           );
 

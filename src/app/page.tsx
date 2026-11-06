@@ -249,21 +249,63 @@ export default function CustomerBookingPage() {
     );
   }, [selectedDay]);
 
+  const selectedServices = useMemo(
+    () => services.filter((s) => selectedServiceIds.includes(s.id)),
+    [services, selectedServiceIds]
+  );
+
+  const totalPrice = useMemo(
+    () =>
+      selectedServices.reduce(
+        (sum, item) => sum + getServicePriceForBarber(item, selectedBarber),
+        0
+      ),
+    [selectedServices, selectedBarber, getServicePriceForBarber]
+  );
+
+  const totalDuration = useMemo(
+    () => Math.max(30, selectedServices.reduce((sum, item) => sum + item.duration, 0)),
+    [selectedServices]
+  );
+
   // Sadece boş (müsait) saatler
   const availableDaySlots = useMemo(
     () => currentDaySlots.filter((s) => s.state === "available"),
     [currentDaySlots]
   );
 
-  // Bugün ise geçmiş saatleri eleyerek gerçek alınabilir boş saatleri bul
+  // Seçilen süreye (örn: 60 dk) ve çalışma saatlerine göre gerçek alınabilir slotlar
   const validAvailableSlots = useMemo(() => {
+    const closeM = shopSettings?.closeTime ? timeToMinutes(shopSettings.closeTime) : 21 * 60;
+    const step = 30;
+    const requiredBlocks = Math.ceil(totalDuration / step);
+
     return availableDaySlots.filter((slot) => {
-      if (isSelectedDayToday) {
-        return !isSlotPassedOrImminent(slot.time, true);
+      // 1. Bugün ise geçmiş saatleri ele
+      if (isSelectedDayToday && isSlotPassedOrImminent(slot.time, true)) {
+        return false;
       }
+
+      // 2. Kapanış saatini aşıyor mu?
+      const startM = timeToMinutes(slot.time);
+      if (startM + totalDuration > closeM) {
+        return false;
+      }
+
+      // 3. 60 dk ve üzeri randevularda ardışık tüm slotların boş olduğunu doğrula
+      if (requiredBlocks > 1) {
+        for (let i = 1; i < requiredBlocks; i++) {
+          const nextTime = minutesToTime(startM + i * step);
+          const nextSlot = currentDaySlots.find((s) => s.time === nextTime);
+          if (!nextSlot || nextSlot.state !== "available") {
+            return false;
+          }
+        }
+      }
+
       return true;
     });
-  }, [availableDaySlots, isSelectedDayToday, isSlotPassedOrImminent]);
+  }, [availableDaySlots, isSelectedDayToday, isSlotPassedOrImminent, totalDuration, shopSettings?.closeTime, currentDaySlots]);
 
   // Geçmiş bir saat seçilmişse seçimi temizle
   useEffect(() => {
@@ -289,24 +331,6 @@ export default function CustomerBookingPage() {
     [shopSettings.closedDays, selectedDay.dayOfWeek]
   );
 
-  const selectedServices = useMemo(
-    () => services.filter((s) => selectedServiceIds.includes(s.id)),
-    [services, selectedServiceIds]
-  );
-
-  const totalPrice = useMemo(
-    () =>
-      selectedServices.reduce(
-        (sum, item) => sum + getServicePriceForBarber(item, selectedBarber),
-        0
-      ),
-    [selectedServices, selectedBarber, getServicePriceForBarber]
-  );
-
-  const totalDuration = useMemo(
-    () => selectedServices.reduce((sum, item) => sum + item.duration, 0),
-    [selectedServices]
-  );
 
   const blacklistRecord = useMemo(
     () => isPhoneBlacklisted(customerPhone),

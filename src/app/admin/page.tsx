@@ -868,29 +868,115 @@ export default function AdminDashboardPage() {
     return slots;
   }, [shopSettings?.openTime, shopSettings?.closeTime, timelineAppointments]);
 
-  // Çoklu personel / koltuk destekli randevu eşlemesi (birden fazla berber aynı saatte randevu alabilir)
-  const { slotAppointmentsMap, occupiedSlotsSet } = useMemo(() => {
-    const slotMap = new Map<string, Appointment[]>();
-    const occupied = new Set<string>();
+  // Çizelgede gösterilecek aktif ustalar (Tek usta veya tüm kadro)
+  const timelineBarbers = useMemo(() => {
+    if (adminStaffFilter === "all") return realBarbers;
+    const found = realBarbers.filter((b) => b.id === adminStaffFilter);
+    return found.length > 0 ? found : realBarbers;
+  }, [realBarbers, adminStaffFilter]);
 
-    timelineAppointments.forEach((apt) => {
-      const list = slotMap.get(apt.time) || [];
-      list.push(apt);
-      slotMap.set(apt.time, list);
-
-      // Uzun randevuların (60 dk vb.) kapladığı slotlar
-      const duration = apt.totalDuration || 30;
-      if (duration > 30) {
-        const startM = timeToMinutes(apt.time);
-        const steps = Math.ceil(duration / 30);
-        for (let i = 1; i < steps; i++) {
-          occupied.add(minutesToTime(startM + i * 30));
+  // Çoklu personel / koltuk destekli ultra-hızlı O(1) Timeline Izgara Haritası
+  const timelineGridMap = useMemo(() => {
+    const gridMap = new Map<
+      string,
+      Map<
+        string,
+        {
+          startingApt?: Appointment;
+          ongoingApt?: Appointment;
+          startingBlock?: Appointment;
+          ongoingBlock?: Appointment;
+          isFree: boolean;
         }
-      }
+      >
+    >();
+
+    // Randevuların dakika aralıklarını bir kere önceden hesapla (0 gecikme)
+    const parsedApts = timelineAppointments.map((apt) => {
+      const startM = timeToMinutes(apt.time);
+      const dur = apt.totalDuration || 30;
+      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+      return { apt, startM, endM };
     });
 
-    return { slotAppointmentsMap: slotMap, occupiedSlotsSet: occupied };
-  }, [timelineAppointments]);
+    timelineSlots.forEach((slotTime) => {
+      const slotM = timeToMinutes(slotTime);
+      const slotInterval = 30;
+      const barberMap = new Map<
+        string,
+        {
+          startingApt?: Appointment;
+          ongoingApt?: Appointment;
+          startingBlock?: Appointment;
+          ongoingBlock?: Appointment;
+          isFree: boolean;
+        }
+      >();
+
+      timelineBarbers.forEach((barber) => {
+        // Bu koltuğa/berbere ait randevuyu bul
+        const aptItem = parsedApts.find(({ apt, startM, endM }) => {
+          if (apt.isBlockedSlot) return false;
+          const match =
+            !apt.barberId ||
+            apt.barberId === "any" ||
+            apt.barberId === barber.id ||
+            (apt.barberName &&
+              apt.barberName.toLowerCase().includes(barber.name.toLowerCase()));
+          if (!match) return false;
+          return slotM < endM && slotM + slotInterval > startM;
+        });
+
+        // Blokaj (mola/kapalı saat) kontrolü
+        const blockItem = parsedApts.find(({ apt, startM, endM }) => {
+          if (!apt.isBlockedSlot) return false;
+          const match =
+            !apt.barberId ||
+            apt.barberId === "all" ||
+            apt.barberId === barber.id ||
+            (apt.barberName &&
+              apt.barberName.toLowerCase().includes(barber.name.toLowerCase()));
+          if (!match) return false;
+          return slotM < endM && slotM + slotInterval > startM;
+        });
+
+        let startingApt: Appointment | undefined;
+        let ongoingApt: Appointment | undefined;
+        let startingBlock: Appointment | undefined;
+        let ongoingBlock: Appointment | undefined;
+
+        if (aptItem) {
+          if (aptItem.startM === slotM) {
+            startingApt = aptItem.apt;
+          } else {
+            ongoingApt = aptItem.apt;
+          }
+        }
+
+        if (blockItem) {
+          if (blockItem.startM === slotM) {
+            startingBlock = blockItem.apt;
+          } else {
+            ongoingBlock = blockItem.apt;
+          }
+        }
+
+        const isFree = !startingApt && !ongoingApt && !startingBlock && !ongoingBlock;
+
+        barberMap.set(barber.id, {
+          startingApt,
+          ongoingApt,
+          startingBlock,
+          ongoingBlock,
+          isFree,
+        });
+      });
+
+      gridMap.set(slotTime, barberMap);
+    });
+
+    return gridMap;
+  }, [timelineAppointments, timelineSlots, timelineBarbers]);
 
   // Sürükle-Bırak (Drop) Olayı ve Çakışma Kontrolü
   const handleDropOnSlot = (targetTime: string) => {
@@ -2007,11 +2093,38 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
+                {/* Çoklu Koltuk / Usta Sütun Başlıkları (Tümü Seçiliyken) */}
+                {adminStaffFilter === "all" && timelineBarbers.length > 1 && (
+                  <div className="grid grid-cols-[70px_1fr] bg-[#121215] border-t border-b border-white/10 text-xs py-2 px-1 sticky top-0 z-40 shadow-md">
+                    <div className="w-[70px] text-stone-500 font-mono text-[10px] font-black text-center flex items-center justify-center">
+                      SAAT
+                    </div>
+                    <div
+                      className="grid gap-2 px-2"
+                      style={{
+                        gridTemplateColumns: `repeat(${timelineBarbers.length}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {timelineBarbers.map((b) => (
+                        <div
+                          key={b.id}
+                          className="flex items-center justify-center gap-1.5 font-black text-[#dfc39e] truncate px-2.5 py-1.5 bg-[#1a181c] rounded-xl border border-white/10 shadow-sm"
+                        >
+                          <User className="h-3.5 w-3.5 text-[#dfc39e] shrink-0" />
+                          <span className="truncate">{b.name}</span>
+                          <span className="text-[10px] text-stone-400 font-bold truncate">
+                            ({b.chairName})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="relative border-t border-white/10 dark:border-white/10">
                   {timelineSlots.map((slotTime) => {
-                    const apts = slotAppointmentsMap.get(slotTime) || [];
-                    const hasAppointments = apts.length > 0;
                     const isDragTarget = dragOverSlotTime === slotTime;
+                    const barberCellsMap = timelineGridMap.get(slotTime);
 
                     return (
                       <div
@@ -2023,7 +2136,7 @@ export default function AdminDashboardPage() {
                           {slotTime}
                         </div>
 
-                        {/* SAĞ SÜTUN: Kesin ve sabit 60px relative hücre */}
+                        {/* SAĞ SÜTUN: Koltuk / Usta Hücreleri */}
                         <div
                           onDragOver={(e) => {
                             e.preventDefault();
@@ -2041,20 +2154,29 @@ export default function AdminDashboardPage() {
                             e.preventDefault();
                             handleDropOnSlot(slotTime);
                           }}
-                          className={`relative h-[60px] px-2 flex items-center justify-between transition-colors bg-transparent ${
+                          className={`relative h-[60px] px-2 transition-colors ${
                             isDragTarget
                               ? "bg-emerald-500/10 border border-emerald-400 rounded-lg"
-                              : ""
+                              : "bg-transparent"
                           }`}
                         >
-                          {/* DOLU SAATLER: Bu saatte başlayan randevular absolute olarak tam satırının üzerine oturur */}
-                          {hasAppointments ? (
-                            <div className="absolute top-[2px] left-1 right-1 z-10 grid grid-cols-1 sm:grid-cols-2 gap-1.5 pointer-events-auto">
-                              {apts.map((apt) => {
-                                const duration = apt.totalDuration || 30;
-                                // 30 dk -> h-[56px] (60px satır içine 2px payla oturur)
-                                // 60 dk -> h-[116px] (tam 2 slot kaplar: 60px + 60px - 4px = 116px!)
-                                // 90 dk -> h-[176px] (3 slot = 180px - 4px = 176px!)
+                          <div
+                            className="grid gap-2 h-[60px] w-full relative"
+                            style={{
+                              gridTemplateColumns: `repeat(${timelineBarbers.length}, minmax(0, 1fr))`,
+                            }}
+                          >
+                            {timelineBarbers.map((barber) => {
+                              const cellData = barberCellsMap?.get(barber.id);
+                              if (!cellData) {
+                                return <div key={barber.id} className="h-[60px]" />;
+                              }
+
+                              const { startingApt, ongoingApt, startingBlock, ongoingBlock, isFree } = cellData;
+
+                              // 1. Mola / Blokaj Başlıyorsa
+                              if (startingBlock) {
+                                const duration = startingBlock.totalDuration || 30;
                                 const heightClass =
                                   duration >= 75
                                     ? "h-[176px]"
@@ -2062,41 +2184,54 @@ export default function AdminDashboardPage() {
                                     ? "h-[116px]"
                                     : "h-[56px]";
 
-                                if (apt.isBlockedSlot) {
-                                  return (
+                                return (
+                                  <div key={barber.id} className="relative h-[60px]">
                                     <div
-                                      key={apt.id}
-                                      className={`rounded-xl border border-stone-600/50 bg-[#161618] px-2.5 py-1.5 flex items-center justify-between gap-2 shadow-sm ${heightClass}`}
+                                      className={`absolute top-[2px] left-0 right-0 z-30 rounded-xl border border-stone-600/70 bg-[#161618] px-2.5 py-1.5 flex items-center justify-between gap-2 shadow-xl ${heightClass}`}
                                     >
                                       <div className="flex items-center gap-2 min-w-0">
-                                        <Lock className="h-3.5 w-3.5 text-stone-400 shrink-0" />
+                                        <Lock className="h-4 w-4 text-stone-400 shrink-0" />
                                         <div className="min-w-0">
                                           <span className="text-xs font-black text-stone-200 block truncate">
-                                            ⛔ Mola / Kapalı: {apt.blockReason}
+                                            ⛔ Mola: {startingBlock.blockReason || "Kapalı"}
                                           </span>
                                           <span className="text-[10px] text-stone-400 block truncate">
-                                            {apt.barberName} ({apt.time} - {apt.endTime})
+                                            {startingBlock.barberName} ({startingBlock.time} - {startingBlock.endTime})
                                           </span>
                                         </div>
                                       </div>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          removeAppointmentOrBlock(apt.id);
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeAppointmentOrBlock(startingBlock.id);
                                           triggerToast(
                                             "Saat Kilidi Açıldı",
-                                            `${apt.time} saati tekrar randevuya açıldı.`,
+                                            `${startingBlock.time} saati tekrar randevuya açıldı.`,
                                             "success"
                                           );
                                         }}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-stone-600 bg-stone-800/80 px-2 py-1 text-[10px] font-black text-stone-300 hover:text-white transition cursor-pointer shrink-0"
+                                        className="inline-flex items-center gap-1 rounded-lg border border-stone-600 bg-stone-800 px-2 py-1 text-[10px] font-black text-stone-300 hover:text-white transition cursor-pointer shrink-0"
                                       >
                                         <Unlock className="h-3 w-3" />
-                                        <span>Kilidi Aç</span>
+                                        <span>Aç</span>
                                       </button>
                                     </div>
-                                  );
-                                }
+                                  </div>
+                                );
+                              }
+
+                              // 2. Randevu Bu Saatte Başlıyorsa: KART BURADA RENDER EDİLİR!
+                              if (startingApt) {
+                                const apt = startingApt;
+                                const duration = apt.totalDuration || 30;
+                                const isMultiSlot = duration > 30;
+                                const heightClass =
+                                  duration >= 75
+                                    ? "h-[176px]"
+                                    : duration >= 45
+                                    ? "h-[116px]"
+                                    : "h-[56px]";
 
                                 const isCompleted = apt.status === "completed";
                                 const isPending = apt.status === "pending";
@@ -2107,182 +2242,229 @@ export default function AdminDashboardPage() {
 
                                 const cardThemeClass =
                                   isBlacklistApt && isPending
-                                    ? "border-2 border-rose-500 bg-gradient-to-r from-rose-950/70 via-[#1f1013] to-[#170c0f] shadow-md shadow-rose-500/20"
+                                    ? "border-2 border-rose-500 bg-[#1c0d11] shadow-xl shadow-rose-950/40"
                                     : isPending
-                                    ? "border border-amber-500/60 bg-gradient-to-r from-amber-950/50 via-[#1a1410] to-[#16120e] shadow-sm"
+                                    ? "border-2 border-amber-500/70 bg-[#1b140f] shadow-lg shadow-amber-950/30"
                                     : isCompleted
-                                    ? "border border-emerald-500/30 bg-[#0e1611]/80 shadow-sm"
-                                    : "border border-emerald-500/60 bg-gradient-to-r from-emerald-950/60 via-[#101913] to-[#121c15] shadow-sm";
+                                    ? "border border-emerald-500/40 bg-[#0e1712] shadow-md"
+                                    : "border-2 border-emerald-500/60 bg-[#121914] shadow-xl shadow-emerald-950/30";
+
+                                const servicesSummary = apt.services.map((s) => s.name).join(" + ");
 
                                 return (
-                                  <div
-                                    key={apt.id}
-                                    draggable={!isPending && !isBlacklistApt}
-                                    onDragStart={(e) => {
-                                      dragMovedRef.current = true;
-                                      e.dataTransfer.setData("text/plain", apt.id);
-                                      setDraggedApt(apt);
-                                    }}
-                                    onDragEnd={() => {
-                                      setDraggedApt(null);
-                                      setTimeout(() => {
-                                        dragMovedRef.current = false;
-                                      }, 150);
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedDetailApt(apt);
-                                    }}
-                                    className={`relative z-20 pointer-events-auto rounded-xl px-2.5 py-1.5 flex flex-col justify-between transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e]/60 hover:brightness-110 active:scale-[0.99] touch-pan-y select-none shadow-sm ${heightClass} ${cardThemeClass}`}
-                                  >
-                                    {/* Üst Satır */}
-                                    <div className="flex items-center justify-between gap-1 min-w-0">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="truncate text-xs font-black text-[#fdf8f5]">
-                                          {apt.customerName}
-                                        </span>
-                                        {duration > 30 && (
-                                          <span className="rounded bg-amber-400/20 border border-amber-400/40 px-1 py-0.2 text-[9px] font-black text-amber-300 shrink-0">
-                                            {duration} dk
-                                          </span>
-                                        )}
-                                        {isBlacklistApt && isPending ? (
-                                          <span className="inline-flex items-center gap-1 rounded bg-rose-500 text-white px-1.5 py-0.2 text-[9px] font-black animate-pulse shadow-sm shrink-0">
-                                            🚨 KARA LİSTE (KAPORA BEKLİYOR)
-                                          </span>
-                                        ) : isPending ? (
-                                          <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
-                                            ⏳ Onay Bekliyor
-                                          </span>
-                                        ) : isCompleted ? (
-                                          <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
-                                            Geldi ✅
-                                          </span>
-                                        ) : (
-                                          <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
-                                            ✅ Onaylandı
-                                          </span>
-                                        )}
-                                        <span className="text-[10px] text-stone-300 hidden md:inline truncate">
-                                          • {apt.barberName}
-                                        </span>
-                                      </div>
+                                  <div key={barber.id} className="relative h-[60px]">
+                                    <div
+                                      draggable={!isPending && !isBlacklistApt}
+                                      onDragStart={(e) => {
+                                        dragMovedRef.current = true;
+                                        e.dataTransfer.setData("text/plain", apt.id);
+                                        setDraggedApt(apt);
+                                      }}
+                                      onDragEnd={() => {
+                                        setDraggedApt(null);
+                                        setTimeout(() => {
+                                          dragMovedRef.current = false;
+                                        }, 150);
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedDetailApt(apt);
+                                      }}
+                                      className={`absolute top-[2px] left-0 right-0 z-30 pointer-events-auto rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer hover:ring-2 hover:ring-[#dfc39e] hover:brightness-110 active:scale-[0.99] select-none ${heightClass} ${cardThemeClass}`}
+                                    >
+                                      {/* Kartın İçi: Tek slot veya 60+ dk çoklu slot için kusursuz tasarım */}
+                                      {isMultiSlot ? (
+                                        // 60 DK / 90 DK ÇOKLU SLOT GÖRÜNÜMÜ:
+                                        <div className="flex flex-col justify-between h-full min-w-0 space-y-1">
+                                          {/* Üst Satır */}
+                                          <div className="flex items-center justify-between gap-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <span className="font-mono text-[11px] font-black text-[#dfc39e]">
+                                                {apt.time} - {apt.endTime}
+                                              </span>
+                                              <span className="rounded bg-amber-400/25 border border-amber-400/50 px-1.5 py-0.2 text-[9px] font-black text-amber-300 shrink-0">
+                                                ⏱️ {duration} dk
+                                              </span>
+                                              {isBlacklistApt && isPending ? (
+                                                <span className="inline-flex items-center gap-1 rounded bg-rose-500 text-white px-1.5 py-0.2 text-[9px] font-black animate-pulse shadow-sm shrink-0">
+                                                  🚨 KAPORA BEKLİYOR
+                                                </span>
+                                              ) : isPending ? (
+                                                <span className="rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  ⏳ Onay Bekliyor
+                                                </span>
+                                              ) : isCompleted ? (
+                                                <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  Geldi ✅
+                                                </span>
+                                              ) : (
+                                                <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  ✅ Onaylandı
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="font-mono text-xs sm:text-sm font-black text-[#dfc39e] shrink-0">
+                                              {apt.totalPrice} TL
+                                            </span>
+                                          </div>
 
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <span className="font-mono text-xs font-black text-[#dfc39e] mr-0.5">
-                                          {apt.totalPrice} TL
-                                        </span>
-                                        {isBlacklistApt && isPending && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              confirmAppointment(apt.id);
-                                              triggerToast(
-                                                `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
-                                                "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-                                                "success"
-                                              );
-                                            }}
-                                            className="rounded bg-emerald-500 hover:bg-emerald-400 px-1.5 py-0.5 text-[10px] font-black text-[#06150f] transition active:scale-95 cursor-pointer shrink-0"
-                                            title="Kaporayı onaylayın"
-                                          >
-                                            ✅ Onayla
-                                          </button>
-                                        )}
-                                        {!isBlacklistApt && isPending && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              confirmAppointment(apt.id);
-                                              triggerToast(
-                                                `${apt.customerName} — Onaylandı ✅`,
-                                                "WhatsApp onay kodu doğrulandı ve randevu kesinleşti.",
-                                                "success"
-                                              );
-                                            }}
-                                            className="rounded bg-emerald-500 hover:bg-emerald-400 px-1.5 py-0.5 text-[10px] font-black text-[#06150f] transition active:scale-95 cursor-pointer shrink-0"
-                                          >
-                                            Onayla
-                                          </button>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMobileRescheduleApt(apt);
-                                          }}
-                                          className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black text-amber-200 hover:bg-amber-500/25 transition cursor-pointer shrink-0"
-                                          title="Saati Değiştir"
-                                        >
-                                          ⇄ Taşı
-                                        </button>
-                                      </div>
-                                    </div>
+                                          {/* Orta Satır: Müşteri Adı ve Koltuk */}
+                                          <div className="flex items-center justify-between gap-2 min-w-0 py-0.5">
+                                            <div className="min-w-0">
+                                              <span className="text-xs sm:text-sm font-black text-[#fdf8f5] block truncate">
+                                                👤 {apt.customerName}
+                                              </span>
+                                              <span className="text-[10px] text-stone-300 block truncate">
+                                                💺 {apt.chairLabel || apt.barberName}
+                                              </span>
+                                            </div>
 
-                                    {/* Alt Satır */}
-                                    <div className="flex items-center justify-between text-[10px] text-stone-400 truncate border-t border-white/5 pt-0.5">
-                                      <span className="truncate">
-                                        ✂️ {apt.services.map((s) => s.name).join(" + ")}
-                                      </span>
-                                      <span className="font-mono text-[9px] shrink-0 ml-1 text-stone-300 font-bold">
-                                        📞 {formatPhoneDisplay(apt.customerPhone)}
-                                      </span>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                              {isPending && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    confirmAppointment(apt.id);
+                                                    triggerToast(
+                                                      `${apt.customerName} — Onaylandı ✅`,
+                                                      "Randevu onaylandı.",
+                                                      "success"
+                                                    );
+                                                  }}
+                                                  className="rounded-lg bg-emerald-500 hover:bg-emerald-400 px-2 py-1 text-[10px] font-black text-[#06150f] transition active:scale-95 cursor-pointer shrink-0"
+                                                >
+                                                  ✅ Onayla
+                                                </button>
+                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setMobileRescheduleApt(apt);
+                                                }}
+                                                className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-1.5 py-1 text-[10px] font-black text-amber-200 hover:bg-amber-500/25 transition cursor-pointer shrink-0"
+                                                title="Saati Değiştir"
+                                              >
+                                                ⇄ Taşı
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          {/* Alt Satır: Hizmetler & Telefon */}
+                                          <div className="flex items-center justify-between text-[10px] text-stone-400 truncate border-t border-white/10 pt-1">
+                                            <span className="truncate text-stone-300">
+                                              ✂️ {servicesSummary}
+                                            </span>
+                                            <span className="font-mono text-[10px] font-bold text-stone-200 shrink-0 ml-1">
+                                              📞 {formatPhoneDisplay(apt.customerPhone)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        // 30 DK TEK SLOT GÖRÜNÜMÜ:
+                                        <div className="flex flex-col justify-between h-full min-w-0">
+                                          <div className="flex items-center justify-between gap-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <span className="truncate text-xs font-black text-[#fdf8f5]">
+                                                {apt.customerName}
+                                              </span>
+                                              {isBlacklistApt && isPending ? (
+                                                <span className="inline-flex items-center gap-1 rounded bg-rose-500 text-white px-1.5 py-0.2 text-[9px] font-black animate-pulse shadow-sm shrink-0">
+                                                  🚨 KAPORA
+                                                </span>
+                                              ) : isPending ? (
+                                                <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  ⏳ Onay
+                                                </span>
+                                              ) : isCompleted ? (
+                                                <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  Geldi ✅
+                                                </span>
+                                              ) : (
+                                                <span className="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 text-[9px] font-black shrink-0">
+                                                  ✅
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="font-mono text-xs font-black text-[#dfc39e] shrink-0">
+                                              {apt.totalPrice} TL
+                                            </span>
+                                          </div>
+
+                                          <div className="flex items-center justify-between text-[10px] text-stone-400 truncate border-t border-white/5 pt-0.5">
+                                            <span className="truncate">
+                                              ✂️ {servicesSummary}
+                                            </span>
+                                            <span className="font-mono text-[9px] shrink-0 ml-1 text-stone-300 font-bold">
+                                              📞 {formatPhoneDisplay(apt.customerPhone)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );
-                              })}
-                            </div>
-                          ) : (
-                            /* BOŞ SAAT: Kesinlikle arka plan rengi yok (bg-transparent) */
-                            <div className="flex items-center justify-between w-full opacity-60 hover:opacity-100 transition-opacity">
-                              <span className="text-[11px] font-medium text-stone-500">
-                                {isDragTarget ? "📍 Buraya Bırakın!" : "• Boş"}
-                              </span>
+                              }
 
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setQuickDayId(currentTimelineDayId);
-                                    setQuickTime(slotTime);
-                                    if (adminStaffFilter !== "all") {
-                                      setQuickBarberId(adminStaffFilter);
-                                    }
-                                    setBottomTab("quick_add");
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-300 hover:bg-emerald-500/25 transition active:scale-95 cursor-pointer shadow-sm"
-                                  title="Bu saate müşteri randevusu ekle"
+                              // 3. Devam Eden Randevu Varsa (60 dk vb. yukarıdan sarkıyor)
+                              if (ongoingApt || ongoingBlock) {
+                                return (
+                                  <div
+                                    key={barber.id}
+                                    className="h-[60px] pointer-events-none"
+                                    title="Bu saat dilimi üstteki randevu süresine dahildir"
+                                  />
+                                );
+                              }
+
+                              // 4. Gerçekten BOŞ Olan Saat
+                              return (
+                                <div
+                                  key={barber.id}
+                                  className="flex items-center justify-between h-[60px] px-2 rounded-xl transition-colors hover:bg-white/5 group"
                                 >
-                                  <Plus className="h-2.5 w-2.5" />
-                                  <span>Randevu Ekle</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const defaultBarber = realBarbers[0]?.id || "";
-                                    setBlockModal({
-                                      isOpen: true,
-                                      barberId:
-                                        adminStaffFilter !== "all"
-                                          ? adminStaffFilter
-                                          : defaultBarber,
-                                      dayId: currentTimelineDayId,
-                                      startTime: slotTime,
-                                      endTime: minutesToTime(timeToMinutes(slotTime) + 30),
-                                      reason: "Yemek Molası",
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
-                                  title="Saati kapat veya mola ver"
-                                >
-                                  <Lock className="h-2.5 w-2.5" />
-                                  <span>Mola</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                                  <span className="text-[11px] font-medium text-stone-500 group-hover:text-stone-300 transition">
+                                    • Boş
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setQuickDayId(currentTimelineDayId);
+                                        setQuickTime(slotTime);
+                                        setQuickBarberId(barber.id);
+                                        setBottomTab("quick_add");
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300 hover:bg-emerald-500/25 transition active:scale-95 cursor-pointer shadow-sm"
+                                      title={`${barber.name} için randevu ekle`}
+                                    >
+                                      <Plus className="h-2.5 w-2.5" />
+                                      <span>Randevu Ekle</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setBlockModal({
+                                          isOpen: true,
+                                          barberId: barber.id,
+                                          dayId: currentTimelineDayId,
+                                          startTime: slotTime,
+                                          endTime: minutesToTime(timeToMinutes(slotTime) + 30),
+                                          reason: "Yemek Molası",
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-stone-400 hover:text-white hover:bg-white/10 transition active:scale-95 cursor-pointer"
+                                      title="Saati kapat veya mola ver"
+                                    >
+                                      <Lock className="h-2.5 w-2.5" />
+                                      <span>Mola</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     );
