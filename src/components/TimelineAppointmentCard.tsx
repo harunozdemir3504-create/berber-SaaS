@@ -211,6 +211,12 @@ function TimelineAppointmentCardBase({
     </span>
   );
 
+  const earlyBadge = apt.canComeEarly ? (
+    <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] leading-none bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40 font-black">
+      ⚡ Erken Gelebilir
+    </span>
+  ) : null;
+
   const phoneLink = phoneDisplay ? (
     <a
       href={phoneHref}
@@ -249,6 +255,7 @@ function TimelineAppointmentCardBase({
                 {apt.customerName}
               </span>
               {statusBadge}
+              {earlyBadge}
             </div>
             {actions}
           </div>
@@ -274,6 +281,7 @@ function TimelineAppointmentCardBase({
                   ⏱️ {formatDurationLabel(duration)}
                 </span>
                 {statusBadge}
+                {earlyBadge}
               </div>
             </div>
             {actions}
@@ -302,6 +310,7 @@ function TimelineAppointmentCardBase({
                   👑 VIP Paket • {duration} Dk
                 </span>
                 {statusBadge}
+                {earlyBadge}
               </div>
             </div>
             {actions}
