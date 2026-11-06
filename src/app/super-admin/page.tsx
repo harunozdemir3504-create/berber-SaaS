@@ -32,16 +32,22 @@ import {
   Trash2,
   CalendarDays,
   Clock,
+  MessageSquare,
+  Share2,
 } from "lucide-react";
 import {
   useBarber,
   slugifyShopName,
   getShopBookingUrl,
   getShopDisplayUrl,
+  getShopAdminUrl,
+  getShopAdminDisplayUrl,
+  generateShopSetupShareText,
   SITE_DOMAIN,
   SITE_URL,
 } from "@/context/BarberContext";
-import { SubscriptionStatus } from "@/data/mockData";
+import { SubscriptionStatus, TenantShop } from "@/data/mockData";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 export default function SuperAdminPage() {
   const {
@@ -96,6 +102,8 @@ export default function SuperAdminPage() {
   const [newShopEndDate, setNewShopEndDate] = useState<string>("30 Kasım 2026");
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [createdShopSuccess, setCreatedShopSuccess] = useState<TenantShop | null>(null);
   const [toast, setToast] = useState<{
     title: string;
     subtitle: string;
@@ -347,9 +355,11 @@ export default function SuperAdminPage() {
       subscriptionEndDate: newShopEndDate.trim() || "30 Gün Sonra",
     });
 
+    setCreatedShopSuccess(created);
+
     showToast(
       `Yeni Berber Dükkanı Oluşturuldu: ${created.name}`,
-      `Özel Link: /?shop=${created.slug} — Yönetim Şifresi: ${created.adminPin} ile izole olarak kuruldu!`,
+      `Özel Link: ${getShopDisplayUrl(created.slug)} — Yönetim Şifresi: ${created.adminPin}`,
       "success"
     );
 
@@ -360,18 +370,41 @@ export default function SuperAdminPage() {
     setNewShopPin("1234");
   };
 
-  const handleCopyShopUrl = (slug: string) => {
-    const url = getShopBookingUrl(slug);
+  const handleCopyText = (text: string, key: string, label: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(url);
+      navigator.clipboard.writeText(text);
     }
-    setCopiedSlug(slug);
+    setCopiedKey(key);
+    showToast(`${label} Kopyalandı`, `${text} panoya kopyalandı.`, "success");
+    setTimeout(() => setCopiedKey((prev) => (prev === key ? null : prev)), 2500);
+  };
+
+  const handleSendSetupWhatsApp = (shop: TenantShop) => {
+    const bookingUrl = getShopBookingUrl(shop.slug);
+    const adminUrl = getShopAdminUrl(shop.slug);
+    const pin = (shop.adminPin || "1234").trim();
+    const text = generateShopSetupShareText({
+      shopName: shop.name,
+      bookingUrl,
+      adminUrl,
+      pin,
+    });
+
+    const url = buildWhatsAppUrl(shop.phone, text);
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
     showToast(
-      "Randevu Linki Kopyalandı",
-      `${url} adresi panoya kopyalandı.`,
+      "WhatsApp Hazırlandı",
+      `${shop.name} için kurulum mesajı WhatsApp'ta açıldı.`,
       "success"
     );
-    setTimeout(() => setCopiedSlug(null), 2500);
+  };
+
+  const handleCopyShopUrl = (slug: string) => {
+    const url = getShopBookingUrl(slug);
+    handleCopyText(url, `cust-${slug}`, "Müşteri Randevu Linki");
+    setCopiedSlug(slug);
   };
 
   // MASTER PIN GUARD SCREEN (/super-admin)
@@ -796,6 +829,162 @@ export default function SuperAdminPage() {
                         <span className="block text-[11px] font-semibold text-stone-400">
                           Aylık SaaS Paketi
                         </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🔗 2 AYRI LİNK & BERBER GİRİŞ/KURULUM BİLGİLERİ BANDI */}
+                  <div className="mt-3.5 space-y-2 rounded-2xl border border-white/10 bg-[#14110f] p-3 sm:p-3.5">
+                    {/* Link 1: Müşteri Randevu Linki (Vitrin) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-sky-500/30 bg-sky-950/20 px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Link2 className="h-4 w-4 text-sky-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-sky-300 block">
+                            🔗 Müşteri Randevu Linki (Vitrin)
+                          </span>
+                          <span className="text-xs font-mono font-bold text-sky-100 truncate block">
+                            {getShopBookingUrl(shop.slug)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyText(
+                              getShopBookingUrl(shop.slug),
+                              `cust-${shop.slug}`,
+                              "Müşteri Randevu Linki"
+                            )
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30 transition active:scale-95 cursor-pointer"
+                        >
+                          {copiedKey === `cust-${shop.slug}` ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              <span className="text-emerald-300">Kopyalandı ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>📋 Müşteri Linkini Kopyala</span>
+                            </>
+                          )}
+                        </button>
+                        <Link
+                          href={getShopBookingUrl(shop.slug)}
+                          target="_blank"
+                          className="inline-flex items-center gap-1 rounded-lg border border-sky-400/30 bg-white/5 px-2 py-1 text-xs font-bold text-stone-300 hover:text-white transition"
+                          title="Yeni sekmede vitrini aç"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Link 2: Berber Yönetim Paneli Linki */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-purple-500/30 bg-purple-950/20 px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Lock className="h-4 w-4 text-purple-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-purple-300 block">
+                            🔐 Berber Yönetim Paneli Linki
+                          </span>
+                          <span className="text-xs font-mono font-bold text-purple-100 truncate block">
+                            {getShopAdminUrl(shop.slug)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyText(
+                              getShopAdminUrl(shop.slug),
+                              `adm-${shop.slug}`,
+                              "Berber Panel Linki"
+                            )
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-purple-400/40 bg-purple-500/20 px-2.5 py-1 text-xs font-bold text-purple-200 hover:bg-purple-500/30 transition active:scale-95 cursor-pointer"
+                        >
+                          {copiedKey === `adm-${shop.slug}` ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              <span className="text-emerald-300">Kopyalandı ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>📋 Berber Panel Linkini Kopyala</span>
+                            </>
+                          )}
+                        </button>
+                        <Link
+                          href={`/admin?shop=${shop.slug}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-purple-400/50 bg-gradient-to-r from-purple-600 to-indigo-600 px-3 py-1 text-xs font-black text-white hover:brightness-110 transition active:scale-95 shadow-sm cursor-pointer"
+                          title="Doğrudan bu berberin yönetim paneline git"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span>↗️ Panele Git</span>
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Berber Giriş Bilgileri & WhatsApp ile Gönder */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 border-t border-white/10 pt-2.5">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-stone-300">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#100d0b] border border-white/10 px-2.5 py-1 text-[11px] font-mono">
+                          👤 <strong>Kullanıcı Adı:</strong>{" "}
+                          <span className="text-[#dfc39e]">{shop.slug}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#100d0b] border border-white/10 px-2.5 py-1 text-[11px] font-mono">
+                          📞 <strong>Telefon:</strong>{" "}
+                          <span className="text-emerald-300">{shop.phone}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-md border border-purple-400/40 bg-purple-500/20 px-2.5 py-1 text-[11px] font-mono text-purple-100">
+                          🔑 <strong>Giriş Şifresi / PIN:</strong>{" "}
+                          <span className="font-bold text-white tracking-wider">
+                            {shop.adminPin || "1234"}
+                          </span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleSendSetupWhatsApp(shop)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/50 bg-[#25D366] hover:bg-[#1ebe5b] px-3 py-1.5 text-xs font-black text-white transition active:scale-95 shadow-md shadow-emerald-500/20 cursor-pointer"
+                          title="Kurulum şablonunu tek tıkla berberin WhatsApp'ına gönderin"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5 fill-white" />
+                          <span>💬 Kurulum Bilgilerini Berbere Gönder</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = generateShopSetupShareText({
+                              shopName: shop.name,
+                              bookingUrl: getShopBookingUrl(shop.slug),
+                              adminUrl: getShopAdminUrl(shop.slug),
+                              pin: (shop.adminPin || "1234").trim(),
+                            });
+                            handleCopyText(
+                              text,
+                              `setup-${shop.slug}`,
+                              "Kurulum Şablonu"
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 text-xs font-bold text-stone-300 hover:text-white transition active:scale-95 cursor-pointer"
+                          title="Şablonu panoya kopyala"
+                        >
+                          {copiedKey === `setup-${shop.slug}` ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          <span className="hidden sm:inline">Kopyala</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1248,6 +1437,157 @@ export default function SuperAdminPage() {
           </form>
         </div>
       </div>
+
+      {/* YENİ DÜKKAN KURULDU BAŞARI MODALI */}
+      <AnimatePresence>
+        {createdShopSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-lg rounded-3xl border border-[#dfc39e]/60 bg-gradient-to-b from-[#1c1613] via-[#14100d] to-[#0d0a08] p-5 sm:p-6 shadow-2xl text-[#fdf8f5]"
+            >
+              <button
+                type="button"
+                onClick={() => setCreatedShopSuccess(null)}
+                className="absolute right-4 top-4 rounded-xl border border-white/10 bg-white/5 p-2 text-stone-400 hover:text-white transition cursor-pointer"
+              >
+                ✕
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-[#0c1410] shadow-lg shadow-emerald-500/30">
+                  <CheckCircle2 className="h-6 w-6 stroke-[2.5]" />
+                </div>
+                <div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-300">
+                    VIP DÜKKAN KURULUMU TAMAMLANDI
+                  </span>
+                  <h3 className="text-lg font-black text-white mt-0.5">
+                    {createdShopSuccess.name}
+                  </h3>
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs text-stone-300 leading-relaxed">
+                Yeni berber dükkanı tüm izole randevu veritabanı, 3 koltuk ve 4 ana hizmet paketiyle oluşturuldu.
+                Aşağıdaki 2 bağlantıyı ve giriş şifresini berber esnafına hemen iletebilirsiniz:
+              </p>
+
+              {/* Link 1: Müşteri Linki */}
+              <div className="mt-4 rounded-2xl border border-sky-500/30 bg-sky-950/20 p-3 space-y-1.5">
+                <span className="text-[10px] font-black uppercase text-sky-300 block">
+                  🔗 Müşteri Randevu Linki (Vitrin)
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <code className="text-xs font-mono font-bold text-sky-100 truncate">
+                    {getShopBookingUrl(createdShopSuccess.slug)}
+                  </code>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyText(
+                          getShopBookingUrl(createdShopSuccess.slug),
+                          "created-cust",
+                          "Müşteri Linki"
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-2.5 py-1 text-xs font-bold text-[#0c1410] hover:bg-sky-400 cursor-pointer transition active:scale-95"
+                    >
+                      {copiedKey === "created-cust" ? "✓ Kopyalandı" : "📋 Kopyala"}
+                    </button>
+                    <Link
+                      href={getShopBookingUrl(createdShopSuccess.slug)}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 rounded-lg border border-sky-400/30 bg-white/5 px-2 py-1 text-xs font-bold text-stone-300 hover:text-white transition"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Link 2: Berber Panel Linki */}
+              <div className="mt-3 rounded-2xl border border-purple-500/30 bg-purple-950/20 p-3 space-y-1.5">
+                <span className="text-[10px] font-black uppercase text-purple-300 block">
+                  🔐 Berber Yönetim Paneli Linki
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <code className="text-xs font-mono font-bold text-purple-100 truncate">
+                    {getShopAdminUrl(createdShopSuccess.slug)}
+                  </code>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyText(
+                          getShopAdminUrl(createdShopSuccess.slug),
+                          "created-adm",
+                          "Berber Panel Linki"
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg bg-purple-500 px-2.5 py-1 text-xs font-bold text-white hover:bg-purple-400 cursor-pointer transition active:scale-95"
+                    >
+                      {copiedKey === "created-adm" ? "✓ Kopyalandı" : "📋 Kopyala"}
+                    </button>
+                    <Link
+                      href={`/admin?shop=${createdShopSuccess.slug}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-purple-600 px-2.5 py-1 text-xs font-black text-white hover:bg-purple-500 cursor-pointer transition active:scale-95"
+                    >
+                      ↗️ Panele Git
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Giriş Bilgileri */}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#161311] p-3 text-xs">
+                <div>
+                  <span className="text-stone-400 block text-[11px]">Kullanıcı Adı:</span>
+                  <span className="font-mono font-bold text-white">{createdShopSuccess.slug}</span>
+                </div>
+                <div>
+                  <span className="text-stone-400 block text-[11px]">Telefon:</span>
+                  <span className="font-mono font-bold text-emerald-300">{createdShopSuccess.phone}</span>
+                </div>
+                <div>
+                  <span className="text-purple-300 block text-[11px] font-bold">🔑 Yönetim Şifresi / PIN:</span>
+                  <span className="font-mono text-sm font-black text-white">{createdShopSuccess.adminPin || "1234"}</span>
+                </div>
+              </div>
+
+              {/* Tek Tıkla WhatsApp Gönder */}
+              <div className="mt-5 flex flex-col sm:flex-row items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSendSetupWhatsApp(createdShopSuccess)}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#25D366] hover:bg-[#1ebe5b] py-3 text-xs font-black text-white transition active:scale-95 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                >
+                  <MessageSquare className="h-4 w-4 fill-white" />
+                  <span>💬 Kurulum Bilgilerini Berbere Gönder (WhatsApp)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = generateShopSetupShareText({
+                      shopName: createdShopSuccess.name,
+                      bookingUrl: getShopBookingUrl(createdShopSuccess.slug),
+                      adminUrl: getShopAdminUrl(createdShopSuccess.slug),
+                      pin: (createdShopSuccess.adminPin || "1234").trim(),
+                    });
+                    handleCopyText(text, "created-full-setup", "Kurulum Bilgileri Şablonu");
+                  }}
+                  className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/15 px-4 py-3 text-xs font-bold text-white transition active:scale-95 cursor-pointer"
+                >
+                  {copiedKey === "created-full-setup" ? "✓ Kopyalandı" : "📋 Metni Kopyala"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* DÜKKAN SİLME / HESAP KAPATMA ONAY MODALI */}
       <AnimatePresence>

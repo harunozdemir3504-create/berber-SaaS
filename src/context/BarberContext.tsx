@@ -42,6 +42,9 @@ export {
   SITE_URL,
   getShopBookingUrl,
   getShopDisplayUrl,
+  getShopAdminUrl,
+  getShopAdminDisplayUrl,
+  generateShopSetupShareText,
 } from "@/lib/siteConfig";
 
 export interface UpdateShopDetailsInput {
@@ -479,7 +482,11 @@ function ShopUrlQuerySync({
     }
 
     if (pathname) {
-      const clean = pathname.replace(/^\/+/, "").split("/")[0]?.trim();
+      const parts = pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+      let clean = parts[0]?.trim();
+      if (clean?.toLowerCase() === "s" && parts[1]) {
+        clean = parts[1].trim();
+      }
       const reserved = [
         "admin",
         "super-admin",

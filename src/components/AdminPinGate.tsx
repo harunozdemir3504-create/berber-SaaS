@@ -266,6 +266,44 @@ export default function AdminPinGate({
     router,
   ]);
 
+  // 3. Dynamic URL / Shop navigation sync: When ?shop= parameter changes, directly switch target shop
+  useEffect(() => {
+    if (!hydrated || !hasInitializedRef.current) return;
+    if (!currentShopSlug) return;
+    if (selectedSlug.toLowerCase() === currentShopSlug.toLowerCase()) return;
+
+    const matched = shops.find(
+      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
+    );
+    if (!matched) return;
+
+    setSelectedSlug(matched.slug);
+    setError("");
+    setPin("");
+
+    try {
+      const savedSession = readPersistentSession();
+      const expectedPin = (matched.adminPin || "1234").trim();
+      const savedToken =
+        localStorage.getItem(sessionKey(matched.slug)) ||
+        sessionStorage.getItem(sessionKey(matched.slug));
+
+      const isMatch =
+        (savedSession &&
+          savedSession.shopSlug.toLowerCase() === matched.slug.toLowerCase() &&
+          savedSession.pinSnapshot === expectedPin) ||
+        savedToken === expectedPin;
+
+      if (isMatch) {
+        setAuthenticatedSlug(matched.slug);
+      } else {
+        setAuthenticatedSlug(null);
+      }
+    } catch {
+      setAuthenticatedSlug(null);
+    }
+  }, [currentShopSlug, shops, hydrated, selectedSlug]);
+
   const targetShop = useMemo(
     () =>
       shops.find((s) => s.slug.toLowerCase() === selectedSlug.toLowerCase()),
