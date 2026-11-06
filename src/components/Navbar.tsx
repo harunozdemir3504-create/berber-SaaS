@@ -32,6 +32,9 @@ export default function Navbar() {
   const isSuperAdmin = pathname?.startsWith("/super-admin");
   const isShopAdmin = pathname?.startsWith("/admin");
 
+  // Berber Yönetim Paneli (/admin) kendi özel kavisli VIP Hero Header'ını kullanır
+  if (isShopAdmin) return null;
+
   return (
     <header
       className={`sticky top-0 z-40 border-b backdrop-blur-xl print:hidden transition-colors duration-200 ${

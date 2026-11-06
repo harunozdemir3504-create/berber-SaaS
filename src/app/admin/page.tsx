@@ -1530,6 +1530,124 @@ export default function AdminDashboardPage() {
   return (
     <AdminPinGate>
       <div className="admin-page-theme relative mx-auto max-w-3xl px-3 pb-32 pt-3 sm:px-6 sm:pt-5">
+        {/* 👑 VIP HERO HEADER (Kavisli ve Parıltılı Üst Alan) */}
+        <header className="-mx-3 -mt-3 sm:-mx-6 sm:-mt-5 mb-3.5 rounded-b-3xl border-b border-amber-500/30 bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-800 dark:bg-gradient-to-b dark:from-amber-500/15 dark:via-zinc-900 dark:to-zinc-950 text-white shadow-xl px-3.5 pt-4 pb-4 sm:px-6 sm:pt-5 sm:pb-5">
+          {/* Üst Bar: Sol Logo + Dükkan Adı & Durumu, Sağ 3 İkon Butonu */}
+          <div className="flex items-center justify-between gap-3">
+            {/* Sol: Logo + İsim + Durum */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-stone-950 shadow-md ring-2 ring-amber-400">
+                <Scissors className="h-5 w-5 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-white uppercase truncate">
+                  {currentShop.name}
+                </h1>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="truncate">
+                    Dükkan Açık • {currentShop.district ? `${currentShop.district}/İzmir` : "Bayraklı/İzmir"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sağ: 3 Cam Efektli İkon Buton (Tema, Vitrin, Çıkış) */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                title="Tema Değiştir (Gündüz / Gece)"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all active:scale-95 cursor-pointer shadow-sm border border-white/10"
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-4 w-4 text-amber-300" />
+                ) : (
+                  <Moon className="h-4 w-4 text-amber-200" />
+                )}
+              </button>
+
+              <Link
+                href={`/?shop=${currentShop.slug}&preview=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Müşteri Vitrini (Yeni Sekmede Aç)"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all active:scale-95 cursor-pointer shadow-sm border border-white/10"
+              >
+                <ExternalLink className="h-4 w-4 text-emerald-300" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  lockAdminSession(currentShop.slug);
+                  if (typeof window !== "undefined") {
+                    window.location.href = "/admin";
+                  }
+                }}
+                title="Güvenli Çıkış Yap"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-rose-500/20 hover:bg-rose-500/30 backdrop-blur-md text-rose-300 hover:text-rose-100 transition-all active:scale-95 cursor-pointer shadow-sm border border-rose-500/30"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Header'ın İçine Gömülü "Canlı Kasa ve Doluluk" Kartı (3'lü Grid) */}
+          <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3 border-t border-white/10">
+            {/* 1. Kutu: Bugün Ciro */}
+            <div className="rounded-2xl border border-amber-500/20 bg-black/30 backdrop-blur-sm p-2 sm:p-2.5">
+              <div className="text-[10px] sm:text-[11px] font-bold text-amber-300/90 flex items-center gap-1 truncate">
+                <span>💰</span>
+                <span>Bugün Ciro</span>
+              </div>
+              <div className="mt-0.5 font-mono font-black text-amber-400 text-sm sm:text-lg tracking-tight truncate">
+                {todaySummaryMetrics.revenue.toLocaleString("tr-TR")} ₺
+              </div>
+            </div>
+
+            {/* 2. Kutu: Tıraş / Doluluk */}
+            <div className="rounded-2xl border border-emerald-500/20 bg-black/30 backdrop-blur-sm p-2 sm:p-2.5">
+              <div className="text-[10px] sm:text-[11px] font-bold text-emerald-300/90 flex items-center gap-1 truncate">
+                <span>✂️</span>
+                <span>Tıraş / Doluluk</span>
+              </div>
+              <div className="mt-0.5 font-mono font-black text-emerald-400 text-sm sm:text-lg tracking-tight truncate">
+                {todaySummaryMetrics.appointmentCount}{" "}
+                <span className="text-[11px] sm:text-xs font-semibold text-emerald-200">Randevu</span>
+              </div>
+            </div>
+
+            {/* 3. Kutu: Hızlı Mola Butonu */}
+            <button
+              type="button"
+              onClick={() => {
+                const defaultBarber = realBarbers[0]?.id || "";
+                setBlockModal({
+                  isOpen: true,
+                  barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
+                  dayId: currentTimelineDayId,
+                  startTime: "13:00",
+                  endTime: "14:00",
+                  reason: "Yemek Molası",
+                });
+              }}
+              className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/20 via-amber-600/15 to-transparent hover:from-amber-500/30 hover:to-amber-600/25 p-2 sm:p-2.5 text-left transition active:scale-95 cursor-pointer shadow-sm group"
+            >
+              <div className="text-[10px] sm:text-[11px] font-bold text-amber-300 flex items-center gap-1 truncate">
+                <Lock className="h-3 w-3 shrink-0" />
+                <span>⛔ Hızlı Mola</span>
+              </div>
+              <div className="mt-0.5 text-xs sm:text-sm font-black text-white group-hover:text-amber-200 flex items-center justify-between">
+                <span className="truncate">Mola Ver / Kapat</span>
+                <span className="text-amber-400 text-xs font-bold sm:inline hidden">→</span>
+              </div>
+            </button>
+          </div>
+        </header>
         {/* QR AFİŞ MODALI */}
         <QrPosterModal
           open={isQrModalOpen}
@@ -1703,126 +1821,181 @@ export default function AdminDashboardPage() {
           )}
         </AnimatePresence>
 
-        {/* 2. CANLI GÜNLÜK ÖZET ŞERİDİ (MINI DASHBOARD) */}
-        <div className="mb-2.5 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar rounded-xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent px-3 py-2 text-xs shadow-sm">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="font-bold text-amber-700 dark:text-amber-400">💰 Bugün:</span>
-            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
-              {todaySummaryMetrics.revenue.toLocaleString("tr-TR")} ₺
-            </span>
-          </div>
-          <div className="h-3 w-px bg-stone-300 dark:bg-white/15 shrink-0" />
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="font-bold text-emerald-700 dark:text-emerald-400">✂️ Randevu:</span>
-            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
-              {todaySummaryMetrics.appointmentCount}
-            </span>
-          </div>
-          <div className="h-3 w-px bg-stone-300 dark:bg-white/15 shrink-0" />
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="font-bold text-sky-700 dark:text-sky-400">💺 Aktif:</span>
-            <span className="font-mono font-black text-stone-900 dark:text-[#fdf8f5] text-xs sm:text-sm">
-              {todaySummaryMetrics.activeBarbersCount} Koltuk
-            </span>
-          </div>
-        </div>
-
         {/* ===================================================================== */}
         {/* SEKME 1: 📅 RANDEVULAR (VARSAYILAN ANA EKRAN — GÜN GÜN AYRIMLI)      */}
         {/* ===================================================================== */}
         {bottomTab === "appointments" && (
           <div className="space-y-2">
-            {/* 1. GÜN SEÇME ALANI: KOMPAKT TEK SATIR HAP/SEKME (PILL) BUTONLAR */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              {/* [📅 Bugün (6 Kas) (count)] */}
-              <button
-                type="button"
-                onClick={() => setAdminDayMode("today")}
-                className={`h-10 shrink-0 inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "today"
-                    ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md shadow-[#dfc39e]/20"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/20"
-                }`}
-              >
-                <span>📅 Bugün ({todayDay.chipLabel.replace("Bugün (", "").replace(")", "")})</span>
-                <span
-                  className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black ${
+            {/* 1. YATAY KAYDIRILABİLİR ŞERİT (TARİH + KOLTUK) & iPHONE STİLİ SEGMENTED CONTROL */}
+            <div className="flex items-center justify-between gap-2 py-0.5">
+              {/* Sol: Yatay Kaydırılabilir Şerit (Tarih Hapları + Koltuk Filtreleri) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1 min-w-0">
+                {/* [📅 Bugün] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("today")}
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
                     adminDayMode === "today"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
+                      : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
                   }`}
                 >
-                  {todayPendingCount}
-                </span>
-              </button>
+                  <span>📅 Bugün ({todayDay.chipLabel.replace("Bugün (", "").replace(")", "")})</span>
+                  <span
+                    className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
+                      adminDayMode === "today"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
+                        : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    }`}
+                  >
+                    {todayPendingCount}
+                  </span>
+                </button>
 
-              {/* [Yarın (7 Kas) (count)] */}
-              <button
-                type="button"
-                onClick={() => setAdminDayMode("tomorrow")}
-                className={`h-10 shrink-0 inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "tomorrow"
-                    ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md shadow-[#dfc39e]/20"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/20"
-                }`}
-              >
-                <span>Yarın ({tomorrowDay.chipLabel.replace("Yarın (", "").replace(")", "")})</span>
-                <span
-                  className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black ${
+                {/* [Yarın] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("tomorrow")}
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
                     adminDayMode === "tomorrow"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
+                      : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
                   }`}
                 >
-                  {tomorrowPendingCount}
-                </span>
-              </button>
+                  <span>Yarın ({tomorrowDay.chipLabel.replace("Yarın (", "").replace(")", "")})</span>
+                  <span
+                    className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
+                      adminDayMode === "tomorrow"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
+                        : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    }`}
+                  >
+                    {tomorrowPendingCount}
+                  </span>
+                </button>
 
-              {/* [📆 Gün Seç (count)] */}
-              <button
-                type="button"
-                onClick={() => setAdminDayMode("calendar")}
-                className={`h-10 shrink-0 inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "calendar"
-                    ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md shadow-[#dfc39e]/20"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/20"
-                }`}
-              >
-                <span>
-                  📆 Gün Seç {adminDayMode === "calendar" && activeTargetDayMeta ? `(${activeTargetDayMeta.chipLabel})` : ""}
-                </span>
-                <span
-                  className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black ${
+                {/* [📆 Gün Seç] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("calendar")}
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
                     adminDayMode === "calendar"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
+                      : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
                   }`}
                 >
-                  {otherDaysPendingCount}
-                </span>
-              </button>
+                  <span>📆 Gün Seç</span>
+                  <span
+                    className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
+                      adminDayMode === "calendar"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
+                        : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    }`}
+                  >
+                    {otherDaysPendingCount}
+                  </span>
+                </button>
 
-              {/* [Tümü (count)] */}
-              <button
-                type="button"
-                onClick={() => setAdminDayMode("all")}
-                className={`h-10 shrink-0 inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "all"
-                    ? "border-[#f3e8dc] bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-md shadow-[#dfc39e]/20"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/20"
-                }`}
-              >
-                <span>Tümü</span>
-                <span
-                  className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-black ${
+                {/* [Tümü] */}
+                <button
+                  type="button"
+                  onClick={() => setAdminDayMode("all")}
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
                     adminDayMode === "all"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300"
+                      ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
+                      : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
                   }`}
                 >
-                  {allPendingCount}
-                </span>
-              </button>
+                  <span>Tümü</span>
+                  <span
+                    className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
+                      adminDayMode === "all"
+                        ? "bg-[#1a110b] text-[#f3e8dc]"
+                        : "bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300"
+                    }`}
+                  >
+                    {allPendingCount}
+                  </span>
+                </button>
+
+                {/* Dikey Ayraç */}
+                {realBarbers.length > 1 && (
+                  <div className="h-5 w-px bg-stone-300 dark:bg-white/15 shrink-0 mx-1" />
+                )}
+
+                {/* Koltuk Filtreleri */}
+                {realBarbers.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setAdminStaffFilter("all")}
+                      className={`h-9 shrink-0 inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-black transition cursor-pointer ${
+                        adminStaffFilter === "all"
+                          ? "border-amber-600 dark:border-[#dfc39e] bg-amber-500/20 dark:bg-[#dfc39e] text-amber-950 dark:text-[#1a110b] shadow-sm"
+                          : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400"
+                      }`}
+                    >
+                      <User className="h-3 w-3" />
+                      <span>Koltuk: Tümü</span>
+                      <span className="text-[10px] opacity-80">({dayFilteredActiveAppointments.length})</span>
+                    </button>
+
+                    {realBarbers.map((b) => {
+                      const staffCount = dayFilteredActiveAppointments.filter(
+                        (a) =>
+                          !a.isBlockedSlot &&
+                          (a.barberId === b.id ||
+                            (a.barberName &&
+                              a.barberName.toLowerCase().includes(b.name.toLowerCase())))
+                      ).length;
+                      const isSelected = adminStaffFilter === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setAdminStaffFilter(b.id)}
+                          className={`h-9 shrink-0 inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-black transition cursor-pointer ${
+                            isSelected
+                              ? "border-amber-600 dark:border-[#dfc39e] bg-amber-500/20 dark:bg-[#dfc39e] text-amber-950 dark:text-[#1a110b] shadow-sm"
+                              : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400"
+                          }`}
+                        >
+                          <span>💈 {b.name}</span>
+                          <span className="text-[10px] opacity-80">({staffCount})</span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+
+              {/* Sağ: iPhone Stili Segmented Control ([ 📅 Takvim | 📋 Liste ]) */}
+              <div className="flex items-center rounded-xl bg-stone-200/90 dark:bg-zinc-800 p-0.5 shadow-inner shrink-0 border border-stone-300/60 dark:border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("timeline")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-black transition cursor-pointer ${
+                    viewMode === "timeline"
+                      ? "bg-white dark:bg-zinc-900 text-stone-900 dark:text-white shadow-sm"
+                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                  }`}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>Takvim</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-black transition cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-white dark:bg-zinc-900 text-stone-900 dark:text-white shadow-sm"
+                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>Liste</span>
+                </button>
+              </div>
             </div>
 
             {/* İleri Tarih Seçim Şeridi (Sadece "Gün Seç" modunda kompakt ince satır) */}
@@ -1904,112 +2077,6 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 <span>✅ Geçmiş ({dayFilteredHistoryAppointments.length})</span>
-              </button>
-            </div>
-
-            {/* 3. SIKILAŞTIRILMIŞ KOLTUK FİLTRESİ */}
-            {realBarbers.length > 1 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-stone-500 dark:text-stone-400 mr-0.5 flex items-center gap-1">
-                  <User className="h-3 w-3 text-amber-600 dark:text-[#dfc39e]" /> Koltuk:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAdminStaffFilter("all")}
-                  className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
-                    adminStaffFilter === "all"
-                      ? "border border-amber-600 dark:border-[#dfc39e] bg-amber-500/20 dark:bg-[#dfc39e] text-amber-950 dark:text-[#1a110b] shadow-sm"
-                      : "border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/25"
-                  }`}
-                >
-                  Tümü ({dayFilteredActiveAppointments.length})
-                </button>
-                {realBarbers.map((b) => {
-                  const staffCount = dayFilteredActiveAppointments.filter(
-                    (a) =>
-                      !a.isBlockedSlot &&
-                      (a.barberId === b.id ||
-                        (a.barberName &&
-                          a.barberName
-                            .toLowerCase()
-                            .includes(b.name.toLowerCase())))
-                  ).length;
-                  const isSelected = adminStaffFilter === b.id;
-                  return (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => setAdminStaffFilter(b.id)}
-                      className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-black transition flex items-center gap-1 cursor-pointer ${
-                        isSelected
-                          ? "border border-amber-600 dark:border-[#dfc39e] bg-amber-500/20 dark:bg-[#dfc39e] text-amber-950 dark:text-[#1a110b] shadow-sm"
-                          : "border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/25"
-                      }`}
-                    >
-                      <span>{b.name}</span>
-                      <span
-                        className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                          isSelected
-                            ? "bg-black/15 text-inherit"
-                            : "bg-stone-200 dark:bg-white/10 text-stone-600 dark:text-stone-400"
-                        }`}
-                      >
-                        {staffCount}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 4. BİRLEŞTİRİLMİŞ GÖRÜNÜM SEÇİCİ VE SAAT KAPAT SATIRI (TEK SATIR) */}
-            <div className="flex items-center justify-between gap-2 py-0.5 mb-1.5">
-              {/* Sol: Kompakt Geçiş Tuşu ([📅 Takvim | 📋 Liste]) */}
-              <div className="flex items-center rounded-xl border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#101012] p-0.5 shadow-sm shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("timeline")}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
-                    viewMode === "timeline"
-                      ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
-                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                  }`}
-                >
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  <span>📅 Takvim</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("list")}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-black transition cursor-pointer ${
-                    viewMode === "list"
-                      ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
-                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>📋 Liste</span>
-                </button>
-              </div>
-
-              {/* Sağ: ⛔ Saat Kapat / Mola Butonu */}
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultBarber = realBarbers[0]?.id || "";
-                  setBlockModal({
-                    isOpen: true,
-                    barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
-                    dayId: currentTimelineDayId,
-                    startTime: "13:00",
-                    endTime: "14:00",
-                    reason: "Yemek Molası",
-                  });
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-800 dark:text-amber-200 hover:bg-amber-500/25 transition active:scale-95 cursor-pointer shadow-sm shrink-0"
-              >
-                <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
-                <span>⛔ Saat Kapat / Mola</span>
               </button>
             </div>
 
