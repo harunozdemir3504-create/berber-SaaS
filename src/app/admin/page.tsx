@@ -1826,10 +1826,8 @@ export default function AdminDashboardPage() {
         {/* ===================================================================== */}
         {bottomTab === "appointments" && (
           <div className="space-y-2">
-            {/* 1. YATAY KAYDIRILABİLİR ŞERİT (TARİH + KOLTUK) & iPHONE STİLİ SEGMENTED CONTROL */}
-            <div className="flex items-center justify-between gap-2 py-0.5">
-              {/* Sol: Yatay Kaydırılabilir Şerit (Tarih Hapları + Koltuk Filtreleri) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1 min-w-0">
+            {/* 1. YATAY KAYDIRILABİLİR ŞERİT (TARİH + KOLTUK) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
                 {/* [📅 Bugün] */}
                 <button
                   type="button"
@@ -1968,28 +1966,6 @@ export default function AdminDashboardPage() {
                   </>
                 )}
               </div>
-
-              {/* Sağ: ⛔ Saat Kapat / Mola Butonu */}
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultBarber = realBarbers[0]?.id || "";
-                  setBlockModal({
-                    isOpen: true,
-                    barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
-                    dayId: currentTimelineDayId,
-                    startTime: "13:00",
-                    endTime: "14:00",
-                    reason: "Yemek Molası",
-                  });
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 dark:border-amber-500/50 bg-stone-100 hover:bg-stone-200 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 px-2.5 py-1.5 text-xs font-black text-stone-800 dark:text-amber-200 transition active:scale-95 cursor-pointer shadow-sm shrink-0"
-              >
-                <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
-                <span className="hidden sm:inline">⛔ Saat Kapat</span>
-                <span className="sm:hidden">⛔ Mola</span>
-              </button>
-            </div>
 
             {/* İleri Tarih Seçim Şeridi (Sadece "Gün Seç" modunda kompakt ince satır) */}
             {adminDayMode === "calendar" && (
@@ -2521,10 +2497,8 @@ export default function AdminDashboardPage() {
         {/* ===================================================================== */}
         {bottomTab === "calendar" && (
           <div className="space-y-2">
-            {/* 1. SADELEŞTİRİLMİŞ ÜST ALAN: GÜN SEÇİMİ + KOLTUK SEÇİMİ + SAĞDA SAAT KAPAT BUTONU */}
-            <div className="flex items-center justify-between gap-2 py-0.5">
-              {/* Sol: Yatay Kaydırılabilir Şerit (Tarih Hapları + Koltuk Filtreleri) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1 min-w-0">
+            {/* 1. SADELEŞTİRİLMİŞ ÜST ALAN: GÜN SEÇİMİ + KOLTUK SEÇİMİ */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
                 {/* [📅 Bugün] */}
                 <button
                   type="button"
@@ -2663,28 +2637,6 @@ export default function AdminDashboardPage() {
                   </>
                 )}
               </div>
-
-              {/* Sağ: ⛔ Saat Kapat / Mola Butonu */}
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultBarber = realBarbers[0]?.id || "";
-                  setBlockModal({
-                    isOpen: true,
-                    barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
-                    dayId: currentTimelineDayId,
-                    startTime: "13:00",
-                    endTime: "14:00",
-                    reason: "Yemek Molası",
-                  });
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 dark:border-amber-500/50 bg-stone-100 hover:bg-stone-200 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 px-2.5 py-1.5 text-xs font-black text-stone-800 dark:text-amber-200 transition active:scale-95 cursor-pointer shadow-sm shrink-0"
-              >
-                <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
-                <span className="hidden sm:inline">⛔ Saat Kapat</span>
-                <span className="sm:hidden">⛔ Mola</span>
-              </button>
-            </div>
 
             {/* İleri Tarih Seçim Şeridi (Sadece "Gün Seç" modunda kompakt ince satır) */}
             {adminDayMode === "calendar" && (
