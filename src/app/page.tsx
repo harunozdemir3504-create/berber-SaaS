@@ -33,6 +33,7 @@ import {
   getLiveDaysMetadata,
   getTurkeyNow,
   toIsoDateString,
+  toStrictIsoDate,
   Barber,
   Service,
   DayMetadata,
@@ -235,10 +236,22 @@ export default function CustomerBookingPage() {
     [barbers, realBarbers, selectedBarberId]
   );
 
-  // Seçili personele / koltuğa özel günün slotları (Harun'un randevusu Ali'yi bloke etmez!)
+  // Seçili günün kesin YYYY-MM-DD tarihi
+  const selectedDate = useMemo(
+    () => toStrictIsoDate(selectedDay.isoDate || selectedDay.id),
+    [selectedDay.isoDate, selectedDay.id]
+  );
+
+  // KESİN ÇÖZÜM: Gün değiştirildiğinde (selectedDate değiştiğinde) önceki günün saat seçim state'ini temizle
+  useEffect(() => {
+    setSelectedSlot(null);
+    setFormError("");
+  }, [selectedDate]);
+
+  // Seçili personele / koltuğa ve seçili tarihe (selectedDate) özel günün slotları
   const currentDaySlots = useMemo(
-    () => getSlotsForDay(selectedDay.id, selectedBarber?.id),
-    [getSlotsForDay, selectedDay.id, selectedBarber?.id]
+    () => getSlotsForDay(selectedDate, selectedBarber?.id),
+    [getSlotsForDay, selectedDate, selectedBarber?.id]
   );
 
   // Seçili gün bugün mü?
@@ -363,7 +376,10 @@ export default function CustomerBookingPage() {
     const depositAmountValue = isBlacklisted || withDeposit ? requiredDepositAmount : undefined;
 
     const created = addAppointment({
-      dayId: selectedDay.id,
+      dayId: selectedDate,
+      date: selectedDate,
+      appointment_date: selectedDate,
+      appointment_time: selectedSlot.time,
       dateLabel: selectedDay.chipLabel,
       time: selectedSlot.time,
       endTime: calculateEndTime(selectedSlot.time, totalDuration),
@@ -426,7 +442,7 @@ export default function CustomerBookingPage() {
     // Aynı telefon numarasıyla aynı gün içinde birden fazla aktif/bekleyen randevu alınmasını engelle
     const existingActive = checkHasActiveAppointmentForDay(
       phoneValidation.cleanPhone,
-      selectedDay.id
+      selectedDate
     );
     if (existingActive) {
       setFormError(
@@ -557,7 +573,7 @@ export default function CustomerBookingPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-xl px-2.5 pb-20 pt-2 sm:px-4 sm:pt-4">
+    <div className="mx-auto max-w-xl px-2.5 pb-20 pt-2 sm:px-4 sm:pt-4 touch-manipulation select-none">
       {/* ÜST BAR: SALON BİLGİSİ & RANDEVUMU SORGULA / İPTAL ET BUTONU */}
       <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
         <span className="text-[11px] font-bold text-stone-400 truncate">

@@ -16,6 +16,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export const metadata: Metadata = {
@@ -24,10 +26,14 @@ export const metadata: Metadata = {
   description:
     "VIP berber ve kuaför salonları için hızlı ve güvenli online randevu sistemi.",
   manifest: "/manifest.json",
+  applicationName: "VIP Randevu",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "VIP Randevu",
+  },
+  formatDetection: {
+    telephone: false,
   },
   icons: {
     icon: [
@@ -47,12 +53,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className="dark">
+    <html lang="tr" className="dark touch-manipulation">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#c88a53" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="VIP Randevu" />
@@ -78,7 +85,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} font-sans min-h-screen bg-[#0d0a08] text-[#fdf8f5] antialiased selection:bg-[#c88a53] selection:text-[#1a110b]`}
+        className={`${inter.variable} font-sans min-h-screen bg-[#0d0a08] text-[#fdf8f5] antialiased touch-manipulation select-none selection:bg-[#c88a53] selection:text-[#1a110b]`}
       >
         <ThemeProvider>
           <BarberProvider>
@@ -88,7 +95,7 @@ export default function RootLayout({
               <div className="mx-auto -mt-40 h-[260px] w-[520px] rounded-full bg-[#c88a53]/10 blur-[110px]" />
             </div>
             <Navbar />
-            <main className="relative z-10">{children}</main>
+            <main className="relative z-10 touch-manipulation select-none">{children}</main>
           </BarberProvider>
         </ThemeProvider>
       </body>

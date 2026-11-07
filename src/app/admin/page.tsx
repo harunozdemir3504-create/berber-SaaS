@@ -69,9 +69,11 @@ import QrPosterModal from "@/components/QrPosterModal";
 import {
   Appointment,
   Barber,
+  getAppointmentIsoDate,
   getLiveDaysMetadata,
   resolveDayMetadata,
   Service,
+  toStrictIsoDate,
   WEEKDAYS_TR,
 } from "@/data/mockData";
 import {
@@ -165,6 +167,29 @@ export default function AdminDashboardPage() {
 
   // Öğle Molası Buton Kilidi (Anti-Bug / Çift Tıklama Engeli)
   const [isTogglingBreak, setIsTogglingBreak] = useState<boolean>(false);
+
+  // Tekil Buton Kilidi (updatingId): Geldi / Onayla / İptal / Mola butonlarında çift tıklama ve gidip gelmeyi %100 engeller
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const updatingIdRef = useRef<string | null>(null);
+
+  const runWithUpdatingLock = useCallback(
+    async (id: string, action: () => void | Promise<void>) => {
+      if (updatingIdRef.current === id) return;
+      updatingIdRef.current = id;
+      setUpdatingId(id);
+      try {
+        await action();
+      } finally {
+        setTimeout(() => {
+          if (updatingIdRef.current === id) {
+            updatingIdRef.current = null;
+          }
+          setUpdatingId((prev) => (prev === id ? null : prev));
+        }, 250);
+      }
+    },
+    []
+  );
 
   // Sürükle - Bırak (Drag & Drop) ve Onay Modalı State'leri
   const [draggedApt, setDraggedApt] = useState<Appointment | null>(null);
@@ -562,11 +587,14 @@ export default function AdminDashboardPage() {
   };
 
   const handleComplete = (apt: Appointment) => {
-    markAppointmentCompleted(apt.id);
+    void runWithUpdatingLock(apt.id, () => {
+      markAppointmentCompleted(apt.id);
+    });
   };
 
   const checkAndTriggerEarlyCandidates = (vacatedApt: Appointment) => {
-    const aptDayMeta = resolveDayMetadata(vacatedApt.dayId);
+    const vacatedDate = getAppointmentIsoDate(vacatedApt);
+    const aptDayMeta = resolveDayMetadata(vacatedDate);
     const vacatedMinutes = timeToMinutes(vacatedApt.time);
     const candidates = appointments.filter((a) => {
       if (a.id === vacatedApt.id) return false;
@@ -576,7 +604,7 @@ export default function AdminDashboardPage() {
         a.status === "pending";
       if (!isLive) return false;
       if (!a.canComeEarly) return false;
-      if (resolveDayMetadata(a.dayId).id !== aptDayMeta.id) return false;
+      if (getAppointmentIsoDate(a) !== vacatedDate) return false;
       // Koltuk / Usta kontrolü: Boşalan saat sadece o ustanın kendi erken gelebilecek müşterilerine önerilsin
       if (
         vacatedApt.barberId &&
@@ -598,26 +626,30 @@ export default function AdminDashboardPage() {
   };
 
   const handleCancelAndBlacklist = (apt: Appointment) => {
-    cancelAppointmentByCustomer(apt.id);
-    markAppointmentNoShow(apt.id);
-    triggerToast(
-      `${apt.customerName} — İptal Edildi & Engellendi 🚫`,
-      `${apt.customerPhone} numarası sahte randevu şüphesiyle kara listeye eklendi.`,
-      "warning"
-    );
-    checkAndTriggerEarlyCandidates(apt);
+    void runWithUpdatingLock(apt.id, () => {
+      cancelAppointmentByCustomer(apt.id);
+      markAppointmentNoShow(apt.id);
+      triggerToast(
+        `${apt.customerName} — İptal Edildi & Engellendi 🚫`,
+        `${apt.customerPhone} numarası sahte randevu şüphesiyle kara listeye eklendi.`,
+        "warning"
+      );
+      checkAndTriggerEarlyCandidates(apt);
+    });
   };
 
   const handleCancelByAdmin = (apt: Appointment) => {
-    const res = cancelAppointmentByCustomer(apt.id);
-    triggerToast(
-      `${apt.customerName} — İptal Edildi ❌`,
-      res.notifiedCount > 0
-        ? `Randevu iptal edildi ve yedek listedeki ${res.notifiedCount} müşteriye bildirim gönderildi.`
-        : `Saat ${apt.time} tekrar randevuya açıldı.`,
-      "warning"
-    );
-    checkAndTriggerEarlyCandidates(apt);
+    void runWithUpdatingLock(apt.id, () => {
+      const res = cancelAppointmentByCustomer(apt.id);
+      triggerToast(
+        `${apt.customerName} — İptal Edildi ❌`,
+        res.notifiedCount > 0
+          ? `Randevu iptal edildi ve yedek listedeki ${res.notifiedCount} müşteriye bildirim gönderildi.`
+          : `Saat ${apt.time} tekrar randevuya açıldı.`,
+        "warning"
+      );
+      checkAndTriggerEarlyCandidates(apt);
+    });
   };
 
   const [expandedAptId, setExpandedAptId] = useState<string | null>(null);
@@ -627,13 +659,15 @@ export default function AdminDashboardPage() {
   };
 
   const handleNoShow = (apt: Appointment) => {
-    markAppointmentNoShow(apt.id);
-    triggerToast(
-      `${apt.customerName} — Gelmedi (No-Show)`,
-      `Müşteri no-show olarak işaretlendi ve ortak kara liste ağına eklendi.`,
-      "warning"
-    );
-    checkAndTriggerEarlyCandidates(apt);
+    void runWithUpdatingLock(apt.id, () => {
+      markAppointmentNoShow(apt.id);
+      triggerToast(
+        `${apt.customerName} — Gelmedi (No-Show)`,
+        `Müşteri no-show olarak işaretlendi ve ortak kara liste ağına eklendi.`,
+        "warning"
+      );
+      checkAndTriggerEarlyCandidates(apt);
+    });
   };
 
   const handleSendReminder = (
@@ -707,9 +741,13 @@ export default function AdminDashboardPage() {
     const finalName = quickName.trim() || "Misafir Müşteri";
     const finalPhone =
       quickPhone.trim() || currentShop.phone || "0555 000 00 00";
+    const strictQuickDate = toStrictIsoDate(quickSelectedDay.isoDate || quickSelectedDay.id);
 
     const created = addAppointment({
-      dayId: quickSelectedDay.id,
+      dayId: strictQuickDate,
+      date: strictQuickDate,
+      appointment_date: strictQuickDate,
+      appointment_time: quickTime,
       dateLabel: quickSelectedDay.chipLabel,
       time: quickTime,
       endTime: minutesToTime(
@@ -738,12 +776,12 @@ export default function AdminDashboardPage() {
     setQuickPhone("");
     setQuickTime("");
     setAppointmentFilter("active");
-    if (quickSelectedDay.id === todayDay.id) {
+    if (strictQuickDate === todayDay.id) {
       setAdminDayMode("today");
-    } else if (quickSelectedDay.id === tomorrowDay.id) {
+    } else if (strictQuickDate === tomorrowDay.id) {
       setAdminDayMode("tomorrow");
     } else {
-      setSelectedCalendarDayId(quickSelectedDay.id);
+      setSelectedCalendarDayId(strictQuickDate);
       setAdminDayMode("calendar");
     }
     setBottomTab("appointments");
@@ -767,17 +805,19 @@ export default function AdminDashboardPage() {
     if (!noShowConfirmModal.appointment) return;
     const apt = noShowConfirmModal.appointment;
     const deposit = Number(noShowConfirmModal.depositAmount) || 100;
-    markAppointmentNoShow(apt.id, deposit);
-    setNoShowConfirmModal({
-      isOpen: false,
-      appointment: null,
-      depositAmount: 100,
+    void runWithUpdatingLock(apt.id, () => {
+      markAppointmentNoShow(apt.id, deposit);
+      setNoShowConfirmModal({
+        isOpen: false,
+        appointment: null,
+        depositAmount: 100,
+      });
+      triggerToast(
+        `${apt.customerName} Kara Listeye Alındı`,
+        `${apt.customerPhone} numarası ${deposit} TL kapora şartıyla kara listeye eklendi.`,
+        "warning"
+      );
     });
-    triggerToast(
-      `${apt.customerName} Kara Listeye Alındı`,
-      `${apt.customerPhone} numarası ${deposit} TL kapora şartıyla kara listeye eklendi.`,
-      "warning"
-    );
   };
 
   const handleConfirmBlockTime = () => {
@@ -785,10 +825,11 @@ export default function AdminDashboardPage() {
       barbers.find((b) => b.id === blockModal.barberId) ||
       barbers.find((b) => !b.isAnyOption) ||
       barbers[0];
-    const dayMeta = resolveDayMetadata(blockModal.dayId || todayDay.id);
+    const strictBlockDate = toStrictIsoDate(blockModal.dayId || todayDay.id);
+    const dayMeta = resolveDayMetadata(strictBlockDate);
 
     addBlockedTimeRange({
-      dayId: dayMeta.id,
+      dayId: strictBlockDate,
       dateLabel: dayMeta.chipLabel,
       startTime: blockModal.startTime,
       endTime: blockModal.endTime,
@@ -816,7 +857,7 @@ export default function AdminDashboardPage() {
 
   const detailAptWaUrl = useMemo(() => {
     if (!activeDetailApt) return "#";
-    const resolvedDay = resolveDayMetadata(activeDetailApt.dayId);
+    const resolvedDay = resolveDayMetadata(getAppointmentIsoDate(activeDetailApt));
     const dateLabel = resolvedDay.chipLabel;
     const srvText = activeDetailApt.services.map((s) => s.name).join(" + ");
     const bookingLink = getShopBookingUrl(currentShop.slug);
@@ -825,17 +866,33 @@ export default function AdminDashboardPage() {
   }, [activeDetailApt, currentShop.name, currentShop.slug]);
 
   const currentTimelineDayId = useMemo(() => {
-    if (adminDayMode === "today") return todayDay.id;
-    if (adminDayMode === "tomorrow") return tomorrowDay.id;
-    if (adminDayMode === "calendar") return selectedCalendarDayId;
-    return todayDay.id;
+    if (adminDayMode === "today") return toStrictIsoDate(todayDay.id);
+    if (adminDayMode === "tomorrow") return toStrictIsoDate(tomorrowDay.id);
+    if (adminDayMode === "calendar") return toStrictIsoDate(selectedCalendarDayId);
+    return toStrictIsoDate(todayDay.id);
   }, [adminDayMode, todayDay.id, tomorrowDay.id, selectedCalendarDayId]);
 
+  // KESİN ÇÖZÜM: Gün değiştirildiğinde (selectedDate değiştiğinde) önceki günün geçici state'ini temizle
+  // ki eski günün açık kartları veya seçimleri yeni günde asla görünmesin!
+  useEffect(() => {
+    setExpandedAptId(null);
+    setSelectedDetailApt(null);
+    setDraggedApt(null);
+    setDragOverSlotTime(null);
+    setMobileRescheduleApt(null);
+    setEditingPhoneAptId(null);
+    setQuickDayId(currentTimelineDayId);
+    setQuickTime("");
+    setBlockModal((prev) => ({ ...prev, dayId: currentTimelineDayId }));
+  }, [currentTimelineDayId, adminDayMode]);
+
   const timelineAppointments = useMemo(() => {
+    const selectedDate = toStrictIsoDate(currentTimelineDayId);
     return appointments.filter((apt) => {
       if (apt.status === "cancelled" || apt.status === "no_show") return false;
-      const aptDayId = resolveDayMetadata(apt.dayId).id;
-      if (aptDayId !== currentTimelineDayId) return false;
+      // SADECE seçili tarihe (appointment_date === selectedDate) ait randevu ve mola bloklarını eşleştir!
+      const appointmentDate = getAppointmentIsoDate(apt);
+      if (appointmentDate !== selectedDate) return false;
       if (
         adminStaffFilter !== "all" &&
         !apt.isBlockedSlot &&
@@ -1024,8 +1081,8 @@ export default function AdminDashboardPage() {
 
   // Memo'lu timeline kartları için SABİT (referansı değişmeyen) aksiyon fonksiyonları.
   // En güncel bağımlılıklar ref üzerinden okunur; böylece kartlar gereksiz yere yeniden render olmaz.
-  const timelineActionsRef = useRef({ confirmAppointment, handleComplete, triggerToast });
-  timelineActionsRef.current = { confirmAppointment, handleComplete, triggerToast };
+  const timelineActionsRef = useRef({ confirmAppointment, markAppointmentCompleted, triggerToast, runWithUpdatingLock });
+  timelineActionsRef.current = { confirmAppointment, markAppointmentCompleted, triggerToast, runWithUpdatingLock };
 
   const handleTimelineOpen = useCallback((apt: Appointment) => {
     if (dragMovedRef.current) return;
@@ -1033,23 +1090,27 @@ export default function AdminDashboardPage() {
   }, []);
 
   const handleTimelineConfirm = useCallback((apt: Appointment, isBlacklistApt: boolean) => {
-    const { confirmAppointment: confirm, triggerToast: toast } = timelineActionsRef.current;
-    confirm(apt.id);
-    if (isBlacklistApt) {
-      toast(
-        `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
-        "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-        "success"
-      );
-    } else {
-      toast(`${apt.customerName} — Onaylandı ✅`, "Randevu onaylandı.", "success");
-    }
+    const { confirmAppointment: confirm, triggerToast: toast, runWithUpdatingLock: lock } = timelineActionsRef.current;
+    void lock(apt.id, () => {
+      confirm(apt.id);
+      if (isBlacklistApt) {
+        toast(
+          `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
+          "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
+          "success"
+        );
+      } else {
+        toast(`${apt.customerName} — Onaylandı ✅`, "Randevu onaylandı.", "success");
+      }
+    });
   }, []);
 
   const handleTimelineComplete = useCallback((apt: Appointment) => {
-    const { handleComplete: complete, triggerToast: toast } = timelineActionsRef.current;
-    complete(apt);
-    toast("Randevu Tamamlandı ✅", `${apt.customerName} geldi ve işlem tamamlandı.`, "success");
+    const { markAppointmentCompleted: complete, triggerToast: toast, runWithUpdatingLock: lock } = timelineActionsRef.current;
+    void lock(apt.id, () => {
+      complete(apt.id);
+      toast("Randevu Tamamlandı ✅", `${apt.customerName} geldi ve işlem tamamlandı.`, "success");
+    });
   }, []);
 
   const handleTimelineMove = useCallback((apt: Appointment) => {
@@ -1083,7 +1144,7 @@ export default function AdminDashboardPage() {
     const startM = timeToMinutes(targetTime);
     const endM = startM + duration;
 
-    // Hedef saat diliminde çakışma var mı?
+    // Hedef saat diliminde çakışma var mı? (Sadece seçili gündeki timelineAppointments içinde!)
     const hasCollision = timelineAppointments.some((a) => {
       if (a.id === draggedApt.id) return false;
       if (
@@ -1122,49 +1183,56 @@ export default function AdminDashboardPage() {
     if (!dragConfirmModal.appointment || !dragConfirmModal.targetTime) return;
     const apt = dragConfirmModal.appointment;
     const newTime = dragConfirmModal.targetTime;
-    const dayMeta = resolveDayMetadata(currentTimelineDayId);
+    const strictDate = toStrictIsoDate(currentTimelineDayId);
+    const dayMeta = resolveDayMetadata(strictDate);
 
-    shiftAppointmentToEarlySlot(apt.id, newTime, dayMeta.id, dayMeta.chipLabel);
-    setDragConfirmModal({ isOpen: false, appointment: null, targetTime: "" });
+    void runWithUpdatingLock(apt.id, () => {
+      shiftAppointmentToEarlySlot(apt.id, newTime, strictDate, dayMeta.chipLabel);
+      setDragConfirmModal({ isOpen: false, appointment: null, targetTime: "" });
 
-    triggerToast(
-      "Randevu Saati Güncellendi! ⏰",
-      `${apt.customerName} adlı müşterinin randevusu saat ${newTime} olarak taşındı. Eski saat (${apt.time}) anında boşa çıkarıldı.`,
-      "success"
-    );
+      triggerToast(
+        "Randevu Saati Güncellendi! ⏰",
+        `${apt.customerName} adlı müşterinin randevusu saat ${newTime} olarak taşındı. Eski saat (${apt.time}) anında boşa çıkarıldı.`,
+        "success"
+      );
+    });
   };
 
-  // Mola durumunu doğrudan o günkü randevular/kayıtlar dizisinden türet (Derived State)
+  // Mola durumunu SADECE seçili günkü (appointment_date === selectedDate) randevular/kayıtlar dizisinden türet (Derived State)
   const isBreakActiveToday = useMemo(() => {
+    const selectedDate = toStrictIsoDate(currentTimelineDayId);
     return appointments.some(
       (a) =>
         a.isBlockedSlot &&
-        (a.dayId === currentTimelineDayId || !a.dayId) &&
+        getAppointmentIsoDate(a) === selectedDate &&
         (a.blockReason?.toLowerCase().includes("mola") ||
           a.blockReason?.toLowerCase().includes("öğle") ||
-          a.blockReason?.toLowerCase().includes("yemek"))
+          a.blockReason?.toLowerCase().includes("yemek") ||
+          a.customerName?.toLowerCase().includes("mola"))
     );
   }, [appointments, currentTimelineDayId]);
 
   // Öğle Molası Korumalı Aç-Kapa (Çift Tıklama / Bug Engelli)
   const handleToggleBreakSecure = () => {
-    if (isTogglingBreak) return;
+    if (isTogglingBreak || updatingId === "break-toggle") return;
     setIsTogglingBreak(true);
 
-    const willEnable = !isBreakActiveToday;
-    toggleShopBreak(currentTimelineDayId);
+    void runWithUpdatingLock("break-toggle", () => {
+      const willEnable = !isBreakActiveToday;
+      toggleShopBreak(toStrictIsoDate(currentTimelineDayId));
 
-    triggerToast(
-      willEnable ? "Öğle Molası Başlatıldı 🍽️" : "Öğle Molası Kaldırıldı ✅",
-      willEnable
-        ? `Saat ${shopSettings.breakStart || "13:00"} - ${shopSettings.breakEnd || "14:00"} arası randevulara kapatıldı.`
-        : "Mola kaldırıldı. İlgili saatler takvimde anında tekrar randevuya açıldı.",
-      "success"
-    );
-
-    setTimeout(() => {
-      setIsTogglingBreak(false);
-    }, 400);
+      triggerToast(
+        willEnable ? "Öğle Molası Başlatıldı 🍽️" : "Öğle Molası Kaldırıldı ✅",
+        willEnable
+          ? `Saat ${shopSettings.breakStart || "13:00"} - ${shopSettings.breakEnd || "14:00"} arası seçili gün için randevulara kapatıldı.`
+          : "Mola kaldırıldı. İlgili saatler takvimde anında tekrar randevuya açıldı.",
+        "success"
+      );
+    }).finally(() => {
+      setTimeout(() => {
+        setIsTogglingBreak(false);
+      }, 300);
+    });
   };
 
   const handleOpenRemoveBlacklistModal = (
@@ -1315,8 +1383,8 @@ export default function AdminDashboardPage() {
   // Randevu Listesi ve Gün Gün Ayrım Hesaplamaları (09:00 -> 21:00 Kronolojik Sıralama)
   const sortChronologically = useCallback((list: Appointment[]) => {
     return [...list].sort((a, b) => {
-      const dayA = resolveDayMetadata(a.dayId).id;
-      const dayB = resolveDayMetadata(b.dayId).id;
+      const dayA = getAppointmentIsoDate(a);
+      const dayB = getAppointmentIsoDate(b);
       if (dayA !== dayB) {
         return dayA.localeCompare(dayB);
       }
@@ -1360,7 +1428,7 @@ export default function AdminDashboardPage() {
 
   // 👥 PERSONEL / KOLTUK BAZLI CİRO HESAPLAMA (GÜNLÜK & AYLIK)
   const staffRevenueStats = useMemo(() => {
-    const todayIso = todayDay.id;
+    const todayIso = toStrictIsoDate(todayDay.id);
     const currentMonthPrefix = todayIso.substring(0, 7); // "YYYY-MM"
 
     // Sadece tamamlanan randevuların cirosunu hesapla
@@ -1376,7 +1444,7 @@ export default function AdminDashboardPage() {
       );
 
       const todayApts = barberCompleted.filter(
-        (a) => resolveDayMetadata(a.dayId).id === todayIso
+        (a) => getAppointmentIsoDate(a) === todayIso
       );
       const todayRevenue = todayApts.reduce(
         (sum, a) => sum + (Number(a.totalPrice) || 0),
@@ -1384,7 +1452,7 @@ export default function AdminDashboardPage() {
       );
 
       const monthApts = barberCompleted.filter((a) => {
-        const resolved = resolveDayMetadata(a.dayId).id;
+        const resolved = getAppointmentIsoDate(a);
         return resolved.startsWith(currentMonthPrefix);
       });
       const monthRevenue = monthApts.reduce(
@@ -1411,11 +1479,11 @@ export default function AdminDashboardPage() {
 
   // Canlı Günlük Özet Şeridi (Mini Dashboard) Metrikleri
   const todaySummaryMetrics = useMemo(() => {
-    const todayIso = todayDay.id;
+    const todayIso = toStrictIsoDate(todayDay.id);
     const todayAllApts = appointments.filter(
       (a) =>
         !a.isBlockedSlot &&
-        resolveDayMetadata(a.dayId).id === todayIso &&
+        getAppointmentIsoDate(a) === todayIso &&
         a.status !== "cancelled"
     );
     const revenue = todayAllApts.reduce(
@@ -1432,11 +1500,11 @@ export default function AdminDashboardPage() {
   // Her Gün İçin Bekleyen Randevu Sayısı Rozeti (Badge) Hesaplayıcı
   const getPendingCountForDay = useCallback(
     (targetDayId: string) => {
-      const normalizedTarget = resolveDayMetadata(targetDayId).id;
+      const normalizedTarget = toStrictIsoDate(targetDayId);
       return activeAppointments.filter(
         (apt) =>
           !apt.isBlockedSlot &&
-          resolveDayMetadata(apt.dayId).id === normalizedTarget
+          getAppointmentIsoDate(apt) === normalizedTarget
       ).length;
     },
     [activeAppointments]
@@ -1456,8 +1524,11 @@ export default function AdminDashboardPage() {
     () =>
       activeAppointments.filter((apt) => {
         if (apt.isBlockedSlot) return false;
-        const dId = resolveDayMetadata(apt.dayId).id;
-        return dId !== todayDay.id && dId !== tomorrowDay.id;
+        const dId = getAppointmentIsoDate(apt);
+        return (
+          dId !== toStrictIsoDate(todayDay.id) &&
+          dId !== toStrictIsoDate(tomorrowDay.id)
+        );
       }).length,
     [activeAppointments, todayDay.id, tomorrowDay.id]
   );
@@ -1467,11 +1538,11 @@ export default function AdminDashboardPage() {
     [activeAppointments]
   );
 
-  // Seçili Gün Filtresi (Varsayılan: Bugün)
+  // Seçili Gün Filtresi (Varsayılan: Bugün — YYYY-MM-DD birebir eşleşme)
   const activeTargetDayId: string | null = useMemo(() => {
-    if (adminDayMode === "today") return todayDay.id;
-    if (adminDayMode === "tomorrow") return tomorrowDay.id;
-    if (adminDayMode === "calendar") return selectedCalendarDayId;
+    if (adminDayMode === "today") return toStrictIsoDate(todayDay.id);
+    if (adminDayMode === "tomorrow") return toStrictIsoDate(tomorrowDay.id);
+    if (adminDayMode === "calendar") return toStrictIsoDate(selectedCalendarDayId);
     return null; // "all" (Tümü)
   }, [adminDayMode, todayDay.id, tomorrowDay.id, selectedCalendarDayId]);
 
@@ -1482,15 +1553,17 @@ export default function AdminDashboardPage() {
 
   const dayFilteredActiveAppointments = useMemo(() => {
     if (!activeTargetDayId) return activeAppointments;
+    const selectedDate = toStrictIsoDate(activeTargetDayId);
     return activeAppointments.filter(
-      (apt) => resolveDayMetadata(apt.dayId).id === activeTargetDayId
+      (apt) => getAppointmentIsoDate(apt) === selectedDate
     );
   }, [activeAppointments, activeTargetDayId]);
 
   const dayFilteredHistoryAppointments = useMemo(() => {
     if (!activeTargetDayId) return historyAppointments;
+    const selectedDate = toStrictIsoDate(activeTargetDayId);
     return historyAppointments.filter(
-      (apt) => resolveDayMetadata(apt.dayId).id === activeTargetDayId
+      (apt) => getAppointmentIsoDate(apt) === selectedDate
     );
   }, [historyAppointments, activeTargetDayId]);
 
@@ -1529,7 +1602,7 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminPinGate>
-      <div className="admin-page-theme relative mx-auto max-w-3xl px-3 pb-32 pt-3 sm:px-6 sm:pt-5">
+      <div className="admin-page-theme relative mx-auto max-w-3xl px-3 pb-32 pt-3 sm:px-6 sm:pt-5 touch-manipulation select-none">
         {/* 👑 VIP HERO HEADER (Tema ile %100 Uyumlu Üst Alan) */}
         <header className="-mx-3 -mt-3 sm:-mx-6 sm:-mt-5 mb-3.5 rounded-b-3xl border-b border-stone-200 dark:border-amber-500/20 bg-white dark:bg-zinc-900/90 text-slate-900 dark:text-white shadow-sm dark:shadow-xl px-3.5 pt-4 pb-4 sm:px-6 sm:pt-5 sm:pb-5">
           {/* Üst Bar: Sol Logo + Dükkan Adı & Durumu, Sağ 3 İkon Butonu */}
@@ -2096,7 +2169,7 @@ export default function AdminDashboardPage() {
             ) : (
               <div className="space-y-3">
                 {displayedAppointments.map((apt) => {
-                  const resolvedAptDay = resolveDayMetadata(apt.dayId);
+                  const resolvedAptDay = resolveDayMetadata(getAppointmentIsoDate(apt));
                   const cleanDateLabel = resolvedAptDay.chipLabel;
 
                   // Kilitli Saat Kartı
@@ -2117,18 +2190,21 @@ export default function AdminDashboardPage() {
                         </div>
                         <button
                           type="button"
+                          disabled={updatingId === apt.id}
                           onClick={() => {
-                            removeAppointmentOrBlock(apt.id);
-                            triggerToast(
-                              "Saat Kilidi Açıldı",
-                              `${apt.time} saati tekrar randevuya açıldı.`,
-                              "success"
-                            );
+                            void runWithUpdatingLock(apt.id, () => {
+                              removeAppointmentOrBlock(apt.id);
+                              triggerToast(
+                                "Saat Kilidi Açıldı",
+                                `${apt.time} saati tekrar randevuya açıldı.`,
+                                "success"
+                              );
+                            });
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-500/20 px-4 py-2.5 text-xs font-black text-emerald-300"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-500/20 px-4 py-2.5 text-xs font-black text-emerald-300 disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                         >
                           <Unlock className="h-4 w-4" />
-                          <span>Kilidi Aç</span>
+                          <span>{updatingId === apt.id ? "Açılıyor..." : "Kilidi Aç"}</span>
                         </button>
                       </div>
                     );
@@ -2408,29 +2484,33 @@ export default function AdminDashboardPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                               <button
                                 type="button"
+                                disabled={updatingId === apt.id}
                                 onClick={() => {
-                                  confirmAppointment(apt.id);
-                                  triggerToast(
-                                    `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
-                                    "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-                                    "success"
-                                  );
+                                  void runWithUpdatingLock(apt.id, () => {
+                                    confirmAppointment(apt.id);
+                                    triggerToast(
+                                      `${apt.customerName} — Kapora Alındı & Onaylandı ✅`,
+                                      "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
+                                      "success"
+                                    );
+                                  });
                                 }}
-                                className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 px-4 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer"
+                                className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 px-4 text-xs font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                               >
                                 <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                                <span>✅ Kaporayı Aldım, Onayla</span>
+                                <span>{updatingId === apt.id ? "Onaylanıyor..." : "✅ Kaporayı Aldım, Onayla"}</span>
                               </button>
 
                               <button
                                 type="button"
+                                disabled={updatingId === apt.id}
                                 onClick={() => {
                                   if (confirm(`${apt.customerName} randevusunu reddetmek / iptal etmek istediğinize emin misiniz?`)) {
                                     handleCancelByAdmin(apt);
                                     setExpandedAptId(null);
                                   }
                                 }}
-                                className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-2.5 px-4 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer"
+                                className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-2.5 px-4 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                               >
                                 <Ban className="h-4 w-4" />
                                 <span>❌ Reddet / İptal Et</span>
@@ -2441,27 +2521,29 @@ export default function AdminDashboardPage() {
                               {!isCompleted && !isCancelled && (
                                 <button
                                   type="button"
+                                  disabled={updatingId === apt.id}
                                   onClick={() => {
                                     handleComplete(apt);
                                     setExpandedAptId(null);
                                   }}
-                                  className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2 px-3 text-xs font-black text-[#06150f] transition active:scale-[0.98] cursor-pointer"
+                                  className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2 px-3 text-xs font-black text-[#06150f] transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                                 >
                                   <Check className="h-4 w-4 stroke-[3]" />
-                                  <span>Geldi ✅</span>
+                                  <span>{updatingId === apt.id ? "İşleniyor..." : "Geldi ✅"}</span>
                                 </button>
                               )}
 
                               {!isCancelled && (
                                 <button
                                   type="button"
+                                  disabled={updatingId === apt.id}
                                   onClick={() => {
                                     if (confirm(`${apt.customerName} randevusunu iptal etmek istediğinize emin misiniz?`)) {
                                       handleCancelByAdmin(apt);
                                       setExpandedAptId(null);
                                     }
                                   }}
-                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/15 hover:bg-rose-500/25 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer"
+                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/15 hover:bg-rose-500/25 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                                 >
                                   <X className="h-4 w-4" />
                                   <span>İptal Et ❌</span>
@@ -2471,19 +2553,21 @@ export default function AdminDashboardPage() {
                               {isPhoneBlacklisted(apt.customerPhone) ? (
                                 <button
                                   type="button"
+                                  disabled={updatingId === apt.id}
                                   onClick={() => handleOpenRemoveBlacklistModal(apt.customerPhone, apt.customerName)}
-                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 py-2 px-3 text-xs font-black text-amber-300 transition active:scale-[0.98] cursor-pointer"
+                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 py-2 px-3 text-xs font-black text-amber-300 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                                 >
                                   <span>Kara Listeden Çıkar</span>
                                 </button>
                               ) : (
                                 <button
                                   type="button"
+                                  disabled={updatingId === apt.id}
                                   onClick={() => {
                                     handleOpenNoShowModal(apt);
                                     setExpandedAptId(null);
                                   }}
-                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/20 hover:bg-rose-500/35 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer"
+                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/20 hover:bg-rose-500/35 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                                 >
                                   <AlertTriangle className="h-4 w-4" />
                                   <span>Kara Listeye Al</span>
@@ -2808,18 +2892,21 @@ export default function AdminDashboardPage() {
                               </div>
                               <button
                                 type="button"
+                                disabled={updatingId === blk.id}
                                 onClick={() => {
-                                  removeAppointmentOrBlock(blk.id);
-                                  triggerToast(
-                                    "Saat Kilidi Açıldı",
-                                    `${blk.time} saati tekrar randevuya açıldı.`,
-                                    "success"
-                                  );
+                                  void runWithUpdatingLock(blk.id, () => {
+                                    removeAppointmentOrBlock(blk.id);
+                                    triggerToast(
+                                      "Saat Kilidi Açıldı",
+                                      `${blk.time} saati tekrar randevuya açıldı.`,
+                                      "success"
+                                    );
+                                  });
                                 }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800/80 px-2 py-1 text-[10px] font-black text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition-all duration-150 active:scale-95 cursor-pointer shrink-0"
+                                className="inline-flex items-center gap-1 rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800/80 px-2 py-1 text-[10px] font-black text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition-all duration-150 active:scale-95 cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                               >
                                 <Unlock className="h-3 w-3" />
-                                <span>Kilidi Aç</span>
+                                <span>{updatingId === blk.id ? "..." : "Kilidi Aç"}</span>
                               </button>
                             </div>
                           ))}
@@ -2842,6 +2929,7 @@ export default function AdminDashboardPage() {
                                 slotCount={geo.slotCount}
                                 lane={geo.lane}
                                 lanes={geo.lanes}
+                                isUpdating={updatingId === apt.id}
                                 onOpen={handleTimelineOpen}
                                 onConfirm={handleTimelineConfirm}
                                 onComplete={handleTimelineComplete}
@@ -5162,30 +5250,35 @@ export default function AdminDashboardPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
                       <button
                         type="button"
+                        disabled={updatingId === activeDetailApt.id}
                         onClick={() => {
-                          confirmAppointment(activeDetailApt.id);
-                          triggerToast(
-                            `${activeDetailApt.customerName} — Kapora Alındı & Onaylandı ✅`,
-                            "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-                            "success"
-                          );
-                          setSelectedDetailApt(null);
+                          const target = activeDetailApt;
+                          void runWithUpdatingLock(target.id, () => {
+                            confirmAppointment(target.id);
+                            triggerToast(
+                              `${target.customerName} — Kapora Alındı & Onaylandı ✅`,
+                              "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
+                              "success"
+                            );
+                            setSelectedDetailApt(null);
+                          });
                         }}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-3 px-4 text-xs sm:text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-3 px-4 text-xs sm:text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                       >
                         <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                        <span>✅ Kaporayı Aldım, Onayla</span>
+                        <span>{updatingId === activeDetailApt.id ? "Onaylanıyor..." : "✅ Kaporayı Aldım, Onayla"}</span>
                       </button>
 
                       <button
                         type="button"
+                        disabled={updatingId === activeDetailApt.id}
                         onClick={() => {
                           if (confirm(`${activeDetailApt.customerName} randevusunu reddetmek / iptal etmek istediğinize emin misiniz?`)) {
                             handleCancelByAdmin(activeDetailApt);
                             setSelectedDetailApt(null);
                           }
                         }}
-                        className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-3 px-4 text-xs sm:text-sm font-black text-rose-200 transition active:scale-[0.98] cursor-pointer"
+                        className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-3 px-4 text-xs sm:text-sm font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                       >
                         <Ban className="h-4 w-4" />
                         <span>❌ Reddet / İptal Et</span>
@@ -5196,6 +5289,7 @@ export default function AdminDashboardPage() {
                       {activeDetailApt.status !== "completed" && activeDetailApt.status !== "cancelled" && (
                         <button
                           type="button"
+                          disabled={updatingId === activeDetailApt.id}
                           onClick={() => {
                             handleComplete(activeDetailApt);
                             triggerToast(
@@ -5205,21 +5299,22 @@ export default function AdminDashboardPage() {
                             );
                             setSelectedDetailApt(null);
                           }}
-                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2.5 text-xs font-black text-emerald-300 transition active:scale-95 cursor-pointer"
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2.5 text-xs font-black text-emerald-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                         >
                           <CheckCircle2 className="h-4 w-4" />
-                          <span>Geldi</span>
+                          <span>{updatingId === activeDetailApt.id ? "İşleniyor..." : "Geldi"}</span>
                         </button>
                       )}
 
                       <button
                         type="button"
+                        disabled={updatingId === activeDetailApt.id}
                         onClick={() => {
                           const aptToMove = activeDetailApt;
                           setSelectedDetailApt(null);
                           setMobileRescheduleApt(aptToMove);
                         }}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-xs font-black text-amber-300 transition active:scale-95 cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-xs font-black text-amber-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                       >
                         <span>⇄ Saati Taşı</span>
                       </button>
@@ -5227,13 +5322,14 @@ export default function AdminDashboardPage() {
                       {activeDetailApt.status !== "cancelled" && (
                         <button
                           type="button"
+                          disabled={updatingId === activeDetailApt.id}
                           onClick={() => {
                             if (confirm(`${activeDetailApt.customerName} randevusunu iptal etmek istediğinize emin misiniz? Saat tekrar boşa çıkarılacaktır.`)) {
                               handleCancelByAdmin(activeDetailApt);
                               setSelectedDetailApt(null);
                             }
                           }}
-                          className="flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition active:scale-95 cursor-pointer"
+                          className="flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                           title="Randevuyu İptal Et"
                         >
                           <Trash2 className="h-4 w-4" />

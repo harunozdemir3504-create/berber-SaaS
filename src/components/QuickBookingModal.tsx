@@ -133,10 +133,23 @@ export default function QuickBookingModal({
   const blockDay =
     liveDays.find((d) => d.id === blockDayId) || liveDays[0];
 
-  const phoneSlots = useMemo(() => getSlotsForDay(dayId), [getSlotsForDay, dayId]);
+  // Gün değiştiğinde önceki günün seçili saatini temizle
+  useEffect(() => {
+    setTime("");
+  }, [dayId]);
+
+  useEffect(() => {
+    setBlockStart("");
+    setBlockEnd("");
+  }, [blockDayId]);
+
+  const phoneSlots = useMemo(
+    () => getSlotsForDay(dayId, barberId || undefined),
+    [getSlotsForDay, dayId, barberId]
+  );
   const blockSlots = useMemo(
-    () => getSlotsForDay(blockDayId),
-    [getSlotsForDay, blockDayId]
+    () => getSlotsForDay(blockDayId, blockBarberId || undefined),
+    [getSlotsForDay, blockDayId, blockBarberId]
   );
 
   const isPhoneDayClosed = shopSettings.closedDays.includes(selectedDay.dayOfWeek);

@@ -86,8 +86,11 @@ export interface Appointment {
   appointmentCode: string; // e.g., "#BRB-4829"
   verificationCode?: string; // 4 haneli WhatsApp onay kodu (Örn: "#4829")
   dayId: string; // Gerçek ISO tarih: "YYYY-MM-DD"
+  date?: string; // Gerçek ISO tarih: "YYYY-MM-DD"
+  appointment_date?: string; // Gerçek ISO tarih: "YYYY-MM-DD"
   dateLabel: string; // Örn: "Bugün (2 Kas)"
   time: string;
+  appointment_time?: string;
   endTime: string;
   customerName: string;
   customerPhone: string;
@@ -191,7 +194,7 @@ export const INITIAL_SHOP_SETTINGS: ShopSettings = {
   openTime: "09:00",
   closeTime: "21:00",
   slotInterval: 30,
-  breakEnabled: true,
+  breakEnabled: false,
   breakStart: "13:00",
   breakEnd: "14:00",
   closedDays: [0], // Pazar günü varsayılan tatil/kapalı
@@ -524,7 +527,47 @@ export function getLiveDaysMetadata(count: number = 7): DayMetadata[] {
 }
 
 /**
+ * Herhangi bir tarih girdisini kesin olarak "YYYY-MM-DD" formatına çevirir.
+ * Geçmiş tarihleri ASLA bugüne kaydırmaz!
+ */
+export function toStrictIsoDate(rawDayId?: string | null): string {
+  const today = getTurkeyNow();
+  const todayIso = toIsoDateString(today);
+  if (!rawDayId) return todayIso;
+
+  const trimmed = rawDayId.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+
+  if (/^day-\d+$/i.test(trimmed)) {
+    const liveDays = getLiveDaysMetadata(14);
+    const idx = Math.max(0, parseInt(trimmed.split("-")[1], 10) - 1);
+    return (liveDays[Math.min(idx, liveDays.length - 1)] || liveDays[0]).isoDate;
+  }
+
+  return todayIso;
+}
+
+/**
+ * Bir randevu veya mola kaydının kesin "YYYY-MM-DD" tarihini döndürür.
+ */
+export function getAppointmentIsoDate(
+  apt?: {
+    appointment_date?: string | null;
+    date?: string | null;
+    dayId?: string | null;
+  } | null
+): string {
+  if (!apt) return "";
+  const raw = apt.appointment_date || apt.date || apt.dayId || "";
+  if (!raw) return "";
+  return toStrictIsoDate(raw);
+}
+
+/**
  * Verilen ISO tarih veya eski "day-1", "day-2" kimliğini gerçek güncel DayMetadata'ya çevirir.
+ * KESİN KURAL: Geçmiş veya ileri "YYYY-MM-DD" tarihlerini ASLA bugüne (liveDays[0]) çekmez!
  */
 export function resolveDayMetadata(rawDayId?: string | null): DayMetadata {
   const liveDays = getLiveDaysMetadata(14);
@@ -538,23 +581,20 @@ export function resolveDayMetadata(rawDayId?: string | null): DayMetadata {
     return liveDays[Math.min(idx, liveDays.length - 1)] || liveDays[0];
   }
 
+  const isoCandidate = /^\d{4}-\d{2}-\d{2}/.test(trimmed)
+    ? trimmed.slice(0, 10)
+    : trimmed;
+
   // ISO "YYYY-MM-DD" formatı
-  const matched = liveDays.find((d) => d.id === trimmed || d.isoDate === trimmed);
+  const matched = liveDays.find(
+    (d) => d.id === isoCandidate || d.isoDate === isoCandidate
+  );
   if (matched) return matched;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const [y, m, d] = trimmed.split("-").map(Number);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoCandidate)) {
+    const [y, m, d] = isoCandidate.split("-").map(Number);
     const parsed = new Date(y, (m || 1) - 1, d || 1);
     const today = getTurkeyNow();
-    const cleanToday = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate()
-    );
-    // Geçmiş bir tarih kalmışsa bugüne çek
-    if (parsed.getTime() < cleanToday.getTime()) {
-      return liveDays[0];
-    }
     return buildDayMetadataFromDate(parsed, today);
   }
 
@@ -1082,7 +1122,7 @@ export const INITIAL_SHOPS: TenantShop[] = [
       openTime: "10:00",
       closeTime: "22:00",
       slotInterval: 30,
-      breakEnabled: true,
+      breakEnabled: false,
       breakStart: "14:00",
       breakEnd: "15:00",
       closedDays: [0],
@@ -1258,7 +1298,7 @@ export const INITIAL_SHOPS: TenantShop[] = [
       openTime: "09:30",
       closeTime: "21:00",
       slotInterval: 30,
-      breakEnabled: true,
+      breakEnabled: false,
       breakStart: "13:00",
       breakEnd: "14:00",
       closedDays: [0],

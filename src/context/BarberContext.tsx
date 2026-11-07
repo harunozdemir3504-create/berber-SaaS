@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   Suspense,
 } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
@@ -28,6 +29,8 @@ import {
   WaitlistEntry,
   resolveDayMetadata,
   getLiveDaysMetadata,
+  toStrictIsoDate,
+  getAppointmentIsoDate,
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { triggerAutomaticBookingNotification } from "@/lib/notifications";
@@ -404,10 +407,14 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
 
   const sanitizedAppointments = (shop.appointments || [])
     .map((apt) => {
-      const resolved = resolveDayMetadata(apt.dayId);
+      const strictDate = getAppointmentIsoDate(apt) || toStrictIsoDate(apt.dayId);
+      const resolved = resolveDayMetadata(strictDate);
       return {
         ...apt,
         dayId: resolved.id,
+        date: resolved.id,
+        appointment_date: resolved.id,
+        appointment_time: apt.time,
         dateLabel: resolved.chipLabel,
       };
     })
@@ -419,7 +426,8 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
     });
 
   const sanitizedWaitlist = (shop.waitlist || []).map((wl) => {
-    const resolved = resolveDayMetadata(wl.dayId);
+    const strictDate = toStrictIsoDate(wl.dayId);
+    const resolved = resolveDayMetadata(strictDate);
     return {
       ...wl,
       dayId: resolved.id,
@@ -434,6 +442,10 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
   return {
     ...shop,
     adminPin: shop.adminPin || "1234",
+    shopSettings: {
+      ...shop.shopSettings,
+      breakEnabled: false,
+    },
     barbers: (shop.barbers || []).map((b) => ({
       ...b,
       commissionRate:
@@ -517,6 +529,14 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const [masterPin, setMasterPinState] = useState<string>("1923");
   const [hydrated, setHydrated] = useState(false);
 
+  // Realtime çakışmasını (echo / ping-pong döngüsünü) önleyen istemci ve işlem kilitleri
+  const clientIdRef = useRef<string>(
+    `client-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  );
+  const inFlightWritesRef = useRef<number>(0);
+  const lastLocalMutationAtRef = useRef<number>(0);
+  const isApplyingRemoteRef = useRef<boolean>(false);
+
   const loadFromStorage = useCallback(() => {
     try {
       const deletedSlugs = getDeletedShopSlugs();
@@ -549,13 +569,14 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Doğrudan hem localStorage'a hem de Supabase'e anında güvenli yazma fonksiyonu
+  // Doğrudan hem localStorage'a hem de Supabase'e anında güvenli yazma fonksiyonu (Optimistic Update + Tek Seferlik DB Yazımı)
   const syncDirectlyToCloud = useCallback(
-    (
+    async (
       nextShops: TenantShop[],
       nextBlacklist?: BlacklistEntry[],
       nextMasterPin?: string
-    ) => {
+    ): Promise<void> => {
+      lastLocalMutationAtRef.current = Date.now();
       try {
         localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
         if (nextBlacklist) {
@@ -572,20 +593,28 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (isSupabaseConfigured && supabase) {
-        supabase
-          .from("app_state")
-          .upsert({
+        inFlightWritesRef.current += 1;
+        lastLocalMutationAtRef.current = Date.now();
+        try {
+          const { error } = await supabase.from("app_state").upsert({
             key: "global_state",
             data: {
               shops: nextShops,
               globalBlacklist: nextBlacklist || globalBlacklist,
               masterPin: nextMasterPin || masterPin,
+              updatedByClientId: clientIdRef.current,
             },
             updated_at: new Date().toISOString(),
-          })
-          .then(({ error }) => {
-            if (error) console.warn("Supabase direct sync error:", error.message);
           });
+          if (error) {
+            console.warn("Supabase direct sync error:", error.message);
+          }
+        } catch (err) {
+          console.warn("Supabase direct sync exception:", err);
+        } finally {
+          inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+          lastLocalMutationAtRef.current = Date.now();
+        }
       }
     },
     [globalBlacklist, masterPin]
@@ -646,6 +675,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               const sanitizedRemote = remote.shops
                 .map(sanitizeShopDates)
                 .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
+              isApplyingRemoteRef.current = true;
               setShops(sanitizedRemote);
               try {
                 localStorage.setItem(
@@ -656,10 +686,12 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (isMounted && Array.isArray(remote.globalBlacklist)) {
+              isApplyingRemoteRef.current = true;
               setGlobalBlacklist(remote.globalBlacklist);
             }
 
             if (isMounted && remote.masterPin) {
+              isApplyingRemoteRef.current = true;
               setMasterPinState(remote.masterPin);
             }
           } else {
@@ -668,6 +700,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               shops: INITIAL_SHOPS,
               globalBlacklist: INITIAL_GLOBAL_BLACKLIST,
               masterPin: "1923",
+              updatedByClientId: clientIdRef.current,
             };
             await supabase.from("app_state").upsert({
               key: "global_state",
@@ -687,7 +720,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
     initData();
 
-    // Realtime subscription: başka bir sekme veya cihazdan gelen güncellemeleri anında al
+    // Realtime subscription: SADECE başka bir sekme veya cihazdan gelen güncellemeleri al.
+    // Kendi yaptığımız UPDATE / upsert işlemlerinin yankısını (echo) yoksay ki kartlar asla gidip gelmesin!
     let channel: any = null;
     if (isSupabaseConfigured && supabase) {
       channel = supabase
@@ -702,47 +736,85 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           },
           (payload: any) => {
             const nextData = payload.new?.data;
-            if (nextData) {
-              setShops((prevShops) => {
-                if (Array.isArray(nextData.shops)) {
-                  const deletedSlugs = getDeletedShopSlugs();
-                  const sanitizedNext = nextData.shops
-                    .map(sanitizeShopDates)
-                    .filter((s: TenantShop) => !deletedSlugs.has(s.slug.toLowerCase()));
-                  if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
-                    try {
-                      localStorage.setItem(
-                        STORAGE_KEYS.SHOPS,
-                        JSON.stringify(sanitizedNext)
-                      );
-                    } catch {}
-                    return sanitizedNext;
-                  }
-                }
-                return prevShops;
-              });
+            if (!nextData) return;
 
-              setGlobalBlacklist((prevBl) => {
-                if (
-                  Array.isArray(nextData.globalBlacklist) &&
-                  JSON.stringify(prevBl) !== JSON.stringify(nextData.globalBlacklist)
-                ) {
-                  return nextData.globalBlacklist;
-                }
-                return prevBl;
-              });
+            // 1. Kendi istemcimizin yaptığı güncelleme yankısıysa (echo) kesinlikle yoksay
+            if (
+              nextData.updatedByClientId &&
+              nextData.updatedByClientId === clientIdRef.current
+            ) {
+              return;
+            }
 
-              if (nextData.masterPin) {
-                setMasterPinState((prev) => (prev !== nextData.masterPin ? nextData.masterPin : prev));
+            // 2. Şu an aktif bir yerel yazma işlemi varsa veya son 2.5 sn içinde yerel bir butona basıldıysa
+            // eski bulut paketinin yerel Optimistic Update'i ezmesine izin verme
+            if (
+              inFlightWritesRef.current > 0 ||
+              Date.now() - lastLocalMutationAtRef.current < 2500
+            ) {
+              return;
+            }
+
+            setShops((prevShops) => {
+              if (Array.isArray(nextData.shops)) {
+                const deletedSlugs = getDeletedShopSlugs();
+                const sanitizedNext = nextData.shops
+                  .map(sanitizeShopDates)
+                  .filter((s: TenantShop) => !deletedSlugs.has(s.slug.toLowerCase()));
+                if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
+                  isApplyingRemoteRef.current = true;
+                  try {
+                    localStorage.setItem(
+                      STORAGE_KEYS.SHOPS,
+                      JSON.stringify(sanitizedNext)
+                    );
+                  } catch {}
+                  return sanitizedNext;
+                }
               }
+              return prevShops;
+            });
+
+            setGlobalBlacklist((prevBl) => {
+              if (
+                Array.isArray(nextData.globalBlacklist) &&
+                JSON.stringify(prevBl) !== JSON.stringify(nextData.globalBlacklist)
+              ) {
+                isApplyingRemoteRef.current = true;
+                return nextData.globalBlacklist;
+              }
+              return prevBl;
+            });
+
+            if (nextData.masterPin) {
+              setMasterPinState((prev) => {
+                if (prev !== nextData.masterPin) {
+                  isApplyingRemoteRef.current = true;
+                  return nextData.masterPin;
+                }
+                return prev;
+              });
             }
           }
         )
         .subscribe();
     }
 
-    const handleStorageChange = () => {
-      loadFromStorage();
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        inFlightWritesRef.current > 0 ||
+        Date.now() - lastLocalMutationAtRef.current < 1500
+      ) {
+        return;
+      }
+      if (
+        !e.key ||
+        e.key === STORAGE_KEYS.SHOPS ||
+        e.key === STORAGE_KEYS.GLOBAL_BLACKLIST ||
+        e.key === STORAGE_KEYS.MASTER_PIN
+      ) {
+        loadFromStorage();
+      }
     };
     window.addEventListener("storage", handleStorageChange);
 
@@ -755,7 +827,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loadFromStorage]);
 
-  // 2. State her değiştiğinde: Hem localStorage'a hem de Supabase'e yaz
+  // 2. State her değiştiğinde: LocalStorage'a kaydet; eğer doğrudan syncDirectlyToCloud çağrılmadıysa yedek olarak buluta yaz
   useEffect(() => {
     if (!hydrated) return;
 
@@ -771,9 +843,31 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
 
-    // B) Supabase Bulutuna Asenkron Kaydet (Debounced / Safe)
+    // Uzak sunucudan gelen güncelleme uygulanıyorsa tekrar buluta geri gönderme (sonsuz döngü önleme)
+    if (isApplyingRemoteRef.current) {
+      isApplyingRemoteRef.current = false;
+      return;
+    }
+
+    // Eğer syncDirectlyToCloud zaten az önce çalıştıysa ikinci kez (çift) upsert atma!
+    if (
+      inFlightWritesRef.current > 0 ||
+      Date.now() - lastLocalMutationAtRef.current < 1500
+    ) {
+      return;
+    }
+
+    // B) Supabase Bulutuna Asenkron Kaydet (Sadece doğrudan sync çağrılmayan yan state değişimleri için)
     if (isSupabaseConfigured && supabase) {
       const timeout = setTimeout(async () => {
+        if (
+          inFlightWritesRef.current > 0 ||
+          Date.now() - lastLocalMutationAtRef.current < 1200
+        ) {
+          return;
+        }
+        inFlightWritesRef.current += 1;
+        lastLocalMutationAtRef.current = Date.now();
         try {
           await supabase!.from("app_state").upsert({
             key: "global_state",
@@ -781,11 +875,15 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               shops,
               globalBlacklist,
               masterPin,
+              updatedByClientId: clientIdRef.current,
             },
             updated_at: new Date().toISOString(),
           });
         } catch (err) {
           console.warn("Supabase sync write error:", err);
+        } finally {
+          inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+          lastLocalMutationAtRef.current = Date.now();
         }
       }, 400);
 
@@ -825,16 +923,18 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     );
   }, [shops, currentShopSlug, hasShopQueryParam]);
 
-  // Helper to update ONLY the current active shop in `shops`
+  // Helper to update ONLY the current active shop in `shops` (Optimistic Local Update + Single Direct Cloud Write)
   const updateCurrentShop = useCallback(
     (updater: (shop: TenantShop) => TenantShop) => {
-      setShops((prevShops) =>
-        prevShops.map((shop) =>
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) =>
           shop.slug === currentShop.slug ? updater(shop) : shop
-        )
-      );
+        );
+        void syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
     },
-    [currentShop.slug]
+    [currentShop.slug, syncDirectlyToCloud]
   );
 
   // SUPER ADMIN: Add a new isolated Barber Shop Tenant
@@ -951,7 +1051,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         openTime: "09:00",
         closeTime: "21:00",
         slotInterval: 30,
-        breakEnabled: true,
+        breakEnabled: false,
         breakStart: "13:00",
         breakEnd: "14:00",
         closedDays: [0],
@@ -971,7 +1071,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const nextShops = exists
         ? prev.map((s) => (s.slug === cleanSlug ? newTenant : s))
         : [...prev, newTenant];
-      syncDirectlyToCloud(nextShops);
+      void syncDirectlyToCloud(nextShops);
       return nextShops;
     });
 
@@ -996,33 +1096,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           };
         });
 
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase toggleShopSubscription sync error:", error.message);
-            });
-        }
-
-        try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
-        } catch {
-          // ignore
-        }
-
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
-    [globalBlacklist, masterPin]
+    [syncDirectlyToCloud]
   );
 
   // SUPER ADMIN: Explicitly Update Subscription Status & End Date
@@ -1040,33 +1118,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase updateShopSubscription sync error:", error.message);
-            });
-        }
-
-        try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
-        } catch {
-          // ignore
-        }
-
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
-    [globalBlacklist, masterPin]
+    [syncDirectlyToCloud]
   );
 
   // SUPER ADMIN: Update Specific Shop's PIN
@@ -1079,25 +1135,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           s.slug === slug ? { ...s, adminPin: cleaned } : s
         );
 
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase updateShopPinBySlug sync error:", error.message);
-            });
-        }
+        void syncDirectlyToCloud(nextShops);
 
         try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
           const target = slug.trim().toLowerCase();
           localStorage.removeItem(`vip_barber_admin_unlocked_${target}`);
           sessionStorage.removeItem(`vip_barber_admin_unlocked_${target}`);
@@ -1117,7 +1157,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         return nextShops;
       });
     },
-    [globalBlacklist, masterPin]
+    [syncDirectlyToCloud]
   );
 
   // SUPER ADMIN & SHOP ADMIN: Update Shop Details (Name, Phone, District, Fee, Subtitle)
@@ -1162,7 +1202,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           };
         });
 
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -1182,30 +1222,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           (s) => s.slug.toLowerCase() !== target
         );
 
-        try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
-        } catch {
-          // ignore
-        }
-
-        // Anında Supabase'e yaz (debounce beklemeden)
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) console.warn("Supabase deleteShop direct sync error:", error.message);
-            });
-        }
-
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
 
@@ -1226,7 +1243,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         // ignore
       }
     },
-    [globalBlacklist, masterPin]
+    [syncDirectlyToCloud]
   );
 
   // SHOP ADMIN: Update Current Shop's Deposit Policy & Amount
@@ -1283,32 +1300,32 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // Dynamic Slot Generator for Current Shop (Koltuk / Personel Bazlı & Müsaitlik Kontrolü)
+  // Dynamic Slot Generator for Current Shop (Koltuk / Personel Bazlı & Kesin YYYY-MM-DD Tarih Eşleştirmeli)
   const getSlotsForDay = useCallback(
     (dayId: string, barberId?: string): TimeSlot[] => {
-      const { shopSettings, appointments, waitlist, barbers } = currentShop;
+      const { shopSettings, appointments, barbers } = currentShop;
       const realBarbers = barbers.filter((b) => !b.isAnyOption);
-      const targetDayId = resolveDayMetadata(dayId).id;
+      // KESİN ÇÖZÜM: Seçili tarihi YYYY-MM-DD formatında birebir eşleştir
+      const selectedDate = toStrictIsoDate(dayId);
       const startMins = timeToMinutes(shopSettings.openTime);
       const endMins = timeToMinutes(shopSettings.closeTime);
       const interval = Math.max(15, shopSettings.slotInterval || 30);
-      const breakStartMins = timeToMinutes(shopSettings.breakStart);
-      const breakEndMins = timeToMinutes(shopSettings.breakEnd);
 
       const slots: TimeSlot[] = [];
 
-      // O güne ait aktif randevuların dakika aralıklarını bir kere hesapla (Ultra hızlı O(1) karşılaştırma)
+      // SADECE seçili tarihe (appointment_date === selectedDate) ait aktif randevu ve mola bloklarını filtrele!
+      // Başka günün randevusu veya molası asla diğer günlerde görünmez.
       const dayAppointments = appointments
         .filter((a) => {
-          const aptDayId = resolveDayMetadata(a.dayId).id;
+          const appointmentDate = getAppointmentIsoDate(a);
           return (
-            aptDayId === targetDayId &&
+            appointmentDate === selectedDate &&
             a.status !== "cancelled" &&
             a.status !== "no_show"
           );
         })
         .map((a) => {
-          const startM = timeToMinutes(a.time);
+          const startM = timeToMinutes(a.appointment_time || a.time);
           const dur = a.totalDuration || 30;
           const endM = a.endTime ? timeToMinutes(a.endTime) : startM + dur;
           return { ...a, startM, endM };
@@ -1317,19 +1334,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       for (let m = startMins; m + interval <= endMins; m += interval) {
         const timeLabel = minutesToTime(m);
 
-        const isBreak =
-          shopSettings.breakEnabled && m >= breakStartMins && m < breakEndMins;
-
-        if (isBreak) {
-          slots.push({
-            time: timeLabel,
-            available: false,
-            state: "break",
-          });
-          continue;
-        }
-
-        // 1. Salon genelinde bloke edilmiş saat aralığı kontrolü
+        // 1. Seçili güne (selectedDate) ait bloke edilmiş saat aralığı veya öğle molası kontrolü
         const shopBlock = dayAppointments.find((a) => {
           if (!a.isBlockedSlot) return false;
           // Eğer blokaj belirli bir ustaya özel ise ve başka bir usta sorgulanıyorsa bloke etmez
@@ -1337,6 +1342,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             barberId &&
             barberId !== "any" &&
             a.barberId &&
+            a.barberId !== "all" &&
             a.barberId !== barberId
           ) {
             return false;
@@ -1345,16 +1351,22 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (shopBlock) {
+          const isBreakBlock =
+            shopBlock.blockReason?.toLowerCase().includes("mola") ||
+            shopBlock.blockReason?.toLowerCase().includes("öğle") ||
+            shopBlock.blockReason?.toLowerCase().includes("yemek") ||
+            shopBlock.customerName?.toLowerCase().includes("mola");
+
           slots.push({
             time: timeLabel,
             available: false,
-            state: "booked",
+            state: isBreakBlock ? "break" : "booked",
             bookedBy: shopBlock.customerName || "Kapalı / Mola",
           });
           continue;
         }
 
-        // 2. Personel / Koltuk Bazlı Doluluk Kontrolü (60 dk ve uzun randevuların tüm kapsadığı aralıklar dahil!)
+        // 2. Personel / Koltuk Bazlı Doluluk Kontrolü (Sadece selectedDate === appointment_date için)
         if (barberId && barberId !== "any") {
           const activeApt = dayAppointments.find((a) => {
             if (a.isBlockedSlot) return false;
@@ -1382,7 +1394,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           // "Fark Etmez / Tümü":
-          // Bir saat sadece salondaki TÜM ustalar meşgulse dolu sayılır; en az 1 usta boşsa saat boştur!
+          // Bir saat sadece salondaki TÜM ustalar o gün o saatte meşgulse dolu sayılır; en az 1 usta boşsa saat boştur!
           const bookedBarberIds = new Set(
             dayAppointments
               .filter((a) => {
@@ -1421,7 +1433,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   // Add Appointment to Current Shop
   const addAppointment = useCallback(
     (newAptData: Omit<Appointment, "id" | "appointmentCode">): Appointment => {
-      const resolvedDay = resolveDayMetadata(newAptData.dayId);
+      const selectedDate = toStrictIsoDate(
+        newAptData.appointment_date || newAptData.date || newAptData.dayId
+      );
+      const resolvedDay = resolveDayMetadata(selectedDate);
       const isBlacklisted = Boolean(isPhoneBlacklisted(newAptData.customerPhone));
       // KESİN GÜVENLİK KİLİDİ: Kara listedeki müşteri ASLA confirmed olamaz!
       const safeStatus: AppointmentStatus = isBlacklisted ? "pending" : newAptData.status;
@@ -1433,7 +1448,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         status: safeStatus,
         requiresDeposit: isBlacklisted || newAptData.requiresDeposit,
         isBlacklisted: isBlacklisted || newAptData.isBlacklisted,
-        dayId: resolvedDay.id,
+        dayId: selectedDate,
+        date: selectedDate,
+        appointment_date: selectedDate,
+        appointment_time: newAptData.time,
         dateLabel: resolvedDay.chipLabel,
         id: `apt-${Date.now()}`,
         appointmentCode: generateAppointmentCode(currentShop.slug),
@@ -1479,7 +1497,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           return {
             ...shop,
             appointments: [...shop.appointments, newApt].sort((a, b) => {
-              if (a.dayId !== b.dayId) return a.dayId.localeCompare(b.dayId);
+              const dateA = getAppointmentIsoDate(a);
+              const dateB = getAppointmentIsoDate(b);
+              if (dateA !== dateB) return dateA.localeCompare(dateB);
               return timeToMinutes(a.time) - timeToMinutes(b.time);
             }),
             adminAlerts: newBookingAlert,
@@ -1493,31 +1513,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           };
         });
 
-        try {
-          localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
-        } catch {
-          // ignore
-        }
-
-        if (isSupabaseConfigured && supabase) {
-          supabase
-            .from("app_state")
-            .upsert({
-              key: "global_state",
-              data: {
-                shops: nextShops,
-                globalBlacklist,
-                masterPin,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .then(({ error }) => {
-              if (error) {
-                console.warn("Supabase addAppointment sync error:", error.message);
-              }
-            });
-        }
-
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
 
@@ -1541,12 +1537,14 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
       return newApt;
     },
-    [currentShop.slug, currentShop.name, currentShop.phone, globalBlacklist, masterPin]
+    [currentShop.slug, currentShop.name, currentShop.phone, isPhoneBlacklisted, syncDirectlyToCloud]
   );
 
   // Add Blocked Time Range (Özel Durum / Saati Kapat)
   const addBlockedTimeRange = useCallback(
     (input: BlockedTimeRangeInput): Appointment => {
+      const selectedDate = toStrictIsoDate(input.dayId);
+      const resolvedDay = resolveDayMetadata(selectedDate);
       const startM = timeToMinutes(input.startTime);
       const rawEndM = timeToMinutes(input.endTime);
       const finalEndM = rawEndM > startM ? rawEndM : startM + 30;
@@ -1556,8 +1554,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const blockedApt: Appointment = {
         id: `blk-${Date.now()}`,
         appointmentCode: `#KILIT-${Math.floor(100 + Math.random() * 900)}`,
-        dayId: input.dayId,
-        dateLabel: input.dateLabel,
+        dayId: selectedDate,
+        date: selectedDate,
+        appointment_date: selectedDate,
+        appointment_time: input.startTime,
+        dateLabel: input.dateLabel || resolvedDay.chipLabel,
         time: input.startTime,
         endTime: finalEndTime,
         customerName: `Saat Kapatıldı: ${input.reason}`,
@@ -1607,7 +1608,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               }
             : shop
         );
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -1635,7 +1636,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               }
             : shop
         );
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -1667,7 +1668,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             ),
           };
         });
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -1679,8 +1680,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     (
       newEntryData: Omit<WaitlistEntry, "id" | "createdAt" | "notified">
     ): WaitlistEntry => {
+      const selectedDate = toStrictIsoDate(newEntryData.dayId);
       const created: WaitlistEntry = {
         ...newEntryData,
+        dayId: selectedDate,
         id: `wl-${Date.now()}`,
         createdAt: "Az önce",
         notified: false,
@@ -1724,10 +1727,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const checkHasActiveAppointmentForDay = useCallback(
     (phone: string, dayId: string): Appointment | undefined => {
       const cleanPhone = normalizePhone(phone);
-      const targetDay = resolveDayMetadata(dayId).id;
+      const selectedDate = toStrictIsoDate(dayId);
       return currentShop.appointments.find((apt) => {
         if (apt.isBlockedSlot) return false;
-        const sameDay = resolveDayMetadata(apt.dayId).id === targetDay;
+        const sameDay = getAppointmentIsoDate(apt) === selectedDate;
         const samePhone = normalizePhone(apt.customerPhone) === cleanPhone;
         const isLive =
           apt.status === "pending" ||
@@ -1760,46 +1763,51 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       // 1. Add to Global Blacklist Network (Ortak Kara Liste Ağı)
       setGlobalBlacklist((prev) => {
         const exists = prev.some((b) => normalizePhone(b.phone) === cleanPhone);
-        if (exists) {
-          return prev.map((b) =>
-            normalizePhone(b.phone) === cleanPhone
-              ? {
-                  ...b,
-                  missedDate: `Bugün - ${targetApt.time}`,
-                  missedService: `${targetApt.services
-                    .map((s) => s.name)
-                    .join(" + ")} (${targetApt.totalPrice} TL)`,
-                  requiredDeposit: depositToApply,
-                  reportedByShopSlug: currentShop.slug,
-                  reportedByShopName: currentShop.name,
-                }
-              : b
-          );
-        }
-        return [
-          {
-            phone: cleanPhone,
-            name: targetApt.customerName,
-            missedDate: `Bugün - ${targetApt.time}`,
-            missedService: `${targetApt.services
-              .map((s) => s.name)
-              .join(" + ")} (${targetApt.totalPrice} TL)`,
-            requiredDeposit: depositToApply,
-            reportedByShopSlug: currentShop.slug,
-            reportedByShopName: currentShop.name,
-          },
-          ...prev,
-        ];
+        const nextBl = exists
+          ? prev.map((b) =>
+              normalizePhone(b.phone) === cleanPhone
+                ? {
+                    ...b,
+                    missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
+                    missedService: `${targetApt.services
+                      .map((s) => s.name)
+                      .join(" + ")} (${targetApt.totalPrice} TL)`,
+                    requiredDeposit: depositToApply,
+                    reportedByShopSlug: currentShop.slug,
+                    reportedByShopName: currentShop.name,
+                  }
+                : b
+            )
+          : [
+              {
+                phone: cleanPhone,
+                name: targetApt.customerName,
+                missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
+                missedService: `${targetApt.services
+                  .map((s) => s.name)
+                  .join(" + ")} (${targetApt.totalPrice} TL)`,
+                requiredDeposit: depositToApply,
+                reportedByShopSlug: currentShop.slug,
+                reportedByShopName: currentShop.name,
+              },
+              ...prev,
+            ];
+        return nextBl;
       });
+
+      const targetDate = getAppointmentIsoDate(targetApt);
 
       // 2. Update Current Shop's Appointment, Waitlist, Stats & Alerts
       const candidate =
         currentShop.waitlist.find(
           (w) =>
             !w.notified &&
-            w.dayId === targetApt.dayId &&
+            toStrictIsoDate(w.dayId) === targetDate &&
             w.requestedTime === targetApt.time
-        ) || currentShop.waitlist.find((w) => !w.notified);
+        ) ||
+        currentShop.waitlist.find(
+          (w) => !w.notified && toStrictIsoDate(w.dayId) === targetDate
+        );
 
       if (candidate) {
         matchedWaitlist = { ...candidate, notified: true };
@@ -1856,14 +1864,19 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const cleanPhone = normalizePhone(phone);
       if (!cleanPhone) return;
 
+      let nextBlRef: BlacklistEntry[] | undefined;
       // 1. Remove from Global Blacklist
-      setGlobalBlacklist((prev) =>
-        prev.filter((entry) => normalizePhone(entry.phone) !== cleanPhone)
-      );
+      setGlobalBlacklist((prev) => {
+        const filtered = prev.filter(
+          (entry) => normalizePhone(entry.phone) !== cleanPhone
+        );
+        nextBlRef = filtered;
+        return filtered;
+      });
 
       // 2. Revert appointments belonging to this customer marked as 'no_show'
-      setShops((prevShops) =>
-        prevShops.map((s) => ({
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((s) => ({
           ...s,
           appointments: s.appointments.map((apt) =>
             normalizePhone(apt.customerPhone) === cleanPhone &&
@@ -1871,10 +1884,12 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               ? { ...apt, status: "upcoming" as const }
               : apt
           ),
-        }))
-      );
+        }));
+        void syncDirectlyToCloud(nextShops, nextBlRef);
+        return nextShops;
+      });
     },
-    []
+    [syncDirectlyToCloud]
   );
 
   // Send WhatsApp Reminder
@@ -1955,9 +1970,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         return { notifiedCount: 0, alertText: "" };
       }
 
+      const targetDate = getAppointmentIsoDate(targetApt);
       const matchingWaitlist = currentShop.waitlist.filter(
         (w) =>
-          w.dayId === targetApt.dayId && w.requestedTime === targetApt.time
+          toStrictIsoDate(w.dayId) === targetDate &&
+          w.requestedTime === targetApt.time
       );
       const count = matchingWaitlist.length;
 
@@ -1974,7 +1991,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         waitlist:
           count > 0
             ? shop.waitlist.map((w) =>
-                w.dayId === targetApt.dayId &&
+                toStrictIsoDate(w.dayId) === targetDate &&
                 w.requestedTime === targetApt.time
                   ? { ...w, notified: true }
                   : w
@@ -2021,12 +2038,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const target = currentShop.appointments.find((a) => a.id === id);
       if (!target) return undefined;
 
+      const selectedDate = toStrictIsoDate(newDayId);
       const newEndTime = minutesToTime(
         timeToMinutes(newTime) + target.totalDuration
       );
       const updatedApt: Appointment = {
         ...target,
-        dayId: newDayId,
+        dayId: selectedDate,
+        date: selectedDate,
+        appointment_date: selectedDate,
+        appointment_time: newTime,
         dateLabel: newDateLabel,
         time: newTime,
         endTime: newEndTime,
@@ -2069,7 +2090,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         const target = shop.appointments.find((a) => a.id === id);
         if (!target) return shop;
 
-        const targetDayId = newDayId || target.dayId;
+        const targetDayId = toStrictIsoDate(newDayId || getAppointmentIsoDate(target));
         const targetDateLabel = newDateLabel || target.dateLabel;
         const newEndTime = minutesToTime(
           timeToMinutes(newTime) + (target.totalDuration || 30)
@@ -2078,6 +2099,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         movedApt = {
           ...target,
           dayId: targetDayId,
+          date: targetDayId,
+          appointment_date: targetDayId,
+          appointment_time: newTime,
           dateLabel: targetDateLabel,
           time: newTime,
           endTime: newEndTime,
@@ -2115,7 +2139,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
 
@@ -2138,7 +2162,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -2157,7 +2181,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -2178,7 +2202,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               }
             : shop
         );
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -2219,7 +2243,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             services: [...shop.services, resultService],
           };
         });
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
 
@@ -2239,7 +2263,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               }
             : shop
         );
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -2269,11 +2293,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
           return {
             ...shop,
-            shopSettings: { ...shop.shopSettings, ...updated },
+            shopSettings: { ...shop.shopSettings, ...updated, breakEnabled: false },
             appointments: nextAppointments,
           };
         });
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },
@@ -2285,41 +2309,49 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       setShops((prevShops) => {
         const nextShops = prevShops.map((shop) => {
           if (shop.slug !== currentShop.slug) return shop;
-          const dayIdToUse = targetDayId || getLiveDaysMetadata(1)[0].id;
+          // KESİN ÇÖZÜM: Sadece seçili günün (YYYY-MM-DD) molasını aç/kapat! Diğer günleri ASLA etkileme.
+          const selectedDate = toStrictIsoDate(
+            targetDayId || getLiveDaysMetadata(1)[0].id
+          );
 
-          // Mola durumunu doğrudan o günkü randevular/kayıtlar dizisinden türet
+          // Mola durumunu SADECE seçili tarihteki (appointment_date === selectedDate) kayıtlardan türet
           const hasBreakAlready = shop.appointments.some(
             (a) =>
               a.isBlockedSlot &&
-              (a.dayId === dayIdToUse || !a.dayId) &&
+              getAppointmentIsoDate(a) === selectedDate &&
               (a.blockReason?.toLowerCase().includes("mola") ||
                 a.blockReason?.toLowerCase().includes("öğle") ||
-                a.blockReason?.toLowerCase().includes("yemek"))
+                a.blockReason?.toLowerCase().includes("yemek") ||
+                a.customerName?.toLowerCase().includes("mola"))
           );
 
           let nextAppointments = shop.appointments;
 
           if (hasBreakAlready) {
-            // Mola varsa: Tek seferde veritabanından/state'ten sil (DELETE)
+            // Mola varsa: Sadece seçili günün (selectedDate) mola kaydını sil
             nextAppointments = nextAppointments.filter(
               (a) =>
                 !(
                   a.isBlockedSlot &&
-                  (a.dayId === dayIdToUse || !a.dayId) &&
+                  getAppointmentIsoDate(a) === selectedDate &&
                   (a.blockReason?.toLowerCase().includes("mola") ||
                     a.blockReason?.toLowerCase().includes("öğle") ||
-                    a.blockReason?.toLowerCase().includes("yemek"))
+                    a.blockReason?.toLowerCase().includes("yemek") ||
+                    a.customerName?.toLowerCase().includes("mola"))
                 )
             );
           } else {
-            // Mola yoksa: Tek seferde mola saatlerini ekle (INSERT)
-            const resolvedDay = resolveDayMetadata(dayIdToUse);
+            // Mola yoksa: Sadece seçili güne (selectedDate) mola saatini ekle
+            const resolvedDay = resolveDayMetadata(selectedDate);
             const bStart = shop.shopSettings.breakStart || "13:00";
             const bEnd = shop.shopSettings.breakEnd || "14:00";
             const breakBlock: Appointment = {
-              id: `block-break-${dayIdToUse}-${Date.now()}`,
+              id: `block-break-${selectedDate}-${Date.now()}`,
               appointmentCode: `#MOLA-${Date.now().toString().slice(-4)}`,
-              dayId: resolvedDay.id,
+              dayId: selectedDate,
+              date: selectedDate,
+              appointment_date: selectedDate,
+              appointment_time: bStart,
               dateLabel: resolvedDay.chipLabel,
               time: bStart,
               endTime: bEnd,
@@ -2341,18 +2373,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             nextAppointments = [...nextAppointments, breakBlock];
           }
 
-          const nextBreakEnabled = !hasBreakAlready;
-
           return {
             ...shop,
             shopSettings: {
               ...shop.shopSettings,
-              breakEnabled: nextBreakEnabled,
+              breakEnabled: false,
             },
             appointments: nextAppointments,
           };
         });
-        syncDirectlyToCloud(nextShops);
+        void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
     },

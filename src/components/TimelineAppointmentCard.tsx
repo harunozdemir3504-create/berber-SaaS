@@ -92,7 +92,7 @@ const formatDurationLabel = (minutes: number) => {
 const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
 const BTN_BASE =
-  "inline-flex items-center justify-center rounded-md px-2 py-1 text-[10px] font-black transition-all duration-150 active:scale-95 cursor-pointer shrink-0 select-none";
+  "inline-flex items-center justify-center rounded-md px-2 py-1 text-[10px] font-black transition-all duration-150 active:scale-95 cursor-pointer shrink-0 select-none touch-manipulation disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed";
 
 export interface TimelineAppointmentCardProps {
   apt: Appointment;
@@ -105,6 +105,7 @@ export interface TimelineAppointmentCardProps {
   slotCount: number;
   lane: number;
   lanes: number;
+  isUpdating?: boolean;
   onOpen: (apt: Appointment) => void;
   onConfirm: (apt: Appointment, isBlacklistApt: boolean) => void;
   onComplete: (apt: Appointment) => void;
@@ -121,6 +122,7 @@ function TimelineAppointmentCardBase({
   slotCount,
   lane,
   lanes,
+  isUpdating = false,
   onOpen,
   onConfirm,
   onComplete,
@@ -168,33 +170,39 @@ function TimelineAppointmentCardBase({
       {isPending && (
         <button
           type="button"
+          disabled={isUpdating}
           onClick={(e) => {
             stop(e);
+            if (isUpdating) return;
             onConfirm(apt, isBlacklistApt);
           }}
           className={`${BTN_BASE} bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm`}
           title={isBlacklistApt ? "Kaporayı onaylayın" : "Randevuyu onayla"}
         >
-          {isBlacklistApt ? "✅ Onayla" : "Onayla"}
+          {isUpdating ? "..." : isBlacklistApt ? "✅ Onayla" : "Onayla"}
         </button>
       )}
       {!isPending && !isCompleted && (
         <button
           type="button"
+          disabled={isUpdating}
           onClick={(e) => {
             stop(e);
+            if (isUpdating) return;
             onComplete(apt);
           }}
           className={`${BTN_BASE} border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25`}
           title="Müşteri Geldi"
         >
-          Geldi
+          {isUpdating ? "..." : "Geldi"}
         </button>
       )}
       <button
         type="button"
+        disabled={isUpdating}
         onClick={(e) => {
           stop(e);
+          if (isUpdating) return;
           onMove(apt);
         }}
         className={`${BTN_BASE} border border-stone-300 dark:border-white/10 bg-white/80 dark:bg-white/5 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/15 font-bold`}
@@ -221,7 +229,7 @@ function TimelineAppointmentCardBase({
     <a
       href={phoneHref}
       onClick={stop}
-      className="font-mono text-[10px] sm:text-[11px] font-bold shrink-0 hover:underline active:scale-95 transition-transform"
+      className="font-mono text-[10px] sm:text-[11px] font-bold shrink-0 hover:underline active:scale-95 transition-transform touch-manipulation"
       title="Telefonu ara"
     >
       📞 {phoneDisplay}
@@ -231,14 +239,14 @@ function TimelineAppointmentCardBase({
   return (
     <div
       style={style}
-      draggable={!isPending && !isBlacklistApt}
+      draggable={!isPending && !isBlacklistApt && !isUpdating}
       onDragStart={(e) => onDragStartApt(e, apt)}
       onDragEnd={onDragEndApt}
       onClick={(e) => {
         stop(e);
         onOpen(apt);
       }}
-      className={`max-w-full overflow-hidden box-border rounded-lg flex flex-col transition-all duration-200 ease-out cursor-pointer hover:shadow-md hover:ring-2 hover:ring-[#dfc39e]/70 select-none will-change-transform ${theme.container} ${
+      className={`max-w-full overflow-hidden box-border rounded-lg flex flex-col transition-all duration-200 ease-out cursor-pointer hover:shadow-md hover:ring-2 hover:ring-[#dfc39e]/70 select-none touch-manipulation will-change-transform ${theme.container} ${
         variant === "compact"
           ? "px-2.5 py-1 justify-center gap-0.5"
           : variant === "hour"
