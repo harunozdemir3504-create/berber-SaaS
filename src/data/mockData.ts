@@ -3,6 +3,11 @@ export interface Barber {
   name: string;
   role: string;
   chairName: string;
+  /**
+   * Opsiyonel Usta WhatsApp Numarası.
+   * Boş bırakılırsa dükkanın ana numarası (shop.phone) kullanılır.
+   */
+  phone?: string;
   rating: number;
   reviewCount: number;
   experience: string;

@@ -401,6 +401,7 @@ export default function AdminDashboardPage() {
   const [editBarberName, setEditBarberName] = useState<string>("");
   const [editBarberRole, setEditBarberRole] = useState<string>("");
   const [editBarberChair, setEditBarberChair] = useState<string>("");
+  const [editBarberPhone, setEditBarberPhone] = useState<string>("");
   const [editBarberExp, setEditBarberExp] = useState<string>("");
   const [editBarberBadge, setEditBarberBadge] = useState<string>("");
   const [editBarberPrices, setEditBarberPrices] = useState<
@@ -410,6 +411,7 @@ export default function AdminDashboardPage() {
   const [newBarberName, setNewBarberName] = useState<string>("");
   const [newBarberChair, setNewBarberChair] = useState<string>("VIP Koltuk #4");
   const [newBarberRole, setNewBarberRole] = useState<string>("Usta Berber");
+  const [newBarberPhone, setNewBarberPhone] = useState<string>("");
 
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [editName, setEditName] = useState<string>("");
@@ -1456,6 +1458,7 @@ export default function AdminDashboardPage() {
     setEditBarberName(b.name);
     setEditBarberRole(b.role);
     setEditBarberChair(b.chairName);
+    setEditBarberPhone(b.phone || "");
     setEditBarberExp(b.experience);
     setEditBarberBadge(b.badge || "");
     const priceMap: Record<string, string> = {};
@@ -1490,6 +1493,7 @@ export default function AdminDashboardPage() {
       name: editBarberName.trim(),
       role: editBarberRole.trim(),
       chairName: editBarberChair.trim(),
+      phone: editBarberPhone.trim() || undefined,
       experience: editBarberExp.trim(),
       badge: editBarberBadge.trim() || undefined,
       initials: b.isAnyOption ? "VIP" : initials,
@@ -1513,6 +1517,7 @@ export default function AdminDashboardPage() {
       name: newBarberName.trim(),
       role: newBarberRole.trim() || "Usta Berber",
       chairName: newBarberChair.trim(),
+      phone: newBarberPhone.trim() || undefined,
       rating: 4.95,
       reviewCount: 50,
       experience: "10 Yıl Deneyim",
@@ -1527,6 +1532,7 @@ export default function AdminDashboardPage() {
 
     setNewBarberName("");
     setNewBarberChair(`VIP Koltuk #${barbers.length + 1}`);
+    setNewBarberPhone("");
     triggerToast("Yeni Usta Eklendi", `${newBarberName} kadroya eklendi.`, "success");
   };
 
@@ -4179,13 +4185,13 @@ export default function AdminDashboardPage() {
               <div className="space-y-4">
                 <form
                   onSubmit={handleCreateBarber}
-                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4"
+                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4 space-y-2.5"
                 >
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
+                  <h3 className="mb-1 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
                     <UserPlus className="h-4 w-4 text-[#dfc39e]" />
                     <span>Yeni Usta / Koltuk Ekle</span>
                   </h3>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     <input
                       type="text"
                       required
@@ -4202,9 +4208,23 @@ export default function AdminDashboardPage() {
                       placeholder="Koltuk Adı (Örn: Koltuk #4)"
                       className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
                     />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 items-start">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="tel"
+                        value={newBarberPhone}
+                        onChange={(e) => setNewBarberPhone(e.target.value)}
+                        placeholder="Usta WhatsApp Numarası (Opsiyonel - Örn: 0532 123 45 67)"
+                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      />
+                      <p className="mt-1 text-[11px] font-medium text-stone-400">
+                        Boş bırakılırsa dükkanın ana numarası kullanılır
+                      </p>
+                    </div>
                     <button
                       type="submit"
-                      className="rounded-xl bg-[#dfc39e] py-2.5 text-sm font-black text-[#1a110b]"
+                      className="w-full rounded-xl bg-[#dfc39e] py-2.5 text-sm font-black text-[#1a110b] cursor-pointer"
                     >
                       + Usta Ekle
                     </button>
@@ -4244,6 +4264,24 @@ export default function AdminDashboardPage() {
                                   className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
                                 />
                               </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] font-bold text-stone-400 block mb-1">
+                                Usta WhatsApp Numarası (Opsiyonel)
+                              </label>
+                              <input
+                                type="tel"
+                                value={editBarberPhone}
+                                onChange={(e) =>
+                                  setEditBarberPhone(e.target.value)
+                                }
+                                placeholder="05XX XXX XX XX (Opsiyonel)"
+                                className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                              />
+                              <p className="mt-1 text-[11px] font-medium text-stone-400">
+                                Boş bırakılırsa dükkanın ana numarası kullanılır
+                              </p>
                             </div>
 
                             {/* Koltuğa Özel Fiyatlandırma Bölümü */}
@@ -4373,7 +4411,7 @@ export default function AdminDashboardPage() {
                               <p className="text-xs text-[#dfc39e]">
                                 {barber.chairName}
                               </p>
-                              <div className="mt-1">
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                 {barber.customPrices && Object.keys(barber.customPrices).length > 0 ? (
                                   <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300">
                                     <Sparkles className="h-2.5 w-2.5" />
@@ -4382,6 +4420,15 @@ export default function AdminDashboardPage() {
                                 ) : (
                                   <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-stone-400">
                                     ✓ Standart Salon Fiyatı Geçerli
+                                  </span>
+                                )}
+                                {barber.phone && barber.phone.trim() !== "" ? (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300">
+                                    <span>📱 Usta WhatsApp: {barber.phone}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-stone-400">
+                                    📱 Dükkan Ana Numarası
                                   </span>
                                 )}
                               </div>

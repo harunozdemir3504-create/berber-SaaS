@@ -1520,12 +1520,20 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (isOnlineCustomerBooking) {
+        const assignedBarber = currentShop.barbers.find(
+          (b) => b.id === newApt.barberId
+        );
+        const targetBarberPhone =
+          assignedBarber?.phone && assignedBarber.phone.trim() !== ""
+            ? assignedBarber.phone.trim()
+            : currentShop.phone;
+
         triggerAutomaticBookingNotification({
           appointmentId: newApt.id,
           appointmentCode: newApt.appointmentCode,
           shopSlug: currentShop.slug,
           shopName: currentShop.name,
-          shopPhone: currentShop.phone,
+          shopPhone: targetBarberPhone,
           customerName: newApt.customerName,
           customerPhone: newApt.customerPhone,
           barberName: newApt.barberName,
@@ -1539,7 +1547,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
       return newApt;
     },
-    [currentShop.slug, currentShop.name, currentShop.phone, isPhoneBlacklisted, syncDirectlyToCloud]
+    [currentShop.slug, currentShop.name, currentShop.phone, currentShop.barbers, isPhoneBlacklisted, syncDirectlyToCloud]
   );
 
   // Add Blocked Time Range (Özel Durum / Saati Kapat)

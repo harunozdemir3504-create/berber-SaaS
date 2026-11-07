@@ -1424,10 +1424,29 @@ export default function CustomerBookingPage() {
                                 : []),
                             ].join("\n");
 
-                        const waHref = buildWhatsAppUrl(
+                        // Seçilen ustanın kendi WhatsApp numarası varsa (barber.phone doluysa) ona,
+                        // boş bırakılmışsa dükkanın ana telefon numarasına (currentShop.phone) yönlendir.
+                        const appointedBarber =
+                          (confirmedAppointment?.barberId
+                            ? barbers.find((b) => b.id === confirmedAppointment.barberId)
+                            : null) || selectedBarber;
+
+                        const targetWhatsAppPhone =
+                          (selectedBarber?.phone && selectedBarber.phone.trim() !== ""
+                            ? selectedBarber.phone.trim()
+                            : appointedBarber?.phone && appointedBarber.phone.trim() !== ""
+                            ? appointedBarber.phone.trim()
+                            : null) || currentShop?.phone;
+
+                        const shopFallbackPhone = formatPhoneForWhatsApp(
                           currentShop?.phone,
-                          waMessage,
                           DEFAULT_SHOP_WHATSAPP_PHONE
+                        );
+
+                        const waHref = buildWhatsAppUrl(
+                          targetWhatsAppPhone,
+                          waMessage,
+                          shopFallbackPhone
                         );
 
                         const handleOpenWhatsApp = () => {
