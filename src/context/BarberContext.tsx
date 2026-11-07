@@ -928,7 +928,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     (updater: (shop: TenantShop) => TenantShop) => {
       setShops((prevShops) => {
         const nextShops = prevShops.map((shop) =>
-          shop.slug === currentShop.slug ? updater(shop) : shop
+          shop.slug.toLowerCase() === currentShop.slug.toLowerCase()
+            ? updater(shop)
+            : shop
         );
         void syncDirectlyToCloud(nextShops);
         return nextShops;
@@ -1600,14 +1602,35 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const removeAppointmentOrBlock = useCallback(
     (id: string) => {
       setShops((prevShops) => {
-        const nextShops = prevShops.map((shop) =>
-          shop.slug === currentShop.slug
-            ? {
-                ...shop,
-                appointments: shop.appointments.filter((a) => a.id !== id),
+        const nextShops = prevShops.map((shop) => {
+          const isTargetShop =
+            shop.slug.toLowerCase() === currentShop.slug.toLowerCase() ||
+            shop.appointments.some((a) => a.id === id);
+          if (!isTargetShop) return shop;
+
+          const targetApt = shop.appointments.find((a) => a.id === id);
+          const targetDate = targetApt ? getAppointmentIsoDate(targetApt) : "";
+
+          return {
+            ...shop,
+            appointments: shop.appointments.filter((a) => {
+              if (a.id === id) return false;
+              if (
+                targetApt &&
+                !targetApt.isBlockedSlot &&
+                !a.isBlockedSlot &&
+                getAppointmentIsoDate(a) === targetDate &&
+                a.time === targetApt.time &&
+                a.barberId === targetApt.barberId &&
+                normalizePhone(a.customerPhone) ===
+                  normalizePhone(targetApt.customerPhone)
+              ) {
+                return false;
               }
-            : shop
-        );
+              return true;
+            }),
+          };
+        });
         void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
@@ -1956,7 +1979,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [currentShop.appointments]
   );
 
-  // Customer Self-Service: Cancel Appointment in Current Shop
+  // Customer Self-Service & Admin Delete: Cancel/Remove Appointment in Current Shop
   const cancelAppointmentByCustomer = useCallback(
     (
       id: string
@@ -1966,57 +1989,88 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       alertText: string;
     } => {
       const targetApt = currentShop.appointments.find((a) => a.id === id);
-      if (!targetApt) {
-        return { notifiedCount: 0, alertText: "" };
-      }
-
-      const targetDate = getAppointmentIsoDate(targetApt);
-      const matchingWaitlist = currentShop.waitlist.filter(
-        (w) =>
-          toStrictIsoDate(w.dayId) === targetDate &&
-          w.requestedTime === targetApt.time
-      );
+      const targetDate = targetApt ? getAppointmentIsoDate(targetApt) : "";
+      const matchingWaitlist = targetApt
+        ? currentShop.waitlist.filter(
+            (w) =>
+              toStrictIsoDate(w.dayId) === targetDate &&
+              w.requestedTime === targetApt.time
+          )
+        : [];
       const count = matchingWaitlist.length;
 
-      const alertText =
-        count > 0
-          ? `Saat ${targetApt.time} randevusu müşteri (${targetApt.customerName}) tarafından iptal edildi! Yedek listedeki ${count} kişiye otomatik WhatsApp bildirimi gönderildi.`
-          : `Saat ${targetApt.time} randevusu müşteri (${targetApt.customerName}) tarafından iptal edildi! Saat dilimi takvimde tekrar 'Boş / Alınabilir' duruma geçti.`;
+      const alertText = targetApt
+        ? count > 0
+          ? `Saat ${targetApt.time} randevusu (${targetApt.customerName}) iptal edildi/silindi! Yedek listedeki ${count} kişiye otomatik WhatsApp bildirimi gönderildi.`
+          : `Saat ${targetApt.time} randevusu (${targetApt.customerName}) silindi! Saat dilimi takvimde anında 'Boş / Alınabilir' duruma geçti.`
+        : "";
 
-      updateCurrentShop((shop) => ({
-        ...shop,
-        appointments: shop.appointments.map((a) =>
-          a.id === id ? { ...a, status: "cancelled" } : a
-        ),
-        waitlist:
-          count > 0
-            ? shop.waitlist.map((w) =>
-                toStrictIsoDate(w.dayId) === targetDate &&
-                w.requestedTime === targetApt.time
-                  ? { ...w, notified: true }
-                  : w
-              )
-            : shop.waitlist,
-        stats:
-          count > 0
-            ? {
-                ...shop.stats,
-                savedRevenue: shop.stats.savedRevenue + targetApt.totalPrice,
-                waitlistFilled: shop.stats.waitlistFilled + 1,
-              }
-            : shop.stats,
-        adminAlerts: [
-          {
-            id: `alert-${Date.now()}`,
-            title: "Müşteri İptali & Otomatik Yedek Liste Bildirimi",
-            message: alertText,
-            timestamp: "Az önce",
-            type: "cancellation_waitlist",
-            read: false,
-          },
-          ...shop.adminAlerts,
-        ],
-      }));
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          const isTargetShop =
+            shop.slug.toLowerCase() === currentShop.slug.toLowerCase() ||
+            shop.appointments.some((a) => a.id === id);
+          if (!isTargetShop) return shop;
+
+          const foundInShop = shop.appointments.find((a) => a.id === id) || targetApt;
+          const foundDate = foundInShop ? getAppointmentIsoDate(foundInShop) : targetDate;
+
+          // Normal randevudan veya takvimden silinince/iptal edilince listeden tamamen kaldır ki takvimde asla kalmasın!
+          const remainingAppointments = shop.appointments.filter((a) => {
+            if (a.id === id) return false;
+            if (
+              foundInShop &&
+              !foundInShop.isBlockedSlot &&
+              !a.isBlockedSlot &&
+              getAppointmentIsoDate(a) === foundDate &&
+              a.time === foundInShop.time &&
+              a.barberId === foundInShop.barberId &&
+              normalizePhone(a.customerPhone) ===
+                normalizePhone(foundInShop.customerPhone)
+            ) {
+              return false;
+            }
+            return true;
+          });
+
+          return {
+            ...shop,
+            appointments: remainingAppointments,
+            waitlist:
+              count > 0 && foundInShop
+                ? shop.waitlist.map((w) =>
+                    toStrictIsoDate(w.dayId) === foundDate &&
+                    w.requestedTime === foundInShop.time
+                      ? { ...w, notified: true }
+                      : w
+                  )
+                : shop.waitlist,
+            stats:
+              count > 0 && foundInShop
+                ? {
+                    ...shop.stats,
+                    savedRevenue: shop.stats.savedRevenue + foundInShop.totalPrice,
+                    waitlistFilled: shop.stats.waitlistFilled + 1,
+                  }
+                : shop.stats,
+            adminAlerts: alertText
+              ? [
+                  {
+                    id: `alert-${Date.now()}`,
+                    title: "Randevu Silindi & Saat Boşa Çıkarıldı",
+                    message: alertText,
+                    timestamp: "Az önce",
+                    type: "cancellation_waitlist" as const,
+                    read: false,
+                  },
+                  ...shop.adminAlerts,
+                ]
+              : shop.adminAlerts,
+          };
+        });
+        void syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
 
       return {
         cancelledApt: targetApt,
@@ -2024,7 +2078,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         alertText,
       };
     },
-    [currentShop, updateCurrentShop]
+    [currentShop, syncDirectlyToCloud]
   );
 
   // Customer Self-Service: Reschedule Appointment in Current Shop

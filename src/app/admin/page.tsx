@@ -71,6 +71,7 @@ import {
   Barber,
   getAppointmentIsoDate,
   getLiveDaysMetadata,
+  getTurkeyNow,
   resolveDayMetadata,
   Service,
   toStrictIsoDate,
@@ -896,13 +897,47 @@ export default function AdminDashboardPage() {
       if (
         adminStaffFilter !== "all" &&
         !apt.isBlockedSlot &&
-        apt.barberId !== adminStaffFilter
+        apt.barberId !== adminStaffFilter &&
+        !(
+          apt.barberName &&
+          apt.barberName.toLowerCase().includes(adminStaffFilter.toLowerCase())
+        )
       ) {
         return false;
       }
       return true;
     });
   }, [appointments, currentTimelineDayId, adminStaffFilter]);
+
+  // 🕒 CANLI TÜRKİYE SAATİ & TAKVİM AKTİF SAAT TAKİBİ (Her 15 sn'de bir otomatik güncellenir)
+  const [nowDate, setNowDate] = useState<Date>(() => getTurkeyNow());
+  const [showPastTimelineSlots, setShowPastTimelineSlots] = useState<boolean>(false);
+  const currentSlotRowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const updateClock = () => setNowDate(getTurkeyNow());
+    updateClock();
+    const timer = setInterval(updateClock, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nowMinutes = useMemo(
+    () => nowDate.getHours() * 60 + nowDate.getMinutes(),
+    [nowDate]
+  );
+
+  const nowTimeLabel = useMemo(
+    () =>
+      `${String(nowDate.getHours()).padStart(2, "0")}:${String(
+        nowDate.getMinutes()
+      ).padStart(2, "0")}`,
+    [nowDate]
+  );
+
+  const isTimelineToday = useMemo(
+    () => toStrictIsoDate(currentTimelineDayId) === toStrictIsoDate(todayDay.id),
+    [currentTimelineDayId, todayDay.id]
+  );
 
   // Salon çalışma saatlerine (shopSettings) göre dinamik 30 dk aralıklı çizelge dilimleri
   const timelineSlots = useMemo(() => {
@@ -925,6 +960,81 @@ export default function AdminDashboardPage() {
     }
     return slots;
   }, [shopSettings?.openTime, shopSettings?.closeTime, timelineAppointments]);
+
+  // Şu an içinde bulunduğumuz 30 dakikalık aktif saat dilimi (Örn: saat 13:05 ise "13:00")
+  const currentActiveSlotTime = useMemo(() => {
+    if (!isTimelineToday || timelineSlots.length === 0) return null;
+    for (const slot of timelineSlots) {
+      const slotM = timeToMinutes(slot);
+      if (nowMinutes >= slotM && nowMinutes < slotM + 30) {
+        return slot;
+      }
+    }
+    const firstM = timeToMinutes(timelineSlots[0]);
+    const lastM = timeToMinutes(timelineSlots[timelineSlots.length - 1]);
+    if (nowMinutes < firstM) return timelineSlots[0];
+    if (nowMinutes >= lastM) return timelineSlots[timelineSlots.length - 1];
+    return null;
+  }, [isTimelineToday, timelineSlots, nowMinutes]);
+
+  // Takvimdeyken sürekli önceki (sabah geçmiş) saatlerde kalmaması için:
+  // Bugün seçiliyse geçmiş saatleri otomatik daraltır (devam eden randevu varsa onu kesmez) ve doğrudan şu anki saatten başlatır.
+  const { visibleTimelineSlots, hiddenPastSlots } = useMemo(() => {
+    if (!isTimelineToday || !currentActiveSlotTime || timelineSlots.length === 0) {
+      return { visibleTimelineSlots: timelineSlots, hiddenPastSlots: [] as string[] };
+    }
+    const activeM = timeToMinutes(currentActiveSlotTime);
+    const lastSlotM = timeToMinutes(timelineSlots[timelineSlots.length - 1]);
+    // Mesai tamamen bittiyse tüm saatleri göster
+    if (nowMinutes >= lastSlotM + 30) {
+      return { visibleTimelineSlots: timelineSlots, hiddenPastSlots: [] as string[] };
+    }
+
+    let cutoffM = activeM;
+    timelineAppointments.forEach((apt) => {
+      const startM = timeToMinutes(apt.time);
+      const dur = apt.totalDuration || 30;
+      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+      if (startM < cutoffM && endM > activeM) {
+        const alignedStartM = Math.floor(startM / 30) * 30;
+        if (alignedStartM < cutoffM) cutoffM = alignedStartM;
+      }
+    });
+
+    const past = timelineSlots.filter((s) => timeToMinutes(s) < cutoffM);
+    if (showPastTimelineSlots || past.length === 0) {
+      return { visibleTimelineSlots: timelineSlots, hiddenPastSlots: past };
+    }
+    const visible = timelineSlots.filter((s) => timeToMinutes(s) >= cutoffM);
+    return { visibleTimelineSlots: visible, hiddenPastSlots: past };
+  }, [
+    isTimelineToday,
+    currentActiveSlotTime,
+    timelineSlots,
+    nowMinutes,
+    timelineAppointments,
+    showPastTimelineSlots,
+  ]);
+
+  // Takvim sekmesine geçildiğinde veya gün değiştiğinde geçmiş saatleri otomatik daralt ve şu anki saate otomatik kaydır!
+  useEffect(() => {
+    if (bottomTab === "calendar") {
+      setShowPastTimelineSlots(false);
+    }
+  }, [bottomTab, currentTimelineDayId]);
+
+  useEffect(() => {
+    if (bottomTab !== "calendar" || !isTimelineToday || !currentActiveSlotTime) return;
+    const timer = setTimeout(() => {
+      if (currentSlotRowRef.current) {
+        currentSlotRowRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [bottomTab, isTimelineToday, currentActiveSlotTime, showPastTimelineSlots]);
 
   // Basit ve Sağlam Timeline Satır Haritası
   const timelineSlotMap = useMemo(() => {
@@ -1081,8 +1191,20 @@ export default function AdminDashboardPage() {
 
   // Memo'lu timeline kartları için SABİT (referansı değişmeyen) aksiyon fonksiyonları.
   // En güncel bağımlılıklar ref üzerinden okunur; böylece kartlar gereksiz yere yeniden render olmaz.
-  const timelineActionsRef = useRef({ confirmAppointment, markAppointmentCompleted, triggerToast, runWithUpdatingLock });
-  timelineActionsRef.current = { confirmAppointment, markAppointmentCompleted, triggerToast, runWithUpdatingLock };
+  const timelineActionsRef = useRef({
+    confirmAppointment,
+    markAppointmentCompleted,
+    handleCancelByAdmin,
+    triggerToast,
+    runWithUpdatingLock,
+  });
+  timelineActionsRef.current = {
+    confirmAppointment,
+    markAppointmentCompleted,
+    handleCancelByAdmin,
+    triggerToast,
+    runWithUpdatingLock,
+  };
 
   const handleTimelineOpen = useCallback((apt: Appointment) => {
     if (dragMovedRef.current) return;
@@ -1116,6 +1238,28 @@ export default function AdminDashboardPage() {
   const handleTimelineMove = useCallback((apt: Appointment) => {
     setMobileRescheduleApt(apt);
   }, []);
+
+  const handleTimelineCancel = useCallback((apt: Appointment) => {
+    timelineActionsRef.current.handleCancelByAdmin(apt);
+  }, []);
+
+  // Normal Randevular sekmesinden Takvim sekmesindeki ilgili güne ve saate doğrudan geçiş
+  const jumpToAppointmentOnCalendar = useCallback(
+    (apt: Appointment) => {
+      const aptDate = getAppointmentIsoDate(apt);
+      if (aptDate === toStrictIsoDate(todayDay.id)) {
+        setAdminDayMode("today");
+      } else if (aptDate === toStrictIsoDate(tomorrowDay.id)) {
+        setAdminDayMode("tomorrow");
+      } else {
+        setSelectedCalendarDayId(aptDate);
+        setAdminDayMode("calendar");
+      }
+      setShowPastTimelineSlots(true);
+      setBottomTab("calendar");
+    },
+    [todayDay.id, tomorrowDay.id]
+  );
 
   const handleTimelineDragStart = useCallback((e: React.DragEvent, apt: Appointment) => {
     dragMovedRef.current = true;
@@ -1973,26 +2117,24 @@ export default function AdminDashboardPage() {
                 </span>
               </button>
 
-              {/* [Tümü] */}
+              {/* [🔴 Şu Ana Git] */}
               <button
                 type="button"
-                onClick={() => setAdminDayMode("all")}
-                className={`h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl border px-1 sm:px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "all"
-                    ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
-                }`}
+                onClick={() => {
+                  setAdminDayMode("today");
+                  setShowPastTimelineSlots(false);
+                  setTimeout(() => {
+                    currentSlotRowRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }, 60);
+                }}
+                className="h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl border border-emerald-400/70 bg-emerald-500/15 hover:bg-emerald-500/25 px-1 sm:px-2.5 py-1 text-xs font-black text-emerald-700 dark:text-emerald-300 transition active:scale-95 cursor-pointer shadow-sm"
+                title="Bugünün şu anki aktif saatine odaklan"
               >
-                <span>Tümü</span>
-                <span
-                  className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
-                    adminDayMode === "all"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300"
-                  }`}
-                >
-                  {allPendingCount}
-                </span>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span>Şu An ({nowTimeLabel})</span>
               </button>
             </div>
 
@@ -2330,11 +2472,25 @@ export default function AdminDashboardPage() {
                           </div>
                         </div>
 
-                        {/* Tutar & Accordion Oku */}
-                        <div className="flex shrink-0 items-center gap-2">
+                        {/* Tutar, Hızlı Sil & Accordion Oku */}
+                        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                           <span className="text-xs font-black text-amber-700 dark:text-[#dfc39e] sm:text-sm">
                             {apt.totalPrice} TL
                           </span>
+                          <button
+                            type="button"
+                            disabled={updatingId === apt.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelByAdmin(apt);
+                              setExpandedAptId(null);
+                            }}
+                            title="Randevuyu Sil (Takvimden de anında kaldırır)"
+                            className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/30 px-2 text-[10px] font-black text-rose-600 dark:text-rose-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>{updatingId === apt.id ? "..." : "Sil"}</span>
+                          </button>
                           <div
                             className={`flex h-6 w-6 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/5 text-stone-600 dark:text-stone-400 transition-transform ${
                               isExpanded ? "rotate-180 text-[#dfc39e]" : ""
@@ -2481,7 +2637,7 @@ export default function AdminDashboardPage() {
 
                           {/* Aksiyon Butonları Izgarası */}
                           {apt.status === "pending" ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                               <button
                                 type="button"
                                 disabled={updatingId === apt.id}
@@ -2503,21 +2659,28 @@ export default function AdminDashboardPage() {
 
                               <button
                                 type="button"
+                                onClick={() => jumpToAppointmentOnCalendar(apt)}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 py-2.5 px-3 text-xs font-black text-amber-300 transition active:scale-[0.98] cursor-pointer touch-manipulation"
+                              >
+                                <CalendarIcon className="h-4 w-4" />
+                                <span>📅 Takvimde Gör</span>
+                              </button>
+
+                              <button
+                                type="button"
                                 disabled={updatingId === apt.id}
                                 onClick={() => {
-                                  if (confirm(`${apt.customerName} randevusunu reddetmek / iptal etmek istediğinize emin misiniz?`)) {
-                                    handleCancelByAdmin(apt);
-                                    setExpandedAptId(null);
-                                  }
+                                  handleCancelByAdmin(apt);
+                                  setExpandedAptId(null);
                                 }}
                                 className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-2.5 px-4 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                               >
-                                <Ban className="h-4 w-4" />
-                                <span>❌ Reddet / İptal Et</span>
+                                <Trash2 className="h-4 w-4" />
+                                <span>{updatingId === apt.id ? "Siliniyor..." : "🗑️ Reddet / Sil"}</span>
                               </button>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                               {!isCompleted && !isCancelled && (
                                 <button
                                   type="button"
@@ -2533,22 +2696,27 @@ export default function AdminDashboardPage() {
                                 </button>
                               )}
 
-                              {!isCancelled && (
-                                <button
-                                  type="button"
-                                  disabled={updatingId === apt.id}
-                                  onClick={() => {
-                                    if (confirm(`${apt.customerName} randevusunu iptal etmek istediğinize emin misiniz?`)) {
-                                      handleCancelByAdmin(apt);
-                                      setExpandedAptId(null);
-                                    }
-                                  }}
-                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/15 hover:bg-rose-500/25 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                                >
-                                  <X className="h-4 w-4" />
-                                  <span>İptal Et ❌</span>
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => jumpToAppointmentOnCalendar(apt)}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 py-2 px-3 text-xs font-black text-amber-300 transition active:scale-[0.98] cursor-pointer touch-manipulation"
+                              >
+                                <CalendarIcon className="h-4 w-4" />
+                                <span>📅 Takvimde Gör</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={updatingId === apt.id}
+                                onClick={() => {
+                                  handleCancelByAdmin(apt);
+                                  setExpandedAptId(null);
+                                }}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/15 hover:bg-rose-500/25 py-2 px-3 text-xs font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span>{updatingId === apt.id ? "Siliniyor..." : "🗑️ Sil / İptal Et"}</span>
+                              </button>
 
                               {isPhoneBlacklisted(apt.customerPhone) ? (
                                 <button
@@ -2665,26 +2833,24 @@ export default function AdminDashboardPage() {
                 </span>
               </button>
 
-              {/* [Tümü] */}
+              {/* [🔴 Şu Ana Git] */}
               <button
                 type="button"
-                onClick={() => setAdminDayMode("all")}
-                className={`h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl border px-1 sm:px-2.5 py-1 text-xs font-black transition active:scale-95 cursor-pointer ${
-                  adminDayMode === "all"
-                    ? "border-amber-400/80 bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-sm"
-                    : "border-stone-300 dark:border-white/10 bg-white dark:bg-[#141416] text-stone-700 dark:text-stone-300 hover:border-amber-400/50"
-                }`}
+                onClick={() => {
+                  setAdminDayMode("today");
+                  setShowPastTimelineSlots(false);
+                  setTimeout(() => {
+                    currentSlotRowRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }, 60);
+                }}
+                className="h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl border border-emerald-400/70 bg-emerald-500/15 hover:bg-emerald-500/25 px-1 sm:px-2.5 py-1 text-xs font-black text-emerald-700 dark:text-emerald-300 transition active:scale-95 cursor-pointer shadow-sm"
+                title="Bugünün şu anki aktif saatine odaklan"
               >
-                <span>Tümü</span>
-                <span
-                  className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-black ${
-                    adminDayMode === "all"
-                      ? "bg-[#1a110b] text-[#f3e8dc]"
-                      : "bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300"
-                  }`}
-                >
-                  {allPendingCount}
-                </span>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span>Şu An ({nowTimeLabel})</span>
               </button>
             </div>
 
@@ -2818,9 +2984,30 @@ export default function AdminDashboardPage() {
                 </div>
               )}
 
+              {/* Bugün seçiliyse: Geçmiş (Önceki) Saatleri Göster / Gizle Kompakt Barı */}
+              {isTimelineToday && hiddenPastSlots.length > 0 && (
+                <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-300 shrink-0" />
+                    <span className="truncate font-bold text-stone-700 dark:text-amber-200">
+                      {showPastTimelineSlots
+                        ? `Önceki saatler açık (${hiddenPastSlots[0]} - ${hiddenPastSlots[hiddenPastSlots.length - 1]})`
+                        : `Önceki ${hiddenPastSlots.length} saat dilimi gizlendi (${hiddenPastSlots[0]} - ${hiddenPastSlots[hiddenPastSlots.length - 1]})`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPastTimelineSlots((prev) => !prev)}
+                    className="shrink-0 rounded-lg border border-amber-400/60 bg-amber-500/20 hover:bg-amber-500/30 px-2.5 py-1 text-[11px] font-black text-amber-900 dark:text-amber-200 transition active:scale-95 cursor-pointer"
+                  >
+                    {showPastTimelineSlots ? "🔼 Öncesini Gizle" : "🕘 Öncesini Göster"}
+                  </button>
+                </div>
+              )}
+
               {/* Çizelge Satırları - Her saat alt alta dizilen, asla kaymayan standart satır */}
               <div className="w-full max-w-full box-border border-stone-200 dark:border-white/10">
-                {timelineSlots.map((slotTime) => {
+                {visibleTimelineSlots.map((slotTime) => {
                   const slotData = timelineSlotMap.get(slotTime) || {
                     startingApts: [],
                     ongoingApts: [],
@@ -2836,15 +3023,45 @@ export default function AdminDashboardPage() {
                   const hasAnyContent = hasStartingApts || hasStartingBlocks || hasOngoingApts || hasOngoingBlocks;
 
                   const isDragTarget = dragOverSlotTime === slotTime;
+                  const slotM = timeToMinutes(slotTime);
+                  const isCurrentSlot =
+                    isTimelineToday && currentActiveSlotTime === slotTime;
+                  const isPastSlot =
+                    isTimelineToday && !isCurrentSlot && slotM + 30 <= nowMinutes;
 
                   return (
                     <div
                       key={`timeline-row-${slotTime}`}
-                      className="relative flex items-stretch h-16 w-full max-w-full box-border border-b border-stone-200 dark:border-white/10 transition-colors"
+                      ref={isCurrentSlot ? currentSlotRowRef : undefined}
+                      className={`relative flex items-stretch h-16 w-full max-w-full box-border border-b transition-all ${
+                        isCurrentSlot
+                          ? "border-amber-400 dark:border-amber-400/90 bg-gradient-to-r from-amber-500/20 via-emerald-500/15 to-amber-500/10 dark:from-amber-500/25 dark:via-emerald-500/15 dark:to-amber-500/5 ring-2 ring-amber-400/80 dark:ring-amber-400/80 rounded-xl my-1 shadow-lg shadow-amber-500/15 z-[5]"
+                          : isPastSlot
+                          ? "border-stone-200/70 dark:border-white/5 opacity-60 bg-stone-100/40 dark:bg-black/20"
+                          : "border-stone-200 dark:border-white/10"
+                      }`}
                     >
-                      {/* Sol Sütun (w-16 shrink-0): Saat yazısı her satırda sabit h-16 */}
-                      <div className="w-16 h-16 shrink-0 flex items-center justify-center font-mono text-xs font-bold text-stone-500 dark:text-stone-400 select-none">
-                        {slotTime}
+                      {/* Sol Sütun (w-16 shrink-0): Saat yazısı her satırda sabit h-16, şu anki saatte renkli ve parlak */}
+                      <div
+                        className={`w-16 h-16 shrink-0 flex flex-col items-center justify-center font-mono select-none ${
+                          isCurrentSlot
+                            ? "rounded-l-xl bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 text-[#1a110b] shadow-md"
+                            : "text-xs font-bold text-stone-500 dark:text-stone-400"
+                        }`}
+                      >
+                        {isCurrentSlot ? (
+                          <>
+                            <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-tighter leading-none">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#1a110b] animate-ping" />
+                              <span>ŞU AN</span>
+                            </span>
+                            <span className="text-xs sm:text-sm font-black leading-tight mt-0.5">
+                              {slotTime}
+                            </span>
+                          </>
+                        ) : (
+                          <span>{slotTime}</span>
+                        )}
                       </div>
 
                       {/* Sağ Sütun: Randevu kartı başladığı satırda absolute olarak yerleşir ve süresi kadar aşağı uzanır */}
@@ -2934,6 +3151,7 @@ export default function AdminDashboardPage() {
                                 onConfirm={handleTimelineConfirm}
                                 onComplete={handleTimelineComplete}
                                 onMove={handleTimelineMove}
+                                onCancel={handleTimelineCancel}
                                 onDragStartApt={handleTimelineDragStart}
                                 onDragEndApt={handleTimelineDragEnd}
                               />
@@ -2942,10 +3160,22 @@ export default function AdminDashboardPage() {
 
                         {/* 4. Tamamen Boş Saat */}
                         {!hasAnyContent && (
-                          <div className="flex items-center justify-between gap-2 w-full max-w-full min-w-0 overflow-hidden box-border h-full transition-opacity opacity-75 hover:opacity-100 bg-transparent">
-                            <span className="truncate min-w-0 text-[11px] font-medium text-stone-500 dark:text-stone-400">
+                          <div className="flex items-center justify-between gap-2 w-full max-w-full min-w-0 overflow-hidden box-border h-full transition-opacity opacity-90 hover:opacity-100 bg-transparent">
+                            <span
+                              className={`truncate min-w-0 text-[11px] ${
+                                isCurrentSlot
+                                  ? "font-black text-amber-800 dark:text-amber-300"
+                                  : "font-medium text-stone-500 dark:text-stone-400"
+                              }`}
+                            >
                               {isDragTarget
                                 ? "📍 Buraya Bırakın!"
+                                : isCurrentSlot
+                                ? `🟢 ŞU ANKİ SAAT (${nowTimeLabel}) • ${
+                                    adminStaffFilter === "all" && slotData.freeBarbers.length > 0
+                                      ? `Boş (${slotData.freeBarbers.length} Koltuk)`
+                                      : "Boş"
+                                  }`
                                 : adminStaffFilter === "all" && slotData.freeBarbers.length > 0
                                 ? `• Boş (${slotData.freeBarbers.length} Koltuk)`
                                 : "• Boş"}
@@ -4427,7 +4657,13 @@ export default function AdminDashboardPage() {
             {/* 2. 📅 Takvim */}
             <button
               type="button"
-              onClick={() => setBottomTab("calendar")}
+              onClick={() => {
+                if (adminDayMode === "all") {
+                  setAdminDayMode("today");
+                }
+                setShowPastTimelineSlots(false);
+                setBottomTab("calendar");
+              }}
               className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-xs font-black transition cursor-pointer ${
                 bottomTab === "calendar"
                   ? "bg-gradient-to-r from-[#d4af7a] via-[#e5cbb0] to-[#c69d65] text-[#1a110b] shadow-lg shadow-[#dfc39e]/25"
@@ -5273,15 +5509,13 @@ export default function AdminDashboardPage() {
                         type="button"
                         disabled={updatingId === activeDetailApt.id}
                         onClick={() => {
-                          if (confirm(`${activeDetailApt.customerName} randevusunu reddetmek / iptal etmek istediğinize emin misiniz?`)) {
-                            handleCancelByAdmin(activeDetailApt);
-                            setSelectedDetailApt(null);
-                          }
+                          handleCancelByAdmin(activeDetailApt);
+                          setSelectedDetailApt(null);
                         }}
                         className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-3 px-4 text-xs sm:text-sm font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
                       >
-                        <Ban className="h-4 w-4" />
-                        <span>❌ Reddet / İptal Et</span>
+                        <Trash2 className="h-4 w-4" />
+                        <span>{updatingId === activeDetailApt.id ? "Siliniyor..." : "🗑️ Reddet / Sil"}</span>
                       </button>
                     </div>
                   ) : (
@@ -5324,16 +5558,14 @@ export default function AdminDashboardPage() {
                           type="button"
                           disabled={updatingId === activeDetailApt.id}
                           onClick={() => {
-                            if (confirm(`${activeDetailApt.customerName} randevusunu iptal etmek istediğinize emin misiniz? Saat tekrar boşa çıkarılacaktır.`)) {
-                              handleCancelByAdmin(activeDetailApt);
-                              setSelectedDetailApt(null);
-                            }
+                            handleCancelByAdmin(activeDetailApt);
+                            setSelectedDetailApt(null);
                           }}
                           className="flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                          title="Randevuyu İptal Et"
+                          title="Randevuyu Sil / İptal Et"
                         >
                           <Trash2 className="h-4 w-4" />
-                          <span>İptal</span>
+                          <span>{updatingId === activeDetailApt.id ? "Siliniyor..." : "Sil"}</span>
                         </button>
                       )}
                     </>

@@ -479,11 +479,6 @@ export default function CustomerBookingPage() {
   // Son Onay Ekranından Randevu İptali
   const handleCancelCurrentAppointment = () => {
     if (!confirmedAppointment?.id) return;
-    const confirmResult = window.confirm(
-      "Randevunuzu iptal etmek istediğinize emin misiniz? Seçtiğiniz saat dilimi takvimde diğer müşterilere tekrar açılacaktır."
-    );
-    if (!confirmResult) return;
-
     cancelAppointmentByCustomer(confirmedAppointment.id);
     setIsCancelledOnConfirm(true);
   };
@@ -512,11 +507,6 @@ export default function CustomerBookingPage() {
   };
 
   const handleCancelFromLookup = (aptId: string) => {
-    const confirmResult = window.confirm(
-      "Bu randevuyu iptal etmek istediğinize emin misiniz? Saat ustanızın takviminde anında tekrar boşa çıkarılacaktır."
-    );
-    if (!confirmResult) return;
-
     cancelAppointmentByCustomer(aptId);
     setLookupResults((prev) => (prev ? prev.filter((a) => a.id !== aptId) : []));
     setLookupMessage({

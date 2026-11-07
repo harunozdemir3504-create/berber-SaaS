@@ -110,6 +110,7 @@ export interface TimelineAppointmentCardProps {
   onConfirm: (apt: Appointment, isBlacklistApt: boolean) => void;
   onComplete: (apt: Appointment) => void;
   onMove: (apt: Appointment) => void;
+  onCancel?: (apt: Appointment) => void;
   onDragStartApt: (e: React.DragEvent, apt: Appointment) => void;
   onDragEndApt: () => void;
 }
@@ -127,6 +128,7 @@ function TimelineAppointmentCardBase({
   onConfirm,
   onComplete,
   onMove,
+  onCancel,
   onDragStartApt,
   onDragEndApt,
 }: TimelineAppointmentCardProps) {
@@ -210,6 +212,21 @@ function TimelineAppointmentCardBase({
       >
         Taşı
       </button>
+      {onCancel && (
+        <button
+          type="button"
+          disabled={isUpdating}
+          onClick={(e) => {
+            stop(e);
+            if (isUpdating) return;
+            onCancel(apt);
+          }}
+          className={`${BTN_BASE} border border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/30 font-bold`}
+          title="Randevuyu Sil / İptal Et"
+        >
+          {isUpdating ? "..." : "Sil"}
+        </button>
+      )}
     </div>
   );
 
