@@ -5287,58 +5287,83 @@ export default function AdminDashboardPage() {
                     Taşımak istediğiniz boş saat dilimine dokunun:
                   </p>
 
-                  <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
-                    {timelineSlots.map((slotTime) => {
-                      const isCurrent = slotTime === mobileRescheduleApt.time;
-                      const duration = mobileRescheduleApt.totalDuration || 30;
-                      const targetStartM = timeToMinutes(slotTime);
-                      const targetEndM = targetStartM + duration;
+                  {(() => {
+                    const aptStartM = timeToMinutes(mobileRescheduleApt.time);
+                    // Aktif canlı saatten ve randevudan önceki saatleri gösterme!
+                    const minAllowedM = isTimelineToday
+                      ? Math.max(nowMinutes - 5, aptStartM)
+                      : aptStartM;
 
-                      const isOccupied = timelineAppointments.some((a) => {
-                        if (a.id === mobileRescheduleApt.id) return false;
-                        if (
-                          mobileRescheduleApt.barberId !== "any" &&
-                          a.barberId !== "any" &&
-                          a.barberId !== mobileRescheduleApt.barberId
-                        ) {
-                          return false;
-                        }
-                        const aStartM = timeToMinutes(a.time);
-                        const aEndM = timeToMinutes(
-                          a.endTime || minutesToTime(aStartM + (a.totalDuration || 30))
-                        );
-                        return targetStartM < aEndM && targetEndM > aStartM;
-                      });
+                    const availableRescheduleSlots = timelineSlots.filter((slotTime) => {
+                      const slotM = timeToMinutes(slotTime);
+                      return slotM >= minAllowedM;
+                    });
 
+                    if (availableRescheduleSlots.length === 0) {
                       return (
-                        <button
-                          key={slotTime}
-                          type="button"
-                          disabled={isOccupied || isCurrent}
-                          onClick={() => {
-                            const targetTime = slotTime;
-                            const aptToMove = mobileRescheduleApt;
-                            setMobileRescheduleApt(null);
-                            setDragConfirmModal({
-                              isOpen: true,
-                              appointment: aptToMove,
-                              targetTime,
-                            });
-                          }}
-                          className={`rounded-xl py-2.5 text-center text-xs font-black transition ${
-                            isCurrent
-                              ? "border border-amber-500/50 bg-amber-500/10 text-amber-300 cursor-default"
-                              : isOccupied
-                              ? "border border-white/5 bg-white/5 text-stone-600 cursor-not-allowed opacity-40"
-                              : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-500/20 active:scale-95"
-                          }`}
-                        >
-                          {slotTime}
-                          {isCurrent && <span className="block text-[9px] font-normal">Şu Anki</span>}
-                        </button>
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center my-2">
+                          <p className="text-xs font-bold text-amber-300">
+                            Bu randevudan sonra bu gün için taşınabilecek başka bir saat dilimi bulunmuyor.
+                          </p>
+                        </div>
                       );
-                    })}
-                  </div>
+                    }
+
+                    return (
+                      <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+                        {availableRescheduleSlots.map((slotTime) => {
+                          const isCurrent = slotTime === mobileRescheduleApt.time;
+                          const duration = mobileRescheduleApt.totalDuration || 30;
+                          const targetStartM = timeToMinutes(slotTime);
+                          const targetEndM = targetStartM + duration;
+
+                          const isOccupied = timelineAppointments.some((a) => {
+                            if (a.id === mobileRescheduleApt.id) return false;
+                            if (
+                              mobileRescheduleApt.barberId !== "any" &&
+                              a.barberId !== "any" &&
+                              a.barberId !== mobileRescheduleApt.barberId
+                            ) {
+                              return false;
+                            }
+                            const aStartM = timeToMinutes(a.time);
+                            const aEndM = timeToMinutes(
+                              a.endTime || minutesToTime(aStartM + (a.totalDuration || 30))
+                            );
+                            return targetStartM < aEndM && targetEndM > aStartM;
+                          });
+
+                          return (
+                            <button
+                              key={slotTime}
+                              type="button"
+                              disabled={isOccupied || isCurrent}
+                              onClick={() => {
+                                const targetTime = slotTime;
+                                const aptToMove = mobileRescheduleApt;
+                                setMobileRescheduleApt(null);
+                                setDragConfirmModal({
+                                  isOpen: true,
+                                  appointment: aptToMove,
+                                  targetTime,
+                                });
+                              }}
+                              className={`rounded-xl py-2.5 text-center text-xs font-black transition ${
+                                isCurrent
+                                  ? "border border-amber-500/50 bg-amber-500/10 text-amber-300 cursor-default"
+                                  : isOccupied
+                                  ? "border border-white/5 bg-white/5 text-stone-600 cursor-not-allowed opacity-40"
+                                  : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-500/20 active:scale-95"
+                              }`}
+                            >
+                              {slotTime}
+                              {isCurrent && <span className="block text-[9px] font-normal">Şu Anki</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex justify-end pt-3 border-t border-white/10">
