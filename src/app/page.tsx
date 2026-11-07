@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import VipLandingPage from "@/components/VipLandingPage";
 import {
   Scissors,
   Clock,
@@ -61,6 +62,7 @@ type VerificationStage =
 
 export default function CustomerBookingPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     shops,
     currentShop,
@@ -82,6 +84,18 @@ export default function CustomerBookingPage() {
     cancelAppointmentByCustomer,
     findCustomerAppointments,
   } = useBarber();
+
+  const isRootLandingPage = pathname === "/" && !hasShopQueryParam;
+
+  const handleOpenLiveDemo = useCallback(() => {
+    const sampleShop =
+      shops.find((s) => s.subscriptionStatus === "active") ||
+      shops[0] ||
+      currentShop;
+    const sampleSlug = sampleShop?.slug || "atelier-noir";
+    setCurrentShopSlug(sampleSlug);
+    router.push(`/?shop=${sampleSlug}`);
+  }, [shops, currentShop, setCurrentShopSlug, router]);
 
   // Akıllı PWA Yönlendirmesi (Yalnızca telefon ana ekranına 'Admin' olarak kurulmuş PWA standalone ise)
   useEffect(() => {
@@ -520,6 +534,16 @@ export default function CustomerBookingPage() {
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
+
+  // ANA KÖK DİZİN (/): Hiçbir dükkan parametresi (?shop=) olmadan girildiğinde B2B SaaS Tanıtım ve Satış Vitrini açılır
+  if (isRootLandingPage) {
+    return (
+      <VipLandingPage
+        onOpenLiveDemo={handleOpenLiveDemo}
+        demoShopName={currentShop.name}
+      />
+    );
+  }
 
   // SİLİNEN / BİLİNMEYEN DÜKKAN EKRANI
   if (hydrated && !currentShopExists) {

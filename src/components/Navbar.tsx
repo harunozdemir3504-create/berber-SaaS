@@ -25,15 +25,17 @@ export default function Navbar() {
   const {
     shops,
     currentShop,
+    hasShopQueryParam,
     resetDemoData,
   } = useBarber();
   const { theme, toggleTheme } = useTheme();
 
   const isSuperAdmin = pathname?.startsWith("/super-admin");
   const isShopAdmin = pathname?.startsWith("/admin");
+  const isRootLandingPage = pathname === "/" && !hasShopQueryParam;
 
-  // Berber Yönetim Paneli (/admin) kendi özel kavisli VIP Hero Header'ını kullanır
-  if (isShopAdmin) return null;
+  // Berber Yönetim Paneli (/admin) ve Ana Tanıtım Vitrini (/) kendi özel Sticky VIP Header'ını kullanır
+  if (isShopAdmin || isRootLandingPage) return null;
 
   return (
     <header
