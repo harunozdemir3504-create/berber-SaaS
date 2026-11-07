@@ -983,7 +983,13 @@ export default function AdminDashboardPage() {
       if (endM > closeM) closeM = endM;
     });
 
-    for (let m = openM; m <= closeM; m += 30) {
+    if (closeM <= openM) {
+      closeM = openM + 30;
+    }
+
+    // Kapanış saatinde ekstra boş slot açılmaması için m < closeM kuralı uygulanır:
+    // Örneğin 21:00 kapanış ise son slot 20:30 (20:30-21:00) olur; 21:00'da boş koltuk görünmez.
+    for (let m = openM; m < closeM; m += 30) {
       slots.push(minutesToTime(m));
     }
     return slots;
@@ -1001,7 +1007,9 @@ export default function AdminDashboardPage() {
     const firstM = timeToMinutes(timelineSlots[0]);
     const lastM = timeToMinutes(timelineSlots[timelineSlots.length - 1]);
     if (nowMinutes < firstM) return timelineSlots[0];
-    if (nowMinutes >= lastM) return timelineSlots[timelineSlots.length - 1];
+    if (nowMinutes >= lastM && nowMinutes < lastM + 30) {
+      return timelineSlots[timelineSlots.length - 1];
+    }
     return null;
   }, [isTimelineToday, timelineSlots, nowMinutes]);
 
@@ -1315,6 +1323,17 @@ export default function AdminDashboardPage() {
     const duration = draggedApt.totalDuration || 30;
     const startM = timeToMinutes(targetTime);
     const endM = startM + duration;
+    const closeM = shopSettings?.closeTime ? timeToMinutes(shopSettings.closeTime) : 21 * 60;
+
+    if (endM > closeM) {
+      triggerToast(
+        "Kapanış Saati Sınırı! ⚠️",
+        `Bu randevu süresi (${duration} dk) ile salonun kapanış saatini (${shopSettings.closeTime || "21:00"}) aşacağı için bu saate taşınamaz.`,
+        "warning"
+      );
+      setDraggedApt(null);
+      return;
+    }
 
     // Hedef saat diliminde çakışma var mı? (Sadece seçili gündeki timelineAppointments içinde!)
     const hasCollision = timelineAppointments.some((a) => {
@@ -5316,8 +5335,14 @@ export default function AdminDashboardPage() {
                           const duration = mobileRescheduleApt.totalDuration || 30;
                           const targetStartM = timeToMinutes(slotTime);
                           const targetEndM = targetStartM + duration;
+                          const closeM = shopSettings?.closeTime
+                            ? timeToMinutes(shopSettings.closeTime)
+                            : 21 * 60;
+                          const exceedsCloseTime = targetEndM > closeM;
 
-                          const isOccupied = timelineAppointments.some((a) => {
+                          const isOccupied =
+                            exceedsCloseTime ||
+                            timelineAppointments.some((a) => {
                             if (a.id === mobileRescheduleApt.id) return false;
                             if (
                               mobileRescheduleApt.barberId !== "any" &&
