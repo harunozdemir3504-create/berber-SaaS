@@ -708,13 +708,41 @@ export default function AdminDashboardPage() {
     (sum, s) => sum + s.duration,
     0
   );
-  const quickAvailableSlots = useMemo(
-    () =>
-      getSlotsForDay(quickDayId, quickSelectedBarber?.id).filter(
-        (slot) => slot.state === "available"
-      ),
-    [getSlotsForDay, quickDayId, quickSelectedBarber?.id]
-  );
+  const isQuickDayToday =
+    Boolean(quickSelectedDay?.isToday) ||
+    toStrictIsoDate(quickDayId) === toStrictIsoDate(todayDay.id);
+
+  const quickAvailableSlots = useMemo(() => {
+    const rawSlots = getSlotsForDay(
+      quickDayId,
+      quickSelectedBarber?.id
+    ).filter((slot) => slot.state === "available");
+
+    if (!isQuickDayToday) {
+      return rawSlots;
+    }
+
+    const nowTr = getTurkeyNow();
+    const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
+
+    // Bugün için: Geçmiş saatleri filtrele (şu anki saat ve sonrasını göster)
+    // 5 dakikadan fazla geçmiş olan eski saatler elenir
+    return rawSlots.filter((slot) => {
+      const slotMinutes = timeToMinutes(slot.time);
+      return slotMinutes >= currentMinutes - 5;
+    });
+  }, [getSlotsForDay, quickDayId, quickSelectedBarber?.id, isQuickDayToday]);
+
+  // Hızlı ekle sekmesinde saat varsayılan olarak şu anki saate göre en yakın uygun saat seçili gelsin
+  useEffect(() => {
+    if (quickAvailableSlots.length > 0) {
+      if (!quickTime || !quickAvailableSlots.some((s) => s.time === quickTime)) {
+        setQuickTime(quickAvailableSlots[0].time);
+      }
+    } else {
+      setQuickTime("");
+    }
+  }, [quickAvailableSlots, quickTime]);
 
   const toggleQuickService = (id: string) => {
     setQuickServiceIds((prev) =>
@@ -1843,13 +1871,19 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={() => {
                 const defaultBarber = realBarbers[0]?.id || "";
+                const nowTr = getTurkeyNow();
+                const curH = nowTr.getHours();
+                const curM = nowTr.getMinutes();
+                const startStr = `${String(curH).padStart(2, "0")}:${curM < 30 ? "00" : "30"}`;
+                const endH = (curH + 1) % 24;
+                const endStr = `${String(endH).padStart(2, "0")}:${curM < 30 ? "00" : "30"}`;
                 setBlockModal({
                   isOpen: true,
                   barberId: adminStaffFilter !== "all" ? adminStaffFilter : defaultBarber,
                   dayId: currentTimelineDayId,
-                  startTime: "13:00",
-                  endTime: "14:00",
-                  reason: "Yemek Molası",
+                  startTime: startStr,
+                  endTime: endStr,
+                  reason: "Mola",
                 });
               }}
               className="rounded-2xl border border-stone-200 dark:border-amber-500/30 bg-stone-50 hover:bg-stone-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 p-2 sm:p-2.5 text-left transition active:scale-95 cursor-pointer shadow-sm group"
@@ -3297,10 +3331,17 @@ export default function AdminDashboardPage() {
             {/* KUTU 2: SAAT SEÇİMİ */}
             <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
               <div className="mb-2.5 flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
-                  <Clock className="h-4 w-4 text-emerald-400" />
-                  <span>2. Gün & Saat Seçin ({quickSelectedDay.chipLabel})</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
+                    <Clock className="h-4 w-4 text-emerald-400" />
+                    <span>2. Gün & Saat Seçin ({quickSelectedDay.chipLabel})</span>
+                  </label>
+                  {quickTime && (
+                    <span className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs font-black text-emerald-300 border border-emerald-500/30">
+                      Seçili: {quickTime}
+                    </span>
+                  )}
+                </div>
 
                 <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
                   {liveDays.map((d) => (
@@ -3325,7 +3366,9 @@ export default function AdminDashboardPage() {
 
               {quickAvailableSlots.length === 0 ? (
                 <p className="rounded-xl bg-amber-500/10 p-3 text-center text-xs font-bold text-amber-300">
-                  Bu gün için boş saat kalmadı. Başka bir gün seçiniz.
+                  {isQuickDayToday
+                    ? "Bugün için bu saatten sonra boş saat kalmadı. Başka bir gün seçebilirsiniz."
+                    : "Bu gün için boş saat kalmadı. Başka bir gün seçiniz."}
                 </p>
               ) : (
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">

@@ -18,7 +18,7 @@ import {
   Sparkles,
   Search,
 } from "lucide-react";
-import { getLiveDaysMetadata, Appointment } from "@/data/mockData";
+import { getLiveDaysMetadata, getTurkeyNow, toStrictIsoDate, Appointment } from "@/data/mockData";
 import {
   useBarber,
   minutesToTime,
@@ -143,10 +143,26 @@ export default function QuickBookingModal({
     setBlockEnd("");
   }, [blockDayId]);
 
-  const phoneSlots = useMemo(
-    () => getSlotsForDay(dayId, barberId || undefined),
-    [getSlotsForDay, dayId, barberId]
-  );
+  const isPhoneDayToday =
+    Boolean(selectedDay?.isToday) ||
+    toStrictIsoDate(dayId) === toStrictIsoDate(liveDays[0]?.id);
+
+  const phoneSlots = useMemo(() => {
+    const raw = getSlotsForDay(dayId, barberId || undefined);
+    if (!isPhoneDayToday) return raw;
+    const nowTr = getTurkeyNow();
+    const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
+    return raw.filter((s) => timeToMinutes(s.time) >= currentMinutes - 5);
+  }, [getSlotsForDay, dayId, barberId, isPhoneDayToday]);
+
+  useEffect(() => {
+    if (tab === "phone" && phoneSlots.length > 0) {
+      if (!time || !phoneSlots.some((s) => s.time === time)) {
+        const firstAvail = phoneSlots.find((s) => s.state === "available");
+        if (firstAvail) setTime(firstAvail.time);
+      }
+    }
+  }, [tab, phoneSlots, time]);
   const blockSlots = useMemo(
     () => getSlotsForDay(blockDayId, blockBarberId || undefined),
     [getSlotsForDay, blockDayId, blockBarberId]
