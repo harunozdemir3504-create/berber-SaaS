@@ -108,9 +108,9 @@ export interface TimelineAppointmentCardProps {
   lanes: number;
   isUpdating?: boolean;
   onOpen: (apt: Appointment) => void;
-  onConfirm: (apt: Appointment, isBlacklistApt: boolean) => void;
-  onComplete: (apt: Appointment) => void;
-  onMove: (apt: Appointment) => void;
+  onConfirm?: (apt: Appointment, isBlacklistApt: boolean) => void;
+  onComplete?: (apt: Appointment) => void;
+  onMove?: (apt: Appointment) => void;
   onCancel?: (apt: Appointment) => void;
   onDragStartApt: (e: React.DragEvent, apt: Appointment) => void;
   onDragEndApt: () => void;
@@ -156,7 +156,7 @@ function TimelineAppointmentCardBase({
       : isPending
       ? "⏳ Onay Bekliyor"
       : isCompleted
-      ? "Geldi ✅"
+      ? "👍 Geldi"
       : "✅ Onaylı";
 
   const style: React.CSSProperties = {
@@ -171,75 +171,8 @@ function TimelineAppointmentCardBase({
     zIndex: 10,
   };
 
-  /* ---------------------------- Aksiyon Butonları ---------------------------- */
-  const actions = (
-    <div className="flex items-center gap-1 shrink-0">
-      <span className={`font-mono text-xs sm:text-sm font-black mr-0.5 ${theme.price}`}>
-        {apt.totalPrice} TL
-      </span>
-      {isPending && (
-        <button
-          type="button"
-          disabled={isUpdating}
-          onClick={(e) => {
-            stop(e);
-            if (isUpdating) return;
-            onConfirm(apt, isBlacklistApt);
-          }}
-          className={`${BTN_BASE} bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm`}
-          title={isBlacklistApt ? "Kaporayı onaylayın" : "Randevuyu onayla"}
-        >
-          {isUpdating ? "..." : isBlacklistApt ? "✅ Onayla" : "Onayla"}
-        </button>
-      )}
-      {!isPending && !isCompleted && (
-        <button
-          type="button"
-          disabled={isUpdating}
-          onClick={(e) => {
-            stop(e);
-            if (isUpdating) return;
-            onComplete(apt);
-          }}
-          className={`${BTN_BASE} border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25`}
-          title="Müşteri Geldi"
-        >
-          {isUpdating ? "..." : "Geldi"}
-        </button>
-      )}
-      <button
-        type="button"
-        disabled={isUpdating}
-        onClick={(e) => {
-          stop(e);
-          if (isUpdating) return;
-          onMove(apt);
-        }}
-        className={`${BTN_BASE} border border-stone-300 dark:border-white/10 bg-white/80 dark:bg-white/5 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/15 font-bold`}
-        title="Randevuyu Başka Saate Taşı"
-      >
-        Taşı
-      </button>
-      {onCancel && (
-        <button
-          type="button"
-          disabled={isUpdating}
-          onClick={(e) => {
-            stop(e);
-            if (isUpdating) return;
-            onCancel(apt);
-          }}
-          className={`${BTN_BASE} border border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/30 font-bold`}
-          title="Randevuyu Sil / İptal Et"
-        >
-          {isUpdating ? "..." : "Sil"}
-        </button>
-      )}
-    </div>
-  );
-
   const statusBadge = (
-    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] leading-none ${theme.badge}`}>
+    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black leading-none ${theme.badge}`}>
       {statusLabel}
     </span>
   );
@@ -248,17 +181,6 @@ function TimelineAppointmentCardBase({
     <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] leading-none bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40 font-black">
       ⚡ Erken Gelebilir
     </span>
-  ) : null;
-
-  const phoneLink = phoneDisplay ? (
-    <a
-      href={phoneHref}
-      onClick={stop}
-      className="font-mono text-[10px] sm:text-[11px] font-bold shrink-0 hover:underline active:scale-95 transition-transform touch-manipulation"
-      title="Telefonu ara"
-    >
-      📞 {phoneDisplay}
-    </a>
   ) : null;
 
   return (
@@ -271,35 +193,42 @@ function TimelineAppointmentCardBase({
         stop(e);
         onOpen(apt);
       }}
-      className={`max-w-full overflow-hidden box-border rounded-lg flex flex-col transition-all duration-200 ease-out cursor-pointer hover:shadow-md hover:ring-2 hover:ring-[#dfc39e]/70 select-none touch-manipulation will-change-transform ${theme.container} ${
+      className={`max-w-full overflow-hidden box-border rounded-xl flex flex-col transition-all duration-150 ease-out cursor-pointer active:scale-[0.99] hover:shadow-lg hover:ring-2 hover:ring-amber-400/80 dark:hover:ring-[#dfc39e]/80 select-none touch-manipulation will-change-transform ${theme.container} ${
         variant === "compact"
-          ? "px-2.5 py-1 justify-center gap-0.5"
+          ? "px-3 py-1.5 justify-center gap-1"
           : variant === "hour"
-          ? "px-3 py-2 justify-center gap-2"
-          : "px-3 py-2 gap-1.5"
+          ? "px-3.5 py-2.5 justify-center gap-2"
+          : "px-4 py-3 gap-2"
       }`}
     >
       {/* ============================ 15 / 30 DK: KOMPAKT (1 SLOT - 64px) ============================ */}
       {variant === "compact" && (
         <>
-          <div className="flex items-center justify-between gap-1.5 min-w-0">
+          {/* Üst Satır: Müşteri Adı + Rozetler (Sol) ve Tutar (Sağ) */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-              <span className={`truncate text-sm sm:text-base font-bold leading-tight ${theme.title}`}>
+              <span className={`text-sm sm:text-base font-bold leading-tight truncate ${theme.title}`}>
                 {apt.customerName}
               </span>
               {statusBadge}
               {earlyBadge}
             </div>
-            {actions}
+            <span className={`font-mono text-xs sm:text-sm font-black shrink-0 ${theme.price}`}>
+              {apt.totalPrice} ₺
+            </span>
           </div>
+
+          {/* Alt Satır: İşlem Adı, Süre ve Koltuk/Usta */}
           <div className="flex items-center gap-2 min-w-0 text-[11px] leading-tight text-stone-600 dark:text-stone-300">
-            <span className="truncate min-w-0">✂️ {servicesSummary}</span>
+            <span className="truncate min-w-0 font-medium">✂️ {servicesSummary}</span>
             <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-800 dark:text-amber-300">
-              ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
+              ⏱️ {duration} Dk ({apt.time} - {endTimeLabel})
             </span>
-            <span className="hidden sm:inline truncate shrink-0 max-w-[30%] text-stone-500 dark:text-stone-400">
-              💈 {apt.barberName}
-            </span>
+            {apt.barberName && (
+              <span className="hidden sm:inline truncate shrink-0 max-w-[25%] text-stone-500 dark:text-stone-400">
+                💈 {apt.barberName}
+              </span>
+            )}
           </div>
         </>
       )}
@@ -307,27 +236,34 @@ function TimelineAppointmentCardBase({
       {/* ========================= 45 / 60 DK: 2 SLOT DÜZENİ (128px) ========================= */}
       {variant === "hour" && (
         <>
-          <div className="flex items-start justify-between gap-2 min-w-0">
-            <div className="min-w-0 overflow-hidden">
-              <div className={`truncate text-base font-bold leading-tight ${theme.title}`}>
+          {/* Üst Satır: Müşteri Adı + Rozetler (Sol) ve Tutar (Sağ) */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              <span className={`text-base sm:text-lg font-bold leading-tight truncate ${theme.title}`}>
                 👤 {apt.customerName}
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 min-w-0 overflow-hidden">
-                <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-800 dark:text-amber-300">
-                  ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
-                </span>
-                {statusBadge}
-                {earlyBadge}
-              </div>
+              </span>
+              {statusBadge}
+              {earlyBadge}
             </div>
-            {actions}
-          </div>
-          <div className="flex items-center gap-2 min-w-0 rounded-md bg-white/60 dark:bg-white/[0.04] px-2 py-1.5 text-[11px] text-stone-700 dark:text-stone-300">
-            <span className="truncate min-w-0 font-semibold">✂️ {servicesSummary}</span>
-            <span className="truncate shrink-0 max-w-[30%] text-stone-500 dark:text-stone-400">
-              💈 {apt.barberName}
+            <span className={`font-mono text-sm sm:text-base font-black shrink-0 ${theme.price}`}>
+              {apt.totalPrice} ₺
             </span>
-            {phoneLink && <span className="ml-auto shrink-0">{phoneLink}</span>}
+          </div>
+
+          {/* Alt Alan: İşlem Tam Adı, Süre ve Koltuk/Usta */}
+          <div className="flex flex-col gap-1 min-w-0 rounded-lg bg-white/70 dark:bg-white/[0.04] p-2 text-xs text-stone-700 dark:text-stone-300 border border-stone-200/50 dark:border-white/5">
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="truncate font-bold text-stone-900 dark:text-[#fdf8f5]">
+                ✂️ {servicesSummary}
+              </span>
+              <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] leading-none font-black text-amber-800 dark:text-amber-300">
+                ⏱️ {duration} Dk ({apt.time} - {endTimeLabel})
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 min-w-0 text-[11px] text-stone-500 dark:text-stone-400">
+              <span className="truncate">💈 {apt.chairLabel || apt.barberName}</span>
+              {phoneDisplay && <span className="shrink-0 font-mono">📞 {phoneDisplay}</span>}
+            </div>
           </div>
         </>
       )}
@@ -335,58 +271,45 @@ function TimelineAppointmentCardBase({
       {/* ===================== 75 / 90 DK+: VIP / UZUN İŞLEM DÜZENİ (3+ SLOT - 192px+) ===================== */}
       {variant === "vip" && (
         <>
-          {/* 1. Katman: Üst Başlık */}
-          <div className="flex items-start justify-between gap-2 min-w-0 shrink-0">
-            <div className="min-w-0 overflow-hidden">
-              <div className={`truncate text-base sm:text-lg font-bold leading-tight ${theme.title}`}>
+          {/* 1. Katman: Üst Başlık ve Tutar */}
+          <div className="flex items-center justify-between gap-2 min-w-0 shrink-0">
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              <span className={`text-base sm:text-xl font-bold leading-tight truncate ${theme.title}`}>
                 👤 {apt.customerName}
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 min-w-0 overflow-hidden">
-                <span className="shrink-0 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-0.5 text-[9px] leading-none font-black text-amber-950 shadow-sm">
-                  👑 VIP • ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
-                </span>
-                {statusBadge}
-                {earlyBadge}
-              </div>
+              </span>
+              <span className="shrink-0 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-0.5 text-[9px] leading-none font-black text-amber-950 shadow-sm">
+                👑 VIP
+              </span>
+              {statusBadge}
+              {earlyBadge}
             </div>
-            {actions}
+            <span className={`font-mono text-base sm:text-lg font-black shrink-0 ${theme.price}`}>
+              {apt.totalPrice} ₺
+            </span>
           </div>
 
-          {/* 2. Katman: Orta Bilgi Bandı (boşluğu dolduran alan) */}
+          {/* 2. Katman: Orta Bilgi Bandı */}
           <div
-            className={`flex-1 min-h-0 flex flex-col justify-center gap-1 rounded-md border px-2.5 py-1.5 overflow-hidden ${theme.infoBox}`}
+            className={`flex-1 min-h-0 flex flex-col justify-center gap-1.5 rounded-xl border px-3 py-2 overflow-hidden ${theme.infoBox}`}
           >
-            <p className="text-[11px] sm:text-xs leading-snug text-stone-800 dark:text-stone-200 line-clamp-2">
-              <span className="font-black">✂️ İşlem:</span> {servicesSummary}
+            <p className="text-xs sm:text-sm font-bold text-stone-900 dark:text-[#fdf8f5] line-clamp-2">
+              ✂️ {servicesSummary}
             </p>
-            <p className="text-[10px] sm:text-[11px] leading-snug text-stone-600 dark:text-stone-400 truncate">
-              <span className="font-bold">🕒 Süreç:</span> {apt.time} - {endTimeLabel} ({safeSlotCount} Saat
-              Dilimi Kapalı) • <span className="font-bold">💈 Koltuk:</span> {apt.barberName}
-            </p>
-          </div>
-
-          {/* 3. Katman: Alt Bar */}
-          <div className="flex items-center gap-1.5 min-w-0 shrink-0 text-stone-700 dark:text-stone-300">
-            <div className="min-w-0 truncate">{phoneLink}</div>
-            <div className="ml-auto flex items-center gap-1 shrink-0">
-              <a
-                href={buildWhatsAppUrl(apt.customerPhone, `Merhaba ${apt.customerName}, `)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={stop}
-                className={`${BTN_BASE} bg-[#25D366] hover:bg-[#1ebe5b] text-white shadow-sm`}
-              >
-                💬 WhatsApp Yaz
-              </a>
-              <a
-                href={phoneHref}
-                onClick={stop}
-                className={`${BTN_BASE} bg-stone-900 hover:bg-stone-800 text-white dark:bg-[#dfc39e] dark:hover:bg-[#e8d1b0] dark:text-[#1a110b] shadow-sm`}
-              >
-                📞 Hemen Ara
-              </a>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-stone-600 dark:text-stone-400">
+              <span className="font-semibold">
+                🕒 {apt.time} - {endTimeLabel} ({safeSlotCount} Dilim • {duration} Dk)
+              </span>
+              <span>💈 {apt.chairLabel || apt.barberName}</span>
             </div>
           </div>
+
+          {/* 3. Katman: Alt Bilgi Barı */}
+          {phoneDisplay && (
+            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-0.5">
+              <span className="font-mono font-bold">📞 {phoneDisplay}</span>
+              <span className="text-[10px] text-amber-600 dark:text-[#dfc39e] font-semibold">Dokunarak menüyü açın ➔</span>
+            </div>
+          )}
         </>
       )}
     </div>

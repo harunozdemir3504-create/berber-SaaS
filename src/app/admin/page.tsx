@@ -109,6 +109,7 @@ export default function AdminDashboardPage() {
     stats,
     addAppointment,
     markAppointmentCompleted,
+    revertAppointmentToConfirmed,
     confirmAppointment,
     markAppointmentNoShow,
     cancelAppointmentByCustomer,
@@ -2044,10 +2045,10 @@ export default function AdminDashboardPage() {
             >
               <div className="text-[10px] sm:text-[11px] font-bold text-stone-700 dark:text-amber-300 flex items-center gap-1 truncate">
                 <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
-                <span>⛔ Hızlı Mola</span>
+                <span>Hızlı Mola</span>
               </div>
               <div className="mt-0.5 text-xs sm:text-sm font-black text-slate-900 group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-200 flex items-center justify-between">
-                <span className="truncate">Mola Ver / Kapat</span>
+                <span className="truncate">⛔ Mola / Saat Kapat</span>
                 <span className="text-amber-600 dark:text-amber-400 text-xs font-bold sm:inline hidden">→</span>
               </div>
             </button>
@@ -3195,7 +3196,7 @@ export default function AdminDashboardPage() {
                     <span className="truncate font-bold text-stone-700 dark:text-amber-200">
                       {showPastTimelineSlots
                         ? `Önceki saatler açık (${hiddenPastSlots[0]} - ${hiddenPastSlots[hiddenPastSlots.length - 1]})`
-                        : `Önceki ${hiddenPastSlots.length} saat dilimi gizlendi (${hiddenPastSlots[0]} - ${hiddenPastSlots[hiddenPastSlots.length - 1]})`}
+                        : `🕒 Geçmiş Saatler Gizlendi (${hiddenPastSlots.length})`}
                     </span>
                   </div>
                   <button
@@ -3203,7 +3204,7 @@ export default function AdminDashboardPage() {
                     onClick={() => setShowPastTimelineSlots((prev) => !prev)}
                     className="shrink-0 rounded-lg border border-amber-400/60 bg-amber-500/20 hover:bg-amber-500/30 px-2.5 py-1 text-[11px] font-black text-amber-900 dark:text-amber-200 transition active:scale-95 cursor-pointer"
                   >
-                    {showPastTimelineSlots ? "🔼 Öncesini Gizle" : "🕘 Öncesini Göster"}
+                    {showPastTimelineSlots ? "🔼 Öncesini Gizle" : "🕘 Göster"}
                   </button>
                 </div>
               )}
@@ -5601,7 +5602,7 @@ export default function AdminDashboardPage() {
           )}
 
           {/* ===================================================================== */}
-          {/* 📅 TAKVİM RANDEVU DETAY, NORMAL ARAMA & WHATSAPP MODALI                */}
+          {/* 📅 TAKVİM RANDEVU HIZLI İŞLEM MENÜSÜ (BOTTOM SHEET / MODAL)          */}
           {/* ===================================================================== */}
           {activeDetailApt && (
             <div
@@ -5609,9 +5610,9 @@ export default function AdminDashboardPage() {
               className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto"
             >
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                initial={{ opacity: 0, scale: 0.95, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                exit={{ opacity: 0, scale: 0.95, y: 12 }}
                 onClick={(e) => e.stopPropagation()}
                 className="relative w-full max-w-md max-h-[92vh] overflow-y-auto my-auto rounded-3xl border border-stone-200 dark:border-white/20 bg-white dark:bg-gradient-to-b dark:from-[#18181c] dark:to-[#121214] p-5 sm:p-6 shadow-2xl text-stone-900 dark:text-[#fdf8f5]"
               >
@@ -5620,245 +5621,208 @@ export default function AdminDashboardPage() {
                   type="button"
                   onClick={() => setSelectedDetailApt(null)}
                   aria-label="Kapat"
-                  className="absolute right-3.5 top-3.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-stone-800/90 border border-white/25 text-white hover:bg-rose-500 hover:border-rose-500 shadow-xl transition-all active:scale-90 cursor-pointer"
+                  className="absolute right-3.5 top-3.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 hover:bg-stone-200 dark:bg-stone-800/90 border border-stone-200 dark:border-white/25 text-stone-700 dark:text-white hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500 shadow-xl transition-all active:scale-90 cursor-pointer"
                   title="Kapat"
                 >
                   <X className="h-5 w-5 stroke-[2.5]" />
                 </button>
 
                 {/* Başlık Alanı */}
-                <div className="flex items-center gap-3 pr-8 pb-3 border-b border-white/10">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#dfc39e]/20 text-[#dfc39e] border border-[#dfc39e]/30 shrink-0">
+                <div className="flex items-center gap-3 pr-8 pb-3 border-b border-stone-200 dark:border-white/10">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-[#dfc39e] border border-amber-500/30 shrink-0">
                     <CalendarIcon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-base font-black text-[#fdf8f5] truncate">
-                      Randevu Detayları
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-[#dfc39e] block">
+                      ⚡ HIZLI İŞLEM MENÜSÜ
+                    </span>
+                    <h3 className="text-base font-black text-stone-900 dark:text-[#fdf8f5] truncate">
+                      {activeDetailApt.customerName}
                     </h3>
-                    <p className="text-xs text-stone-400 truncate">
-                      📅 {resolveDayMetadata(activeDetailApt.dayId).chipLabel} • ⏰ {activeDetailApt.time} - {activeDetailApt.endTime || minutesToTime(timeToMinutes(activeDetailApt.time) + (activeDetailApt.totalDuration || 30))}
-                    </p>
                   </div>
                 </div>
 
-                {/* Müşteri Profil Kutusu */}
-                <div className="mt-4 rounded-2xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
+                {/* Randevu Özet Kartı */}
+                <div className="mt-4 rounded-2xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="text-xs font-bold text-stone-400 block">Müşteri</span>
-                      <h4 className="text-lg font-black text-[#fdf8f5] truncate">
-                        {activeDetailApt.customerName}
-                      </h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-black text-stone-900 dark:text-[#fdf8f5]">
+                          ⏰ {activeDetailApt.time} - {activeDetailApt.endTime || minutesToTime(timeToMinutes(activeDetailApt.time) + (Number(activeDetailApt.totalDuration) || 30))}
+                        </span>
+                        <span className="text-[11px] text-stone-500 dark:text-stone-400">
+                          ({activeDetailApt.totalDuration || 30} Dk)
+                        </span>
+                      </div>
+                      <div className="text-xs text-stone-600 dark:text-stone-300 font-medium mt-0.5 truncate">
+                        ✂️ {activeDetailApt.services.map((s) => s.name).join(" + ") || "Hizmet"}
+                      </div>
+                      <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                        💈 {activeDetailApt.chairLabel || activeDetailApt.barberName}
+                      </div>
                     </div>
 
                     <div className="shrink-0 text-right">
+                      <span className="text-lg font-black text-amber-600 dark:text-[#dfc39e] block">
+                        {activeDetailApt.totalPrice} ₺
+                      </span>
                       {activeDetailApt.status === "completed" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-black">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-black">
                           Geldi ✅
                         </span>
                       ) : activeDetailApt.status === "pending" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 text-xs font-black animate-pulse">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-2 py-0.5 text-[10px] font-black animate-pulse">
                           ⏳ Onay Bekliyor
                         </span>
                       ) : activeDetailApt.status === "cancelled" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2.5 py-0.5 text-xs font-black">
-                          İptal Edildi
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/40 px-2 py-0.5 text-[10px] font-black">
+                          İptal
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-black">
-                          ✅ Onaylandı
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-black">
+                          ✅ Onaylı
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Telefon Numarası - Boşluklu Format */}
-                  <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                    <span className="text-xs font-bold text-stone-400">Telefon:</span>
-                    <span className="font-mono text-sm font-black text-[#dfc39e] tracking-wider">
+                  {/* Telefon Numarası */}
+                  <div className="flex items-center justify-between pt-2 border-t border-stone-200 dark:border-white/5 text-xs">
+                    <span className="font-bold text-stone-500 dark:text-stone-400">Telefon:</span>
+                    <span className="font-mono font-black text-stone-900 dark:text-[#dfc39e] tracking-wider">
                       {formatPhoneDisplay(activeDetailApt.customerPhone)}
                     </span>
                   </div>
 
                   {activeDetailApt.canComeEarly && (
-                    <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-400/30 px-2.5 py-1 text-xs font-black text-amber-300">
-                      <Zap className="h-3.5 w-3.5 fill-amber-300" />
-                      <span>Erken Saat Boşalırsa Gelebilir</span>
-                    </div>
-                  )}
-
-                  {(activeDetailApt.requiresDeposit || activeDetailApt.isBlacklisted || isPhoneBlacklisted(activeDetailApt.customerPhone)) && (
-                    <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 px-2.5 py-1 text-xs font-black text-rose-300">
-                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
-                      <span>🚨 Kapora Bekleyen Müşteri</span>
+                    <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-400/30 px-2.5 py-1 text-xs font-black text-amber-800 dark:text-amber-300">
+                      <Zap className="h-3.5 w-3.5 fill-current" />
+                      <span>⚡ Erken Saat Boşalırsa Gelebilir</span>
                     </div>
                   )}
                 </div>
 
-                {/* İLETİŞİM BUTONLARI (Normalden Arama & WhatsApp'tan Yazma) */}
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  <a
-                    href={`tel:${activeDetailApt.customerPhone}`}
-                    className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 px-3 py-3 text-xs sm:text-sm font-black text-emerald-300 shadow-md shadow-emerald-500/10 transition active:scale-95"
-                  >
-                    <PhoneCall className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                    <span>📞 Müşteriyi Ara</span>
-                  </a>
-
-                  <a
-                    href={detailAptWaUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] px-3 py-3 text-xs sm:text-sm font-black text-[#041a0b] shadow-md shadow-[#25D366]/20 transition active:scale-95"
-                  >
-                    <MessageCircle className="h-4 w-4 shrink-0 fill-current" />
-                    <span>💬 WhatsApp</span>
-                  </a>
-                </div>
-
-                {/* Randevu Ayrıntıları */}
-                <div className="mt-4 rounded-2xl border border-white/10 bg-[#101012] p-3.5 space-y-2.5">
-                  {/* Koltuk & Personel Bilgisi */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-stone-400 flex items-center gap-1.5">
-                      <Armchair className="h-3.5 w-3.5 text-[#dfc39e]" />
-                      <span>Koltuk / Personel:</span>
-                    </span>
-                    <div className="text-right">
-                      <span className="font-black text-[#fdf8f5] block">
-                        {activeDetailApt.chairLabel || activeDetailApt.barberName}
-                      </span>
-                      {activeDetailApt.chairLabel && activeDetailApt.chairLabel !== activeDetailApt.barberName && (
-                        <span className="text-[10px] text-stone-400">
-                          {activeDetailApt.barberName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Hizmetler Listesi */}
-                  <div className="border-t border-white/5 pt-2 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-stone-400">
-                      <span className="flex items-center gap-1">
-                        <Scissors className="h-3 w-3 text-[#dfc39e]" />
-                        <span>Seçilen Hizmetler:</span>
-                      </span>
-                      <span>{activeDetailApt.services.length} Hizmet</span>
-                    </div>
-
-                    {activeDetailApt.services.map((s, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs pl-2">
-                        <span className="text-stone-300 font-medium">
-                          • {s.name} ({s.duration} dk)
-                        </span>
-                        <span className="font-mono font-bold text-[#dfc39e]">
-                          {s.price} TL
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Toplam Tutar & Süre */}
-                  <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-                    <span className="text-xs font-bold text-stone-400">
-                      Toplam Süre: <strong className="text-stone-200">{activeDetailApt.totalDuration || 30} dk</strong>
-                    </span>
-                    <span className="text-base font-black text-[#dfc39e]">
-                      {activeDetailApt.totalPrice} TL
-                    </span>
-                  </div>
-                </div>
-
-                {/* Alt Hızlı İşlem Butonları */}
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  {activeDetailApt.status === "pending" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-                      <button
-                        type="button"
-                        disabled={updatingId === activeDetailApt.id}
-                        onClick={() => {
-                          const target = activeDetailApt;
-                          void runWithUpdatingLock(target.id, () => {
-                            confirmAppointment(target.id);
-                            triggerToast(
-                              `${target.customerName} — Kapora Alındı & Onaylandı ✅`,
-                              "Kapora ödemesi doğrulandı ve randevu kesinleşti.",
-                              "success"
-                            );
-                            setSelectedDetailApt(null);
-                          });
-                        }}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-3 px-4 text-xs sm:text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                      >
-                        <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                        <span>{updatingId === activeDetailApt.id ? "Onaylanıyor..." : "✅ Kaporayı Aldım, Onayla"}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={updatingId === activeDetailApt.id}
-                        onClick={() => {
-                          handleCancelByAdmin(activeDetailApt);
+                {/* ============================================================== */}
+                {/* RAHAT BASILAN TAM BOY BÜYÜK HIZLI İŞLEM BUTONLARI              */}
+                {/* ============================================================== */}
+                <div className="mt-4 space-y-2.5">
+                  {/* 1. BUTON: MÜŞTERİ GELDİ / BEKLEYENE ÇEVİR / ONAYLA */}
+                  {activeDetailApt.status === "completed" ? (
+                    <button
+                      type="button"
+                      disabled={updatingId === activeDetailApt.id}
+                      onClick={() => {
+                        const target = activeDetailApt;
+                        void runWithUpdatingLock(target.id, () => {
+                          revertAppointmentToConfirmed(target.id);
+                          triggerToast(
+                            "Randevu Bekleyene Alındı ↩️",
+                            `${target.customerName} tekrar bekleyen listesine alındı.`,
+                            "warning"
+                          );
                           setSelectedDetailApt(null);
-                        }}
-                        className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/60 bg-rose-600/20 hover:bg-rose-600/30 py-3 px-4 text-xs sm:text-sm font-black text-rose-200 transition active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span>{updatingId === activeDetailApt.id ? "Siliniyor..." : "🗑️ Reddet / Sil"}</span>
-                      </button>
-                    </div>
+                        });
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 py-3.5 px-4 text-sm font-black text-amber-800 dark:text-amber-200 transition active:scale-[0.98] cursor-pointer shadow-md disabled:opacity-50"
+                    >
+                      <span className="text-base">↩️</span>
+                      <span>Müşteriyi Bekleyene Çevir (Gelmedi)</span>
+                    </button>
+                  ) : activeDetailApt.status === "pending" ? (
+                    <button
+                      type="button"
+                      disabled={updatingId === activeDetailApt.id}
+                      onClick={() => {
+                        const target = activeDetailApt;
+                        void runWithUpdatingLock(target.id, () => {
+                          confirmAppointment(target.id);
+                          triggerToast(
+                            `${target.customerName} — Onaylandı ✅`,
+                            "Randevu onaylandı.",
+                            "success"
+                          );
+                          setSelectedDetailApt(null);
+                        });
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 py-3.5 px-4 text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+                      <span>{updatingId === activeDetailApt.id ? "Onaylanıyor..." : "✅ Kaporayı Aldım, Onayla"}</span>
+                    </button>
                   ) : (
-                    <>
-                      {activeDetailApt.status !== "completed" && activeDetailApt.status !== "cancelled" && (
-                        <button
-                          type="button"
-                          disabled={updatingId === activeDetailApt.id}
-                          onClick={() => {
-                            handleComplete(activeDetailApt);
-                            triggerToast(
-                              "Randevu Tamamlandı ✅",
-                              `${activeDetailApt.customerName} geldi ve işlem tamamlandı.`,
-                              "success"
-                            );
-                            setSelectedDetailApt(null);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2.5 text-xs font-black text-emerald-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span>{updatingId === activeDetailApt.id ? "İşleniyor..." : "Geldi"}</span>
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        disabled={updatingId === activeDetailApt.id}
-                        onClick={() => {
-                          const aptToMove = activeDetailApt;
+                    <button
+                      type="button"
+                      disabled={updatingId === activeDetailApt.id}
+                      onClick={() => {
+                        const target = activeDetailApt;
+                        void runWithUpdatingLock(target.id, () => {
+                          handleComplete(target);
+                          triggerToast(
+                            "Randevu Tamamlandı ✅",
+                            `${target.customerName} geldi ve işlem tamamlandı.`,
+                            "success"
+                          );
                           setSelectedDetailApt(null);
-                          setMobileRescheduleApt(aptToMove);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-xs font-black text-amber-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                      >
-                        <span>⇄ Saati Taşı</span>
-                      </button>
-
-                      {activeDetailApt.status !== "cancelled" && (
-                        <button
-                          type="button"
-                          disabled={updatingId === activeDetailApt.id}
-                          onClick={() => {
-                            handleCancelByAdmin(activeDetailApt);
-                            setSelectedDetailApt(null);
-                          }}
-                          className="flex items-center justify-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2.5 text-xs font-bold text-rose-300 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none touch-manipulation"
-                          title="Randevuyu Sil / İptal Et"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span>{updatingId === activeDetailApt.id ? "Siliniyor..." : "Sil"}</span>
-                        </button>
-                      )}
-                    </>
+                        });
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 py-3.5 px-4 text-sm font-black text-[#06150f] shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+                      <span>{updatingId === activeDetailApt.id ? "İşleniyor..." : "✅ Müşteri Geldi (İşlemi Tamamla)"}</span>
+                    </button>
                   )}
+
+                  {/* 2. BUTON: SAATİ TAŞI */}
+                  <button
+                    type="button"
+                    disabled={updatingId === activeDetailApt.id}
+                    onClick={() => {
+                      const aptToMove = activeDetailApt;
+                      setSelectedDetailApt(null);
+                      setMobileRescheduleApt(aptToMove);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl border border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 py-3.5 px-4 text-sm font-black text-amber-800 dark:text-amber-300 transition active:scale-[0.98] cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    <Clock className="h-5 w-5 stroke-[2.5]" />
+                    <span>🔄 Saati Taşı</span>
+                  </button>
+
+                  {/* 3. BUTONLAR: ARA & WHATSAPP (YAN YANA 2 BÜYÜK BUTON) */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <a
+                      href={`tel:${activeDetailApt.customerPhone}`}
+                      onClick={() => setSelectedDetailApt(null)}
+                      className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 py-3.5 px-2 text-xs sm:text-sm font-black text-emerald-800 dark:text-emerald-300 shadow-sm transition active:scale-[0.98] truncate"
+                    >
+                      <PhoneCall className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                      <span className="truncate">📞 Hemen Ara</span>
+                    </a>
+
+                    <a
+                      href={detailAptWaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setSelectedDetailApt(null)}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] py-3.5 px-2 text-xs sm:text-sm font-black text-[#041a0b] shadow-md shadow-[#25D366]/20 transition active:scale-[0.98] truncate"
+                    >
+                      <MessageCircle className="h-4 w-4 shrink-0 fill-current" />
+                      <span className="truncate">💬 WhatsApp</span>
+                    </a>
+                  </div>
+
+                  {/* 4. BUTON: RANDEVUYU SİL / İPTAL ET */}
+                  <button
+                    type="button"
+                    disabled={updatingId === activeDetailApt.id}
+                    onClick={() => {
+                      handleCancelByAdmin(activeDetailApt);
+                      setSelectedDetailApt(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 py-3.5 px-4 text-sm font-black text-rose-700 dark:text-rose-300 transition active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4 stroke-[2]" />
+                    <span>{updatingId === activeDetailApt.id ? "Siliniyor..." : "🗑️ Randevuyu Sil / İptal Et"}</span>
+                  </button>
                 </div>
               </motion.div>
             </div>

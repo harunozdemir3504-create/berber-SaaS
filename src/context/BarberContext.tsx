@@ -123,6 +123,7 @@ interface BarberContextType {
     entry: Omit<WaitlistEntry, "id" | "createdAt" | "notified">
   ) => WaitlistEntry;
   markAppointmentCompleted: (id: string) => void;
+  revertAppointmentToConfirmed: (id: string) => void;
   confirmAppointment: (id: string) => void;
   checkHasActiveAppointmentForDay: (
     phone: string,
@@ -1829,6 +1830,19 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [updateCurrentShop]
   );
 
+  // Revert Appointment to Confirmed / Waiting (Geri Bekleyene Al)
+  const revertAppointmentToConfirmed = useCallback(
+    (id: string) => {
+      updateCurrentShop((shop) => ({
+        ...shop,
+        appointments: shop.appointments.map((apt) =>
+          apt.id === id ? { ...apt, status: "confirmed" as const } : apt
+        ),
+      }));
+    },
+    [updateCurrentShop]
+  );
+
   // Confirm Appointment (WhatsApp Onay Kodu Doğrulandı -> status: "confirmed")
   const confirmAppointment = useCallback(
     (id: string) => {
@@ -2650,6 +2664,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         removeAppointmentOrBlock,
         addWaitlistEntry,
         markAppointmentCompleted,
+        revertAppointmentToConfirmed,
         confirmAppointment,
         checkHasActiveAppointmentForDay,
         markAppointmentNoShow,
