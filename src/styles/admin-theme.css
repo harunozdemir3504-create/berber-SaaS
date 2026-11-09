@@ -64,8 +64,13 @@ html.light .admin-page-theme [class*="bg-[#141417]"],
 html.light .admin-page-theme [class*="bg-[#161412]"],
 html.light .admin-page-theme [class*="bg-[#151518]"],
 html.light .admin-page-theme [class*="bg-[#1f1710]"],
-html.light .admin-page-theme [class*="bg-[#16120e]"] {
+html.light .admin-page-theme [class*="bg-[#16120e]"],
+html.light .admin-page-theme [class*="bg-[#141b16]"],
+html.light .admin-page-theme [class*="bg-[#1a191d]"],
+html.light .admin-page-theme [class*="from-[#141b16]"],
+html.light .admin-page-theme [class*="from-[#1a191d]"] {
   background-color: #FFFFFF !important;
+  background-image: none !important;
   border-color: #E5E7EB !important;
   color: #1A1A1A !important;
 }
@@ -77,12 +82,14 @@ html.light .admin-page-theme [class*="bg-[#111113]"],
 html.light .admin-page-theme [class*="bg-[#171310]"],
 html.light .admin-page-theme [class*="bg-[#121215]"],
 html.light .admin-page-theme [class*="bg-[#121614]"],
+html.light .admin-page-theme [class*="bg-[#0d0d0f]"],
 html.light .admin-page-theme [class*="bg-black/30"],
 html.light .admin-page-theme [class*="bg-black/40"],
 html.light .admin-page-theme [class*="bg-black/50"],
 html.light .admin-page-theme [class*="bg-black/60"],
 html.light .admin-page-theme [class*="bg-black/20"] {
   background-color: #F8F9FA !important;
+  background-image: none !important;
   border-color: #E5E7EB !important;
   color: #1A1A1A !important;
 }
@@ -114,28 +121,83 @@ html.light .admin-page-theme .rounded-3xl {
 }
 
 /* ===================================================================== */
-/* 3. YAZILAR, İKONLAR VE TİPOGRAFİ (#1A1A1A & #4B5563)                 */
+/* 3. YAZILAR, İKONLAR VE TİPOGRAFİ (#1A1A1A & #374151)                 */
 /* ===================================================================== */
 html.light .admin-page-theme [class*="text-[#fdf8f5]"],
-html.light .admin-page-theme [class*="text-[#fcfbfa]"],
-html.light .admin-page-theme .text-white {
-  color: #1A1A1A !important;
+html.light .admin-page-theme [class*="text-[#fcfbfa]"] {
+  color: #111827 !important;
 }
 
+html.light .admin-page-theme [class*="text-stone-200"],
 html.light .admin-page-theme [class*="text-stone-300"],
+html.light .admin-page-theme [class*="text-zinc-200"],
 html.light .admin-page-theme [class*="text-zinc-300"],
 html.light .admin-page-theme [class*="text-gray-300"] {
-  color: #374151 !important;
+  color: #1F2937 !important;
 }
 
 html.light .admin-page-theme [class*="text-stone-400"],
 html.light .admin-page-theme [class*="text-zinc-400"],
 html.light .admin-page-theme [class*="text-gray-400"] {
-  color: #6B7280 !important;
+  color: #374151 !important;
 }
 
 html.light .admin-page-theme [class*="text-[#dfc39e]"],
 html.light .admin-page-theme [class*="text-[#f3e8dc]"] {
+  color: #78350F !important;
+}
+
+html.light .admin-page-theme [class*="text-emerald-200"],
+html.light .admin-page-theme [class*="text-emerald-300"],
+html.light .admin-page-theme [class*="text-emerald-400"] {
+  color: #065F46 !important;
+}
+
+html.light .admin-page-theme [class*="text-sky-200"],
+html.light .admin-page-theme [class*="text-sky-300"],
+html.light .admin-page-theme [class*="text-sky-400"] {
+  color: #0369A1 !important;
+}
+
+html.light .admin-page-theme [class*="text-purple-200"],
+html.light .admin-page-theme [class*="text-purple-300"],
+html.light .admin-page-theme [class*="text-purple-400"] {
+  color: #5B21B6 !important;
+}
+
+html.light .admin-page-theme [class*="text-rose-200"],
+html.light .admin-page-theme [class*="text-rose-300"],
+html.light .admin-page-theme [class*="text-rose-400"] {
+  color: #9F1239 !important;
+}
+
+html.light .admin-page-theme [class*="text-amber-200"],
+html.light .admin-page-theme [class*="text-amber-300"],
+html.light .admin-page-theme [class*="text-amber-400"] {
+  color: #92400E !important;
+}
+
+html.light .admin-page-theme [class*="bg-sky-500/10"],
+html.light .admin-page-theme [class*="bg-sky-500/15"],
+html.light .admin-page-theme [class*="bg-sky-500/20"] {
+  background-color: #E0F2FE !important;
+  border-color: #7DD3FC !important;
+  color: #0369A1 !important;
+}
+
+html.light .admin-page-theme [class*="bg-purple-500/10"],
+html.light .admin-page-theme [class*="bg-purple-500/15"],
+html.light .admin-page-theme [class*="bg-purple-500/20"] {
+  background-color: #EDE9FE !important;
+  border-color: #C4B5FD !important;
+  color: #5B21B6 !important;
+}
+
+html.light .admin-page-theme [class*="bg-[#dfc39e]/15"],
+html.light .admin-page-theme [class*="bg-[#dfc39e]/20"],
+html.light .admin-page-theme [class*="bg-[#dfc39e]/25"] {
+  background-color: #FEF3C7 !important;
+  border-color: #FCD34D !important;
   color: #92400E !important;
 }
 
@@ -327,20 +389,24 @@ html.light nav[aria-label="Berber Alt Menü"] button[class*="text-stone-400"]:ho
   color: #111827 !important;
 }
 
-/* Alt menü sekmeleri (Ciro & Kara Liste, Personel, Hizmetler butonları) */
-html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl {
+/* Alt menü sekmeleri (Salon Bilgileri, Ciro & Kara Liste, Personel, Hizmetler butonları) */
+html.light .admin-page-theme .grid.rounded-2xl {
   background-color: #F1F3F5 !important;
   border-color: #E5E7EB !important;
 }
 
-html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl button {
-  color: #4B5563 !important;
+html.light .admin-page-theme .grid.rounded-2xl button {
+  color: #374151 !important;
 }
 
-html.light .admin-page-theme .grid.grid-cols-4.rounded-2xl button[class*="bg-[#dfc39e]"] {
+html.light .admin-page-theme .grid.rounded-2xl button:hover {
+  color: #111827 !important;
+}
+
+html.light .admin-page-theme .grid.rounded-2xl button[class*="bg-[#dfc39e]"] {
   background-color: #FFFFFF !important;
   color: #92400E !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12) !important;
 }
 
 /* ===================================================================== */

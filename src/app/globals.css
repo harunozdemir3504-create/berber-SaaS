@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "../styles/admin-theme.css";
-
 :root {
   color-scheme: dark;
 }

@@ -29,6 +29,7 @@ import {
   WaitlistEntry,
   resolveDayMetadata,
   getLiveDaysMetadata,
+  getTurkeyNow,
   toStrictIsoDate,
   getAppointmentIsoDate,
 } from "@/data/mockData";
@@ -404,13 +405,37 @@ function deduplicateServices(list: Service[]): Service[] {
  */
 function sanitizeShopDates(shop: TenantShop): TenantShop {
   const dismissedSet = getDismissedAlertIds();
+  const nowTr = getTurkeyNow();
+  const todayIso = toStrictIsoDate(getLiveDaysMetadata(1)[0]?.id);
+  const nowMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
 
   const sanitizedAppointments = (shop.appointments || [])
     .map((apt) => {
       const strictDate = getAppointmentIsoDate(apt) || toStrictIsoDate(apt.dayId);
       const resolved = resolveDayMetadata(strictDate);
+
+      let nextStatus = apt.status;
+      if (
+        apt.status === "upcoming" ||
+        apt.status === "confirmed" ||
+        apt.status === "pending"
+      ) {
+        const startM = timeToMinutes(apt.time);
+        const dur = apt.totalDuration || 30;
+        const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+        const isPastDay = resolved.id < todayIso;
+        const isPastToday =
+          resolved.id === todayIso &&
+          (endM <= nowMinutes || startM < nowMinutes);
+
+        if (isPastDay || isPastToday) {
+          nextStatus = apt.status === "pending" ? "cancelled" : "completed";
+        }
+      }
+
       return {
         ...apt,
+        status: nextStatus,
         dayId: resolved.id,
         date: resolved.id,
         appointment_date: resolved.id,
@@ -520,7 +545,9 @@ function ShopUrlQuerySync({
 }
 
 export function BarberProvider({ children }: { children: React.ReactNode }) {
-  const [shops, setShops] = useState<TenantShop[]>(INITIAL_SHOPS);
+  const [shops, setShops] = useState<TenantShop[]>(() =>
+    INITIAL_SHOPS.map(sanitizeShopDates)
+  );
   const [globalBlacklist, setGlobalBlacklist] = useState<BlacklistEntry[]>(
     INITIAL_GLOBAL_BLACKLIST
   );
@@ -826,6 +853,20 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [loadFromStorage]);
+
+  // 1B. Saati geçen randevuları canlı olarak her 30 saniyede bir otomatik "completed" / "cancelled" durumuna geçir
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setShops((prevShops) => {
+        const sanitized = prevShops.map(sanitizeShopDates);
+        if (JSON.stringify(prevShops) !== JSON.stringify(sanitized)) {
+          return sanitized;
+        }
+        return prevShops;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // 2. State her değiştiğinde: LocalStorage'a kaydet; eğer doğrudan syncDirectlyToCloud çağrılmadıysa yedek olarak buluta yaz
   useEffect(() => {

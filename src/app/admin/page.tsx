@@ -1589,17 +1589,35 @@ export default function AdminDashboardPage() {
     });
   }, []);
 
+  // Saati veya günü geçmiş randevu kontrolü (Örn: saat 14:25 iken sabah 09:30 randevusu geçmiş sayılır ve Bekleyen'de asla gösterilmez)
+  const isAppointmentTimePassed = useCallback(
+    (apt: Appointment) => {
+      const todayIso = toStrictIsoDate(todayDay.id);
+      const aptDate = getAppointmentIsoDate(apt);
+      if (!aptDate) return false;
+      if (aptDate < todayIso) return true;
+      if (aptDate > todayIso) return false;
+
+      const startM = timeToMinutes(apt.time);
+      const dur = apt.totalDuration || 30;
+      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+      return startM < nowMinutes || endM <= nowMinutes;
+    },
+    [todayDay.id, nowMinutes]
+  );
+
   const activeAppointments = useMemo(
     () =>
       sortChronologically(
         appointments.filter(
           (apt) =>
-            apt.status === "pending" ||
-            apt.status === "confirmed" ||
-            apt.status === "upcoming"
+            (apt.status === "pending" ||
+              apt.status === "confirmed" ||
+              apt.status === "upcoming") &&
+            !isAppointmentTimePassed(apt)
         )
       ),
-    [appointments, sortChronologically]
+    [appointments, sortChronologically, isAppointmentTimePassed]
   );
 
   const historyAppointments = useMemo(
@@ -1607,12 +1625,14 @@ export default function AdminDashboardPage() {
       sortChronologically(
         appointments.filter(
           (apt) =>
-            apt.status === "completed" ||
-            apt.status === "no_show" ||
-            apt.status === "cancelled"
+            !apt.isBlockedSlot &&
+            (apt.status === "completed" ||
+              apt.status === "no_show" ||
+              apt.status === "cancelled" ||
+              isAppointmentTimePassed(apt))
         )
       ),
-    [appointments, sortChronologically]
+    [appointments, sortChronologically, isAppointmentTimePassed]
   );
 
   const completedRevenue = useMemo(
@@ -3491,13 +3511,13 @@ export default function AdminDashboardPage() {
         {bottomTab === "other" && (
           <div className="space-y-4">
             {/* 📱 DİĞER KISMI SOL ÜST: CANLI MÜŞTERİ QR KODU (TIKLAYINCA BÜYÜR) */}
-            <div className="rounded-2xl border border-emerald-400/50 bg-gradient-to-r from-[#141b16] via-[#121614] to-[#141416] p-3.5 sm:p-4 shadow-xl shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+            <div className="rounded-2xl border border-emerald-500/40 dark:border-emerald-400/50 bg-white dark:bg-gradient-to-r dark:from-[#141b16] dark:via-[#121614] dark:to-[#141416] p-3.5 sm:p-4 shadow-md dark:shadow-xl dark:shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
               <div className="flex items-center gap-3.5 min-w-0">
                 {/* Sol Üst Karekod Kutusu - Tıklayınca Büyür */}
                 <button
                   type="button"
                   onClick={() => setIsQuickQrModalOpen(true)}
-                  className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-2 border-emerald-400 bg-white p-1.5 shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-2 border-emerald-500 dark:border-emerald-400 bg-white p-1.5 shadow-lg shadow-emerald-500/20 dark:shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                   title="Karekodu tam ekran büyütmek için dokunun"
                 >
                   <img
@@ -3515,31 +3535,31 @@ export default function AdminDashboardPage() {
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm sm:text-base font-black text-[#fdf8f5] truncate">
+                    <h3 className="text-sm sm:text-base font-black text-stone-900 dark:text-[#fdf8f5] truncate">
                       Müşteri Randevu QR Kodu
                     </h3>
-                    <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-black text-emerald-300 shrink-0">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-400 dark:border-emerald-500/40 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:text-emerald-300 shrink-0">
                       Canlı
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-stone-300 truncate">
+                  <p className="mt-0.5 text-xs font-medium text-stone-600 dark:text-stone-300 truncate">
                     Karekoda dokunarak tam ekran büyütebilir ve müşterinize okutabilirsiniz.
                   </p>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setIsQuickQrModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/25 border border-emerald-400/60 px-3 py-1.5 text-xs font-black text-emerald-200 hover:bg-emerald-500/35 transition active:scale-95 cursor-pointer shadow-sm"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-500/25 border border-emerald-400 dark:border-emerald-400/60 px-3 py-1.5 text-xs font-black text-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/35 transition active:scale-95 cursor-pointer shadow-sm"
                     >
-                      <QrCode className="h-3.5 w-3.5 text-emerald-300 stroke-[2.5]" />
+                      <QrCode className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300 stroke-[2.5]" />
                       <span>📱 Hızlı QR Kod</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleCopyBookingLink}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20 active:scale-95 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-400 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-900 dark:text-sky-300 transition hover:bg-sky-200 dark:hover:bg-sky-500/20 active:scale-95 cursor-pointer"
                     >
-                      <Share2 className="h-3.5 w-3.5 text-sky-400" />
+                      <Share2 className="h-3.5 w-3.5 text-sky-700 dark:text-sky-400" />
                       <span>{copiedShareLink ? "Link Kopyalandı ✓" : "📋 Link Kopyala"}</span>
                     </button>
                     <button
@@ -3547,8 +3567,8 @@ export default function AdminDashboardPage() {
                       onClick={handleEnableNotificationsAndSound}
                       className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition active:scale-95 cursor-pointer ${
                         notifPermission === "granted"
-                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                          : "border-amber-400/50 bg-amber-500/20 text-amber-200"
+                          ? "border-emerald-400 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
+                          : "border-amber-400 dark:border-amber-400/50 bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200"
                       }`}
                       title="Sesli zil ve telefon bildirimini test et / aktif et"
                     >
@@ -3567,7 +3587,7 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsQrModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-3 py-2 text-xs font-black text-[#dfc39e] hover:bg-[#dfc39e]/25 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400 dark:border-[#dfc39e]/40 bg-amber-100 dark:bg-[#dfc39e]/15 px-3 py-2 text-xs font-black text-amber-900 dark:text-[#dfc39e] hover:bg-amber-200 dark:hover:bg-[#dfc39e]/25 transition cursor-pointer"
                 >
                   <span>🖨️ Kapı Afiş Şablonu</span>
                 </button>
@@ -3575,14 +3595,14 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Alt Kategori Seçici */}
-            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-[#141416] p-1.5 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#141416] p-1.5 sm:grid-cols-5">
               <button
                 type="button"
                 onClick={() => setOtherSubTab("shop_info")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "shop_info"
-                    ? "bg-[#dfc39e] text-[#1a110b]"
-                    : "text-stone-300 hover:text-white"
+                    ? "bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white"
                 }`}
               >
                 🏢 Salon Bilgileri
@@ -3592,8 +3612,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("stats_blacklist")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "stats_blacklist"
-                    ? "bg-[#dfc39e] text-[#1a110b]"
-                    : "text-stone-300 hover:text-white"
+                    ? "bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white"
                 }`}
               >
                 📊 Ciro & Kara Liste
@@ -3603,8 +3623,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("barbers")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "barbers"
-                    ? "bg-[#dfc39e] text-[#1a110b]"
-                    : "text-stone-300 hover:text-white"
+                    ? "bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white"
                 }`}
               >
                 💺 Ustalar ({barbers.length})
@@ -3614,8 +3634,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("services")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "services"
-                    ? "bg-[#dfc39e] text-[#1a110b]"
-                    : "text-stone-300 hover:text-white"
+                    ? "bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white"
                 }`}
               >
                 ✂️ Hizmet & Fiyat
@@ -3625,8 +3645,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setOtherSubTab("schedule")}
                 className={`rounded-xl py-2.5 text-xs font-black transition ${
                   otherSubTab === "schedule"
-                    ? "bg-[#dfc39e] text-[#1a110b]"
-                    : "text-stone-300 hover:text-white"
+                    ? "bg-[#dfc39e] text-[#1a110b] shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white"
                 }`}
               >
                 ⏰ Saat & Kapora
@@ -3636,18 +3656,18 @@ export default function AdminDashboardPage() {
             {/* 3.0: SALON PROFİLİ & İLETİŞİM BİLGİLERİ (BERBER PANELİNDE DÜZENLENEBİLİR) */}
             {otherSubTab === "shop_info" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-[#dfc39e]/35 bg-gradient-to-br from-[#1a191d] via-[#161519] to-[#111113] p-4 sm:p-6 shadow-xl shadow-[#dfc39e]/15">
-                  <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
+                <div className="rounded-2xl border border-stone-200 dark:border-[#dfc39e]/35 bg-white dark:bg-gradient-to-br dark:from-[#1a191d] dark:via-[#161519] dark:to-[#111113] p-4 sm:p-6 shadow-md dark:shadow-xl dark:shadow-[#dfc39e]/15">
+                  <div className="flex flex-col justify-between gap-3 border-b border-stone-200 dark:border-white/10 pb-4 sm:flex-row sm:items-center">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#dfc39e]/20 text-[#dfc39e]">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-[#dfc39e]/20 text-amber-800 dark:text-[#dfc39e]">
                           <Scissors className="h-4 w-4" />
                         </span>
-                        <h3 className="text-base font-extrabold text-[#fdf8f5] sm:text-lg">
+                        <h3 className="text-base font-extrabold text-stone-900 dark:text-[#fdf8f5] sm:text-lg">
                           Salon Profil & İletişim Bilgileri
                         </h3>
                       </div>
-                      <p className="mt-1 text-xs text-stone-400">
+                      <p className="mt-1 text-xs font-medium text-stone-600 dark:text-stone-400">
                         Müşterilerinizin randevu sayfasında ve WhatsApp bildirimlerinde gördüğü iletişim ve adres bilgilerinizi buradan güncelleyin.
                       </p>
                     </div>
@@ -3655,9 +3675,9 @@ export default function AdminDashboardPage() {
                     <button
                       type="button"
                       onClick={handleCopyShopPageUrl}
-                      className="inline-flex items-center gap-1.5 self-start rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20 sm:self-auto"
+                      className="inline-flex items-center gap-1.5 self-start rounded-xl border border-sky-400 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-900 dark:text-sky-300 transition hover:bg-sky-200 dark:hover:bg-sky-500/20 sm:self-auto"
                     >
-                      <Share2 className="h-3.5 w-3.5 text-sky-400" />
+                      <Share2 className="h-3.5 w-3.5 text-sky-700 dark:text-sky-400" />
                       <span>{isCopiedShopUrl ? "Link Kopyalandı!" : "Randevu Linkimi Kopyala"}</span>
                     </button>
                   </div>
@@ -3665,7 +3685,7 @@ export default function AdminDashboardPage() {
                   <form onSubmit={handleSaveShopInfo} className="mt-5 space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           Salon / Berber Adı
                         </label>
                         <input
@@ -3673,30 +3693,30 @@ export default function AdminDashboardPage() {
                           required
                           value={shopNameInput}
                           onChange={(e) => setShopNameInput(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="Örn: Atelier Noir Beşiktaş"
                         />
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Müşteri sayfasında başlık olarak görünür.
                         </span>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           WhatsApp & Randevu Telefon Numarası
                         </label>
                         <div className="relative mt-1.5">
-                          <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <Phone className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500 dark:text-stone-400" />
                           <input
                             type="tel"
                             required
                             value={shopPhoneInput}
                             onChange={(e) => setShopPhoneInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                            className="w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="0532 800 50 60"
                           />
                         </div>
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Müşterilere gidecek otomatik WhatsApp onay linkleri bu numara ile ilişkilendirilir.
                         </span>
                       </div>
@@ -3704,36 +3724,36 @@ export default function AdminDashboardPage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           İlçe / Konum / Adres
                         </label>
                         <div className="relative mt-1.5">
-                          <MapPin className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <MapPin className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500 dark:text-stone-400" />
                           <input
                             type="text"
                             value={shopDistrictInput}
                             onChange={(e) => setShopDistrictInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                            className="w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="Beşiktaş, İstanbul"
                           />
                         </div>
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Müşteriler randevu alırken salonunuzun konumunu bu metin ile görür.
                         </span>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           Slogan / Alt Başlık
                         </label>
                         <input
                           type="text"
                           value={shopSubtitleInput}
                           onChange={(e) => setShopSubtitleInput(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="VIP Grooming & Gentlemen's Club"
                         />
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Salonunuzun tarzını yansıtan kısa tanıtım cümlesi.
                         </span>
                       </div>
@@ -3741,23 +3761,23 @@ export default function AdminDashboardPage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           🏦 Berber IBAN Hesabı (Kapora İçin)
                         </label>
                         <input
                           type="text"
                           value={shopIbanInput}
                           onChange={(e) => setShopIbanInput(e.target.value)}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="TR00 0000 0000 0000 0000 0000 00"
                         />
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Kara listedeki müşterilerin randevularını kesinleştirmek için göndereceği banka IBAN bilgisi.
                         </span>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           💰 Kara Liste Kapora Tutarı (TL)
                         </label>
                         <input
@@ -3766,10 +3786,10 @@ export default function AdminDashboardPage() {
                           step="25"
                           value={shopDepositInput}
                           onChange={(e) => setShopDepositInput(Math.max(0, Number(e.target.value) || 0))}
-                          className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          className="mt-1.5 w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                           placeholder="100"
                         />
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Daha önce randevusuna gelmeyen müşterilerden talep edilecek güvence kapora bedeli.
                         </span>
                       </div>
@@ -3777,27 +3797,27 @@ export default function AdminDashboardPage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           Dükkan Yönetim PIN Şifresi
                         </label>
                         <div className="relative mt-1.5">
-                          <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                          <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500 dark:text-stone-400" />
                           <input
                             type="text"
                             maxLength={16}
                             value={shopPinInput}
                             onChange={(e) => setShopPinInput(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                            className="w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] py-2.5 pl-9 pr-3 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
                             placeholder="1234"
                           />
                         </div>
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Yönetim paneline giriş yaparken kullandığınız gizli PIN kodunuz.
                         </span>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-[#f3e8dc]">
+                        <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                           Özel Müşteri Randevu Linkiniz
                         </label>
                         <div className="mt-1.5 flex items-center gap-2">
@@ -3805,25 +3825,25 @@ export default function AdminDashboardPage() {
                             type="text"
                             readOnly
                             value={getShopBookingUrl(currentShop.slug)}
-                            className="w-full rounded-xl border border-sky-500/30 bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-sky-300 focus:outline-none cursor-default"
+                            className="w-full rounded-xl border border-sky-400 dark:border-sky-500/30 bg-sky-50 dark:bg-[#111113] px-3.5 py-2.5 font-mono text-xs font-bold text-sky-900 dark:text-sky-300 focus:outline-none cursor-default"
                           />
                           <button
                             type="button"
                             onClick={handleCopyShopPageUrl}
-                            className="shrink-0 rounded-xl border border-sky-500/40 bg-sky-500/15 p-2.5 text-sky-300 hover:bg-sky-500/25"
+                            className="shrink-0 rounded-xl border border-sky-400 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/15 p-2.5 text-sky-900 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-500/25"
                             title="Linki Kopyala"
                           >
                             <Copy className="h-4 w-4" />
                           </button>
                         </div>
-                        <span className="mt-1 block text-[11px] text-stone-400">
+                        <span className="mt-1 block text-[11px] font-medium text-stone-600 dark:text-stone-400">
                           Instagram biyografinize veya WhatsApp durumunuza ekleyeceğiniz link.
                         </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
-                      <div className="text-[11px] text-[#f3e8dc]/80">
+                      <div className="text-[11px] font-semibold text-amber-900 dark:text-[#f3e8dc]/80">
                         ✨ Kaydettiğiniz tüm bilgiler tüm cihazlarda ve müşteri randevu sayfasında anında güncellenir.
                       </div>
                       <button
@@ -3844,56 +3864,56 @@ export default function AdminDashboardPage() {
               <div className="space-y-5">
                 {/* Gelir & İstatistik Kartları */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-2xl border border-emerald-500/30 bg-[#141416] p-4">
-                    <span className="text-xs font-bold text-emerald-300">
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/70 dark:bg-[#141416] p-4">
+                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
                       Tamamlanan Ciro
                     </span>
-                    <p className="mt-1 text-xl font-black text-[#fdf8f5]">
+                    <p className="mt-1 text-xl font-black text-stone-900 dark:text-[#fdf8f5]">
                       {completedRevenue.toLocaleString("tr-TR")} TL
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4">
-                    <span className="text-xs font-bold text-[#f3e8dc]">
+                  <div className="rounded-2xl border border-amber-400/50 dark:border-[#dfc39e]/40 bg-amber-50/70 dark:bg-[#141416] p-4">
+                    <span className="text-xs font-bold text-amber-900 dark:text-[#f3e8dc]">
                       Kurtarılan Gelir
                     </span>
-                    <p className="mt-1 text-xl font-black text-[#dfc39e]">
+                    <p className="mt-1 text-xl font-black text-amber-800 dark:text-[#dfc39e]">
                       {stats.savedRevenue.toLocaleString("tr-TR")} TL
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-sky-500/30 bg-[#141416] p-4">
-                    <span className="text-xs font-bold text-sky-300">
+                  <div className="rounded-2xl border border-sky-500/30 bg-sky-50/70 dark:bg-[#141416] p-4">
+                    <span className="text-xs font-bold text-sky-800 dark:text-sky-300">
                       Yedek Doluluk
                     </span>
-                    <p className="mt-1 text-xl font-black text-[#fdf8f5]">
+                    <p className="mt-1 text-xl font-black text-stone-900 dark:text-[#fdf8f5]">
                       {stats.waitlistFilled} Koltuk
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-rose-500/30 bg-[#141416] p-4">
-                    <span className="text-xs font-bold text-rose-300">
+                  <div className="rounded-2xl border border-rose-500/30 bg-rose-50/70 dark:bg-[#141416] p-4">
+                    <span className="text-xs font-bold text-rose-800 dark:text-rose-300">
                       No-Show Kalkanı
                     </span>
-                    <p className="mt-1 text-xl font-black text-[#fdf8f5]">
+                    <p className="mt-1 text-xl font-black text-stone-900 dark:text-[#fdf8f5]">
                       {stats.preventedNoShows} Koruma
                     </p>
                   </div>
                 </div>
 
                 {/* 👥 Personel / Koltuk Bazlı Ciro Takibi (Harun Usta, Ömer Çırak vb.) */}
-                <div className="rounded-2xl border border-[#dfc39e]/35 bg-[#141416] p-4 sm:p-5 shadow-lg">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-3">
+                <div className="rounded-2xl border border-stone-200 dark:border-[#dfc39e]/35 bg-white dark:bg-[#141416] p-4 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200 dark:border-white/10 pb-3">
                     <div>
-                      <h3 className="flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                        <Users className="h-4 w-4 text-[#dfc39e]" />
+                      <h3 className="flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
+                        <Users className="h-4 w-4 text-amber-700 dark:text-[#dfc39e]" />
                         <span>Personel & Koltuk Ciro Takibi</span>
                       </h3>
-                      <p className="mt-0.5 text-[11px] text-stone-400">
+                      <p className="mt-0.5 text-[11px] font-medium text-stone-600 dark:text-stone-400">
                         Harun Usta, Ömer Çırak ve diğer personellerin günlük ve aylık net kazanç dağılımı
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setOtherSubTab("barbers")}
-                      className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-[#dfc39e]/40 bg-[#dfc39e]/15 px-3 py-1.5 text-[11px] font-black text-[#f3e8dc] transition hover:bg-[#dfc39e]/25"
+                      className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-amber-400 dark:border-[#dfc39e]/40 bg-amber-100 dark:bg-[#dfc39e]/15 px-3 py-1.5 text-[11px] font-black text-amber-900 dark:text-[#f3e8dc] transition hover:bg-amber-200 dark:hover:bg-[#dfc39e]/25"
                     >
                       <UserPlus className="h-3.5 w-3.5" />
                       <span>Personel / Koltuk Yönet</span>
@@ -3902,28 +3922,28 @@ export default function AdminDashboardPage() {
 
                   {/* Hızlı Özet Şeridi */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-bold text-stone-400">
+                    <span className="text-[11px] font-bold text-stone-600 dark:text-stone-400">
                       Bugün:
                     </span>
                     {staffRevenueStats.map((item) => (
                       <span
                         key={`today-${item.barber.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dfc39e]/30 bg-[#221a14] px-2.5 py-1 text-xs font-black text-[#fdf8f5]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-[#dfc39e]/30 bg-stone-50 dark:bg-[#221a14] px-2.5 py-1 text-xs font-black text-stone-900 dark:text-[#fdf8f5]"
                       >
-                        <span className="text-[#dfc39e]">{item.barber.name}:</span>
-                        <span className="text-emerald-400">{item.todayRevenue.toLocaleString("tr-TR")} TL</span>
+                        <span className="text-amber-800 dark:text-[#dfc39e]">{item.barber.name}:</span>
+                        <span className="text-emerald-700 dark:text-emerald-400">{item.todayRevenue.toLocaleString("tr-TR")} TL</span>
                       </span>
                     ))}
-                    <span className="ml-2 text-[11px] font-bold text-stone-400">
+                    <span className="ml-2 text-[11px] font-bold text-stone-600 dark:text-stone-400">
                       Bu Ay:
                     </span>
                     {staffRevenueStats.map((item) => (
                       <span
                         key={`month-${item.barber.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#1c1815] px-2.5 py-1 text-xs font-semibold text-stone-300"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#1c1815] px-2.5 py-1 text-xs font-semibold text-stone-700 dark:text-stone-300"
                       >
                         <span>{item.barber.name}:</span>
-                        <span className="font-bold text-amber-300">{item.monthRevenue.toLocaleString("tr-TR")} TL</span>
+                        <span className="font-bold text-amber-800 dark:text-amber-300">{item.monthRevenue.toLocaleString("tr-TR")} TL</span>
                       </span>
                     ))}
                   </div>
@@ -3933,50 +3953,50 @@ export default function AdminDashboardPage() {
                     {staffRevenueStats.map((item) => (
                       <div
                         key={item.barber.id}
-                        className="rounded-xl border border-white/10 bg-[#101012] p-3.5"
+                        className="rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] p-3.5"
                       >
-                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <div className="flex items-center justify-between border-b border-stone-200 dark:border-white/5 pb-2">
                           <div className="min-w-0">
-                            <span className="block truncate text-xs font-black text-[#fdf8f5]">
+                            <span className="block truncate text-xs font-black text-stone-900 dark:text-[#fdf8f5]">
                               {item.barber.name}
                             </span>
-                            <span className="text-[10px] text-[#dfc39e]">
+                            <span className="text-[10px] font-bold text-amber-800 dark:text-[#dfc39e]">
                               {item.barber.chairName || item.barber.role}
                             </span>
                           </div>
-                          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-300">
+                          <span className="rounded-md border border-stone-200 dark:border-white/10 bg-white dark:bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-700 dark:text-stone-300">
                             {item.totalCount} Tamamlanan
                           </span>
                         </div>
 
                         <div className="mt-2.5 grid grid-cols-2 gap-2 text-center">
-                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2">
-                            <span className="block text-[10px] font-bold text-emerald-400">
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/5 p-2">
+                            <span className="block text-[10px] font-bold text-emerald-800 dark:text-emerald-400">
                               Bugün
                             </span>
-                            <p className="mt-0.5 text-sm font-black text-[#fdf8f5]">
+                            <p className="mt-0.5 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                               {item.todayRevenue.toLocaleString("tr-TR")} TL
                             </p>
-                            <span className="text-[9px] text-stone-400">
+                            <span className="text-[9px] font-medium text-stone-600 dark:text-stone-400">
                               {item.todayCount} randevu
                             </span>
                           </div>
-                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
-                            <span className="block text-[10px] font-bold text-amber-300">
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 p-2">
+                            <span className="block text-[10px] font-bold text-amber-800 dark:text-amber-300">
                               Bu Ay
                             </span>
-                            <p className="mt-0.5 text-sm font-black text-[#fdf8f5]">
+                            <p className="mt-0.5 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                               {item.monthRevenue.toLocaleString("tr-TR")} TL
                             </p>
-                            <span className="text-[9px] text-stone-400">
+                            <span className="text-[9px] font-medium text-stone-600 dark:text-stone-400">
                               {item.monthCount} randevu
                             </span>
                           </div>
                         </div>
 
-                        <div className="mt-2 flex items-center justify-between rounded-lg bg-black/30 px-2.5 py-1 text-[11px]">
-                          <span className="text-stone-400">Toplam Ciro:</span>
-                          <span className="font-black text-[#dfc39e]">
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-stone-100 dark:bg-black/30 px-2.5 py-1 text-[11px]">
+                          <span className="font-medium text-stone-600 dark:text-stone-400">Toplam Ciro:</span>
+                          <span className="font-black text-amber-800 dark:text-[#dfc39e]">
                             {item.totalRevenue.toLocaleString("tr-TR")} TL
                           </span>
                         </div>
@@ -3986,14 +4006,14 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Hızlı Araçlar: QR Afiş, Müşteri Vitrini, Çıkış, Tema */}
-                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#141416] p-4">
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4">
                   <button
                     type="button"
                     onClick={() => setIsQuickQrModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/80 bg-emerald-500/25 px-3.5 py-2.5 text-xs font-black text-white hover:bg-emerald-500/35 transition active:scale-95 shadow-sm cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500 dark:border-emerald-400/80 bg-emerald-100 dark:bg-emerald-500/25 px-3.5 py-2.5 text-xs font-black text-emerald-900 dark:text-white hover:bg-emerald-200 dark:hover:bg-emerald-500/35 transition active:scale-95 shadow-sm cursor-pointer"
                   >
-                    <QrCode className="h-4 w-4 text-emerald-300 stroke-[2.5]" />
-                    <span className="text-white font-black">📱 Hızlı QR Kod Göster</span>
+                    <QrCode className="h-4 w-4 text-emerald-700 dark:text-emerald-300 stroke-[2.5]" />
+                    <span className="text-emerald-900 dark:text-white font-black">📱 Hızlı QR Kod Göster</span>
                   </button>
                   <button
                     type="button"
@@ -4019,14 +4039,14 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => setIsQrModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/15 px-3.5 py-2.5 text-xs font-black text-purple-200"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400 dark:border-purple-400/40 bg-purple-100 dark:bg-purple-500/15 px-3.5 py-2.5 text-xs font-black text-purple-900 dark:text-purple-200"
                   >
                     <QrCode className="h-4 w-4" />
                     <span>QR Afiş Yazdır</span>
                   </button>
                   <Link
                     href={`/?shop=${currentShop.slug}&preview=1`}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-400/40 bg-sky-500/15 px-3.5 py-2.5 text-xs font-black text-sky-200"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-400 dark:border-sky-400/40 bg-sky-100 dark:bg-sky-500/15 px-3.5 py-2.5 text-xs font-black text-sky-900 dark:text-sky-200"
                   >
                     <ExternalLink className="h-4 w-4" />
                     <span>Müşteri Ekranını Gör</span>
@@ -4039,7 +4059,7 @@ export default function AdminDashboardPage() {
                         window.location.href = "/admin";
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-500/15 px-3.5 py-2.5 text-xs font-black text-rose-300"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400 dark:border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-3.5 py-2.5 text-xs font-black text-rose-900 dark:text-rose-300"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>Çıkış Yap</span>
@@ -4047,24 +4067,24 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Randevuya Gelmeyen Müşteriyi Kara Listeye Alma */}
-                <div className="rounded-2xl border border-rose-500/35 bg-[#141416] p-4">
+                <div className="rounded-2xl border border-rose-500/35 bg-white dark:bg-[#141416] p-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 text-base font-black text-[#fdf8f5]">
-                      <ShieldAlert className="h-5 w-5 text-rose-400" />
+                    <h3 className="flex items-center gap-2 text-base font-black text-stone-900 dark:text-[#fdf8f5]">
+                      <ShieldAlert className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                       <span>Ortak Kara Liste ({globalBlacklist.length})</span>
                     </h3>
-                    <span className="text-xs font-bold text-rose-300">
+                    <span className="text-xs font-bold text-rose-800 dark:text-rose-300">
                       Kapora Koruması
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-stone-400">
+                  <p className="mt-1 text-xs font-medium text-stone-600 dark:text-stone-400">
                     Randevusuna gelmeyen müşterileri buradan kara listeye
                     alabilir veya affedebilirsiniz.
                   </p>
 
                   {activeAppointments.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-                      <span className="block text-xs font-bold text-[#f3e8dc]">
+                    <div className="mt-3 space-y-2 border-t border-stone-200 dark:border-white/10 pt-3">
+                      <span className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
                         Aktif Randevulardan Gelmeyen Varsa İşaretleyin:
                       </span>
                       {activeAppointments
@@ -4072,9 +4092,9 @@ export default function AdminDashboardPage() {
                         .map((apt) => (
                           <div
                             key={apt.id}
-                            className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#101012] px-3 py-2 text-xs"
+                            className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] px-3 py-2 text-xs"
                           >
-                            <span className="font-bold text-[#fdf8f5]">
+                            <span className="font-bold text-stone-900 dark:text-[#fdf8f5]">
                               {apt.time} • {apt.customerName} (
                               {apt.customerPhone})
                             </span>
@@ -4087,7 +4107,7 @@ export default function AdminDashboardPage() {
                                     apt.customerName
                                   )
                                 }
-                                className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 font-bold text-amber-300"
+                                className="rounded-lg border border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-1 font-bold text-amber-900 dark:text-amber-300"
                               >
                                 Kara Listeden Çıkar
                               </button>
@@ -4095,7 +4115,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenNoShowModal(apt)}
-                                className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 font-bold text-rose-300"
+                                className="rounded-lg border border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-2.5 py-1 font-bold text-rose-900 dark:text-rose-300"
                               >
                                 Kara Listeye Al
                               </button>
@@ -4109,13 +4129,13 @@ export default function AdminDashboardPage() {
                     {globalBlacklist.map((entry, idx) => (
                       <div
                         key={`${entry.phone}-${idx}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/25 bg-rose-950/15 p-3 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-300 dark:border-rose-500/25 bg-rose-50 dark:bg-rose-950/15 p-3 text-xs"
                       >
                         <div>
-                          <p className="font-bold text-[#fdf8f5]">
+                          <p className="font-bold text-stone-900 dark:text-[#fdf8f5]">
                             {entry.name} ({entry.phone})
                           </p>
-                          <p className="text-[11px] text-stone-400">
+                          <p className="text-[11px] font-medium text-stone-600 dark:text-stone-400">
                             {entry.missedDate} • {entry.requiredDeposit} TL
                             Kapora Şartı
                           </p>
@@ -4128,7 +4148,7 @@ export default function AdminDashboardPage() {
                               entry.name
                             )
                           }
-                          className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 font-bold text-amber-300"
+                          className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-1.5 font-bold text-amber-900 dark:text-amber-300"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
                           <span>Çıkar</span>
@@ -4140,21 +4160,21 @@ export default function AdminDashboardPage() {
 
                 {/* Yedek Liste */}
                 {waitlist.length > 0 && (
-                  <div className="rounded-2xl border border-amber-500/30 bg-[#141416] p-4">
-                    <h3 className="text-sm font-black text-[#fdf8f5]">
+                  <div className="rounded-2xl border border-amber-500/30 bg-white dark:bg-[#141416] p-4">
+                    <h3 className="text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                       Yedek Liste ({waitlist.length})
                     </h3>
                     <div className="mt-3 space-y-2">
                       {waitlist.map((wl) => (
                         <div
                           key={wl.id}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#101012] p-3 text-xs"
+                          className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] p-3 text-xs"
                         >
                           <div>
-                            <p className="font-bold text-[#fdf8f5]">
+                            <p className="font-bold text-stone-900 dark:text-[#fdf8f5]">
                               {wl.customerName} ({wl.requestedTime})
                             </p>
-                            <p className="text-stone-400">
+                            <p className="font-medium text-stone-600 dark:text-stone-400">
                               {wl.servicesSummary} • {wl.customerPhone}
                             </p>
                           </div>
@@ -4168,7 +4188,7 @@ export default function AdminDashboardPage() {
                                 "whatsapp"
                               );
                             }}
-                            className="rounded-lg bg-emerald-500/20 px-3 py-1.5 font-bold text-emerald-300"
+                            className="rounded-lg bg-emerald-100 dark:bg-emerald-500/20 px-3 py-1.5 font-bold text-emerald-800 dark:text-emerald-300"
                           >
                             {wl.notified ? "Bildirildi ✓" : "Çağır"}
                           </button>
@@ -4185,10 +4205,10 @@ export default function AdminDashboardPage() {
               <div className="space-y-4">
                 <form
                   onSubmit={handleCreateBarber}
-                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4 space-y-2.5"
+                  className="rounded-2xl border border-stone-200 dark:border-[#dfc39e]/40 bg-white dark:bg-[#141416] p-4 space-y-2.5"
                 >
-                  <h3 className="mb-1 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                    <UserPlus className="h-4 w-4 text-[#dfc39e]" />
+                  <h3 className="mb-1 flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
+                    <UserPlus className="h-4 w-4 text-amber-700 dark:text-[#dfc39e]" />
                     <span>Yeni Usta / Koltuk Ekle</span>
                   </h3>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -4198,7 +4218,7 @@ export default function AdminDashboardPage() {
                       value={newBarberName}
                       onChange={(e) => setNewBarberName(e.target.value)}
                       placeholder="Usta Adı (Örn: Usta Ali)"
-                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3.5 py-2.5 text-sm font-semibold text-stone-900 dark:text-[#fdf8f5]"
                     />
                     <input
                       type="text"
@@ -4206,7 +4226,7 @@ export default function AdminDashboardPage() {
                       value={newBarberChair}
                       onChange={(e) => setNewBarberChair(e.target.value)}
                       placeholder="Koltuk Adı (Örn: Koltuk #4)"
-                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3.5 py-2.5 text-sm font-semibold text-stone-900 dark:text-[#fdf8f5]"
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 items-start">
@@ -4216,9 +4236,9 @@ export default function AdminDashboardPage() {
                         value={newBarberPhone}
                         onChange={(e) => setNewBarberPhone(e.target.value)}
                         placeholder="Usta WhatsApp Numarası (Opsiyonel - Örn: 0532 123 45 67)"
-                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                        className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3.5 py-2.5 text-sm font-semibold text-stone-900 dark:text-[#fdf8f5]"
                       />
-                      <p className="mt-1 text-[11px] font-medium text-stone-400">
+                      <p className="mt-1 text-[11px] font-medium text-stone-600 dark:text-stone-400">
                         Boş bırakılırsa dükkanın ana numarası kullanılır
                       </p>
                     </div>
@@ -4237,37 +4257,37 @@ export default function AdminDashboardPage() {
                     return (
                       <div
                         key={barber.id}
-                        className="rounded-2xl border border-white/10 bg-[#141416] p-4"
+                        className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4"
                       >
                         {isEditing ? (
                           <div className="space-y-3">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div>
-                                <label className="text-[11px] font-bold text-stone-400 block mb-1">Usta / Personel Adı</label>
+                                <label className="text-[11px] font-bold text-stone-700 dark:text-stone-400 block mb-1">Usta / Personel Adı</label>
                                 <input
                                   type="text"
                                   value={editBarberName}
                                   onChange={(e) =>
                                     setEditBarberName(e.target.value)
                                   }
-                                  className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                  className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-stone-900 dark:text-[#fdf8f5]"
                                 />
                               </div>
                               <div>
-                                <label className="text-[11px] font-bold text-stone-400 block mb-1">Koltuk Adı</label>
+                                <label className="text-[11px] font-bold text-stone-700 dark:text-stone-400 block mb-1">Koltuk Adı</label>
                                 <input
                                   type="text"
                                   value={editBarberChair}
                                   onChange={(e) =>
                                     setEditBarberChair(e.target.value)
                                   }
-                                  className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
+                                  className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-stone-900 dark:text-[#f3e8dc]"
                                 />
                               </div>
                             </div>
 
                             <div>
-                              <label className="text-[11px] font-bold text-stone-400 block mb-1">
+                              <label className="text-[11px] font-bold text-stone-700 dark:text-stone-400 block mb-1">
                                 Usta WhatsApp Numarası (Opsiyonel)
                               </label>
                               <input
@@ -4277,22 +4297,22 @@ export default function AdminDashboardPage() {
                                   setEditBarberPhone(e.target.value)
                                 }
                                 placeholder="05XX XXX XX XX (Opsiyonel)"
-                                className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-stone-900 dark:text-[#fdf8f5]"
                               />
-                              <p className="mt-1 text-[11px] font-medium text-stone-400">
+                              <p className="mt-1 text-[11px] font-medium text-stone-600 dark:text-stone-400">
                                 Boş bırakılırsa dükkanın ana numarası kullanılır
                               </p>
                             </div>
 
                             {/* Koltuğa Özel Fiyatlandırma Bölümü */}
-                            <div className="rounded-xl border border-white/10 bg-[#0d0d0f] p-3.5 space-y-3">
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-white/10 pb-2.5">
+                            <div className="rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#0d0d0f] p-3.5 space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-stone-200 dark:border-white/10 pb-2.5">
                                 <div>
-                                  <h4 className="text-xs font-black text-[#dfc39e] flex items-center gap-1.5">
-                                    <Sparkles className="h-3.5 w-3.5 text-[#dfc39e]" />
+                                  <h4 className="text-xs font-black text-amber-800 dark:text-[#dfc39e] flex items-center gap-1.5">
+                                    <Sparkles className="h-3.5 w-3.5 text-amber-700 dark:text-[#dfc39e]" />
                                     <span>Koltuğa Özel Fiyatlandırma (Opsiyonel / Ekstra)</span>
                                   </h4>
-                                  <p className="text-[11px] text-stone-400 mt-0.5">
+                                  <p className="text-[11px] font-medium text-stone-600 dark:text-stone-400 mt-0.5">
                                     Varsayılan olarak her koltukta standart salon fiyatları geçerlidir. İsterseniz bu koltuk için özel fiyat tanımlayabilirsiniz.
                                   </p>
                                 </div>
@@ -4305,7 +4325,7 @@ export default function AdminDashboardPage() {
                                     });
                                     setEditBarberPrices(resetMap);
                                   }}
-                                  className="self-start sm:self-auto text-[10px] font-bold text-stone-400 hover:text-[#dfc39e] underline transition cursor-pointer"
+                                  className="self-start sm:self-auto text-[10px] font-bold text-stone-600 dark:text-stone-400 hover:text-amber-800 dark:hover:text-[#dfc39e] underline transition cursor-pointer"
                                 >
                                   Tümünü Standarta Eşitle
                                 </button>
@@ -4323,20 +4343,20 @@ export default function AdminDashboardPage() {
                                       key={srv.id}
                                       className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
                                         isCustom
-                                          ? "border-amber-500/50 bg-gradient-to-r from-amber-950/30 to-[#191512]"
-                                          : "border-white/5 bg-[#141416]"
+                                          ? "border-amber-500/50 bg-amber-50 dark:bg-gradient-to-r dark:from-amber-950/30 dark:to-[#191512]"
+                                          : "border-stone-200 dark:border-white/5 bg-white dark:bg-[#141416]"
                                       }`}
                                     >
                                       <div className="min-w-0 pr-2">
-                                        <span className="text-xs font-black text-[#fdf8f5] block truncate">
+                                        <span className="text-xs font-black text-stone-900 dark:text-[#fdf8f5] block truncate">
                                           {srv.name}
                                         </span>
                                         <div className="flex items-center gap-1.5 mt-0.5">
-                                          <span className="text-[10px] text-stone-400">
-                                            Standart: <strong className="text-stone-300 font-mono">{srv.price} TL</strong>
+                                          <span className="text-[10px] font-medium text-stone-600 dark:text-stone-400">
+                                            Standart: <strong className="text-stone-800 dark:text-stone-300 font-mono">{srv.price} TL</strong>
                                           </span>
                                           {isCustom && (
-                                            <span className="text-[9px] font-black text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30">
+                                            <span className="text-[9px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400 dark:border-amber-500/30">
                                               Özel Fiyat
                                             </span>
                                           )}
@@ -4357,12 +4377,12 @@ export default function AdminDashboardPage() {
                                           }}
                                           className={`w-20 rounded-lg border px-2 py-1 text-right text-xs font-mono font-black focus:outline-none transition ${
                                             isCustom
-                                              ? "border-amber-400 bg-black/60 text-amber-300"
-                                              : "border-white/15 bg-black/40 text-stone-200 focus:border-[#dfc39e]"
+                                              ? "border-amber-500 bg-white dark:bg-black/60 text-amber-900 dark:text-amber-300"
+                                              : "border-stone-300 dark:border-white/15 bg-white dark:bg-black/40 text-stone-900 dark:text-stone-200 focus:border-[#dfc39e]"
                                           }`}
                                           placeholder={String(srv.price)}
                                         />
-                                        <span className="text-xs font-bold text-stone-400">TL</span>
+                                        <span className="text-xs font-bold text-stone-600 dark:text-stone-400">TL</span>
                                         {isCustom && (
                                           <button
                                             type="button"
@@ -4372,7 +4392,7 @@ export default function AdminDashboardPage() {
                                                 [srv.id]: String(srv.price),
                                               }));
                                             }}
-                                            className="ml-1 text-[10px] font-bold text-stone-400 hover:text-white px-1.5 py-1 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
+                                            className="ml-1 text-[10px] font-bold text-stone-700 dark:text-stone-400 hover:text-stone-950 dark:hover:text-white px-1.5 py-1 rounded bg-stone-100 dark:bg-white/5 hover:bg-stone-200 dark:hover:bg-white/10 cursor-pointer"
                                             title="Standart fiyata dön"
                                           >
                                             Sıfırla
@@ -4389,7 +4409,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => setEditingBarberId(null)}
-                                className="rounded-xl border border-white/15 px-3.5 py-2 text-xs font-bold text-stone-300 hover:bg-white/5 transition cursor-pointer"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 px-3.5 py-2 text-xs font-bold text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/5 transition cursor-pointer"
                               >
                                 İptal
                               </button>
@@ -4405,29 +4425,29 @@ export default function AdminDashboardPage() {
                         ) : (
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-black text-[#fdf8f5]">
+                              <p className="text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                                 {barber.name}
                               </p>
-                              <p className="text-xs text-[#dfc39e]">
+                              <p className="text-xs font-bold text-amber-800 dark:text-[#dfc39e]">
                                 {barber.chairName}
                               </p>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                 {barber.customPrices && Object.keys(barber.customPrices).length > 0 ? (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-900 dark:text-amber-300">
                                     <Sparkles className="h-2.5 w-2.5" />
                                     <span>Koltuğa Özel Fiyat ({Object.keys(barber.customPrices).length} Hizmet)</span>
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-stone-400">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-stone-700 dark:text-stone-400">
                                     ✓ Standart Salon Fiyatı Geçerli
                                   </span>
                                 )}
                                 {barber.phone && barber.phone.trim() !== "" ? (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-900 dark:text-emerald-300">
                                     <span>📱 Usta WhatsApp: {barber.phone}</span>
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-stone-400">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-stone-700 dark:text-stone-400">
                                     📱 Dükkan Ana Numarası
                                   </span>
                                 )}
@@ -4437,7 +4457,7 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => startEditBarber(barber)}
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-200"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 bg-stone-100 dark:bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-800 dark:text-stone-200"
                               >
                                 <Edit3 className="inline h-3.5 w-3.5 mr-1" />
                                 Düzenle
@@ -4446,7 +4466,7 @@ export default function AdminDashboardPage() {
                                 <button
                                   type="button"
                                   onClick={() => deleteBarber(barber.id)}
-                                  className="rounded-xl border border-rose-500/30 bg-rose-500/15 p-2 text-rose-300"
+                                  className="rounded-xl border border-rose-500/30 bg-rose-100 dark:bg-rose-500/15 p-2 text-rose-700 dark:text-rose-300"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -4466,9 +4486,9 @@ export default function AdminDashboardPage() {
               <div className="space-y-4">
                 <form
                   onSubmit={handleCreateService}
-                  className="rounded-2xl border border-[#dfc39e]/40 bg-[#141416] p-4"
+                  className="rounded-2xl border border-stone-200 dark:border-[#dfc39e]/40 bg-white dark:bg-[#141416] p-4"
                 >
-                  <h3 className="mb-3 text-sm font-black text-[#fdf8f5]">
+                  <h3 className="mb-3 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                     + Yeni Hizmet Ekle
                   </h3>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-4">
@@ -4478,7 +4498,7 @@ export default function AdminDashboardPage() {
                       value={newServiceName}
                       onChange={(e) => setNewServiceName(e.target.value)}
                       placeholder="Hizmet Adı"
-                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5] sm:col-span-2"
+                      className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3.5 py-2.5 text-sm font-semibold text-stone-900 dark:text-[#fdf8f5] sm:col-span-2"
                     />
                     <input
                       type="number"
@@ -4486,7 +4506,7 @@ export default function AdminDashboardPage() {
                       value={newServicePrice}
                       onChange={(e) => setNewServicePrice(e.target.value)}
                       placeholder="Fiyat (TL)"
-                      className="rounded-xl border border-white/15 bg-[#101012] px-3.5 py-2.5 text-sm text-[#fdf8f5]"
+                      className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3.5 py-2.5 text-sm font-semibold text-stone-900 dark:text-[#fdf8f5]"
                     />
                     <button
                       type="submit"
@@ -4503,7 +4523,7 @@ export default function AdminDashboardPage() {
                     return (
                       <div
                         key={srv.id}
-                        className="rounded-2xl border border-white/10 bg-[#141416] p-4"
+                        className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4"
                       >
                         {isEditing ? (
                           <div className="space-y-3">
@@ -4512,7 +4532,7 @@ export default function AdminDashboardPage() {
                                 type="text"
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#fdf8f5]"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-stone-900 dark:text-[#fdf8f5]"
                               />
                               <input
                                 type="number"
@@ -4520,7 +4540,7 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditPrice(Number(e.target.value))
                                 }
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-[#f3e8dc]"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-amber-900 dark:text-[#f3e8dc]"
                               />
                               <input
                                 type="number"
@@ -4528,14 +4548,14 @@ export default function AdminDashboardPage() {
                                 onChange={(e) =>
                                   setEditDuration(Number(e.target.value))
                                 }
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-2 text-sm font-bold text-sky-300"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2 text-sm font-bold text-sky-900 dark:text-sky-300"
                               />
                             </div>
                             <div className="flex justify-end gap-2">
                               <button
                                 type="button"
                                 onClick={() => setEditingServiceId(null)}
-                                className="rounded-xl border border-white/15 px-3 py-1.5 text-xs text-stone-300"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 px-3 py-1.5 text-xs font-bold text-stone-700 dark:text-stone-300"
                               >
                                 İptal
                               </button>
@@ -4551,10 +4571,10 @@ export default function AdminDashboardPage() {
                         ) : (
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-black text-[#fdf8f5]">
+                              <p className="text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                                 {srv.name}
                               </p>
-                              <p className="text-xs font-bold text-[#dfc39e]">
+                              <p className="text-xs font-bold text-amber-800 dark:text-[#dfc39e]">
                                 {srv.price} TL • {srv.duration} dk
                               </p>
                             </div>
@@ -4562,14 +4582,14 @@ export default function AdminDashboardPage() {
                               <button
                                 type="button"
                                 onClick={() => startEditService(srv)}
-                                className="rounded-xl border border-white/15 bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-200"
+                                className="rounded-xl border border-stone-300 dark:border-white/15 bg-stone-100 dark:bg-[#101012] px-3 py-1.5 text-xs font-bold text-stone-800 dark:text-stone-200"
                               >
                                 Düzenle
                               </button>
                               <button
                                 type="button"
                                 onClick={() => deleteService(srv.id)}
-                                className="rounded-xl border border-rose-500/30 bg-rose-500/15 p-2 text-rose-300"
+                                className="rounded-xl border border-rose-500/30 bg-rose-100 dark:bg-rose-500/15 p-2 text-rose-700 dark:text-rose-300"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -4586,14 +4606,14 @@ export default function AdminDashboardPage() {
             {/* 3D: SAATLER, TATİL GÜNLERİ VE KAPORA */}
             {otherSubTab === "schedule" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                    <Clock className="h-4 w-4 text-[#dfc39e]" />
+                <div className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
+                    <Clock className="h-4 w-4 text-amber-700 dark:text-[#dfc39e]" />
                     <span>Açılış & Kapanış Saatleri</span>
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs text-stone-400">
+                      <label className="mb-1 block text-xs font-bold text-stone-700 dark:text-stone-400">
                         Açılış
                       </label>
                       <select
@@ -4601,7 +4621,7 @@ export default function AdminDashboardPage() {
                         onChange={(e) =>
                           updateShopSettings({ openTime: e.target.value })
                         }
-                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
+                        className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2.5 text-sm font-bold text-stone-900 dark:text-[#fdf8f5]"
                       >
                         {[
                           "08:00",
@@ -4618,7 +4638,7 @@ export default function AdminDashboardPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-stone-400">
+                      <label className="mb-1 block text-xs font-bold text-stone-700 dark:text-stone-400">
                         Kapanış
                       </label>
                       <select
@@ -4626,7 +4646,7 @@ export default function AdminDashboardPage() {
                         onChange={(e) =>
                           updateShopSettings({ closeTime: e.target.value })
                         }
-                        className="w-full rounded-xl border border-white/15 bg-[#101012] px-3 py-2.5 text-sm font-bold text-[#fdf8f5]"
+                        className="w-full rounded-xl border border-stone-300 dark:border-white/15 bg-white dark:bg-[#101012] px-3 py-2.5 text-sm font-bold text-stone-900 dark:text-[#fdf8f5]"
                       >
                         {[
                           "19:00",
@@ -4652,7 +4672,7 @@ export default function AdminDashboardPage() {
                         <Coffee className="h-4 w-4 text-amber-600 dark:text-[#dfc39e]" />
                         Öğle Molası ({shopSettings.breakStart || "12:30"} - {shopSettings.breakEnd || "13:30"})
                       </span>
-                      <p className="text-xs text-stone-500 dark:text-stone-400">
+                      <p className="text-xs font-medium text-stone-600 dark:text-stone-400">
                         {isBreakActiveToday
                           ? "Öğle molası devrede; bu saatler randevuya kapalı."
                           : "Öğle molası kapalı; saatler randevuya açık."}
@@ -4679,9 +4699,9 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-[#fdf8f5]">
-                    <CalendarOff className="h-4 w-4 text-rose-400" />
+                <div className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
+                    <CalendarOff className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span>Haftalık Tatil Günleri</span>
                   </h3>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-7">
@@ -4696,8 +4716,8 @@ export default function AdminDashboardPage() {
                           onClick={() => toggleClosedDay(day.dayOfWeek)}
                           className={`rounded-xl border py-2.5 text-xs font-black ${
                             isClosed
-                              ? "border-rose-500 bg-rose-500/20 text-rose-300"
-                              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                              ? "border-rose-500 bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
+                              : "border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
                           }`}
                         >
                           {day.short}: {isClosed ? "KAPALI" : "AÇIK"}
@@ -4707,8 +4727,8 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#141416] p-4">
-                  <h3 className="mb-2 text-sm font-black text-[#fdf8f5]">
+                <div className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4">
+                  <h3 className="mb-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                     Kara Liste Ön Kapora Tutarı (TL)
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -4724,8 +4744,8 @@ export default function AdminDashboardPage() {
                         }
                         className={`rounded-xl border px-4 py-2 text-xs font-black ${
                           currentShop.depositAmount === amt
-                            ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
-                            : "border-white/15 bg-[#101012] text-[#f3e8dc]"
+                            ? "border-amber-600 dark:border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
+                            : "border-stone-300 dark:border-white/15 bg-stone-100 dark:bg-[#101012] text-stone-800 dark:text-[#f3e8dc]"
                         }`}
                       >
                         {amt} TL

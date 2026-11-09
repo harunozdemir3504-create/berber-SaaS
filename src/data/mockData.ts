@@ -556,15 +556,43 @@ export function toStrictIsoDate(rawDayId?: string | null): string {
 
 /**
  * Bir randevu veya mola kaydının kesin "YYYY-MM-DD" tarihini döndürür.
+ * Eğer eski bir kayıtta dayId "day-1" formatındaysa ve dateLabel içinde açıkça
+ * "7 Kas", "8 Kas" gibi bir tarih varsa, geçmiş günün bugüne kaymaması için dateLabel'dan gerçek tarihi çözer.
  */
 export function getAppointmentIsoDate(
   apt?: {
     appointment_date?: string | null;
     date?: string | null;
     dayId?: string | null;
+    dateLabel?: string | null;
   } | null
 ): string {
   if (!apt) return "";
+  const explicitIso = [apt.appointment_date, apt.date, apt.dayId].find(
+    (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v.trim())
+  );
+  if (explicitIso) {
+    return explicitIso.trim().slice(0, 10);
+  }
+
+  if (apt.dateLabel && typeof apt.dateLabel === "string") {
+    const labelMatch = apt.dateLabel.match(
+      /(\d{1,2})\s+(Oca|Şub|Mar|Nis|May|Haz|Tem|Ağu|Eyl|Eki|Kas|Ara)/i
+    );
+    if (labelMatch) {
+      const dayNum = parseInt(labelMatch[1], 10);
+      const monthName = labelMatch[2].toLocaleLowerCase("tr-TR");
+      const monthIdx = TR_MONTHS_SHORT.findIndex(
+        (m) => m.toLocaleLowerCase("tr-TR") === monthName
+      );
+      if (monthIdx !== -1 && dayNum >= 1 && dayNum <= 31) {
+        const today = getTurkeyNow();
+        const year = today.getFullYear();
+        return toIsoDateString(new Date(year, monthIdx, dayNum));
+      }
+    }
+  }
+
   const raw = apt.appointment_date || apt.date || apt.dayId || "";
   if (!raw) return "";
   return toStrictIsoDate(raw);
