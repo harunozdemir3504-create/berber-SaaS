@@ -283,14 +283,43 @@ export function slugifyShopName(text: string): string {
 }
 
 export function timeToMinutes(timeStr: string): number {
-  const [h, m] = timeStr.split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
+  if (!timeStr || typeof timeStr !== "string") return 0;
+  const parts = timeStr.trim().split(":");
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
 }
 
 export function minutesToTime(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60) % 24;
-  const m = totalMinutes % 60;
+  const safeTotal = Number.isFinite(totalMinutes)
+    ? Math.max(0, Math.round(totalMinutes))
+    : 0;
+  const h = Math.floor(safeTotal / 60) % 24;
+  const m = safeTotal % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+export function isAppointmentPast(appointment: Appointment): boolean {
+  const nowTr = getTurkeyNow();
+  const todayIso = toStrictIsoDate(getLiveDaysMetadata(1)[0]?.id);
+  const nowMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
+  const aptDate =
+    getAppointmentIsoDate(appointment) || toStrictIsoDate(appointment.dayId);
+
+  if (aptDate < todayIso) return true;
+  if (aptDate > todayIso) return false;
+
+  const startM = timeToMinutes(appointment.appointment_time || appointment.time);
+  const duration = Number(appointment.totalDuration) || 30;
+  const computedEndM = startM + duration;
+  const rawEndM =
+    appointment.endTime && !String(appointment.endTime).includes("NaN")
+      ? timeToMinutes(appointment.endTime)
+      : computedEndM;
+  const endM =
+    Number.isFinite(rawEndM) && rawEndM > startM ? rawEndM : computedEndM;
+
+  return endM <= nowMinutes;
 }
 
 export function generateAppointmentCode(shopSlug?: string): string {
@@ -405,42 +434,44 @@ function deduplicateServices(list: Service[]): Service[] {
  */
 function sanitizeShopDates(shop: TenantShop): TenantShop {
   const dismissedSet = getDismissedAlertIds();
-  const nowTr = getTurkeyNow();
-  const todayIso = toStrictIsoDate(getLiveDaysMetadata(1)[0]?.id);
-  const nowMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
 
   const sanitizedAppointments = (shop.appointments || [])
     .map((apt) => {
       const strictDate = getAppointmentIsoDate(apt) || toStrictIsoDate(apt.dayId);
       const resolved = resolveDayMetadata(strictDate);
+      const startM = timeToMinutes(apt.appointment_time || apt.time);
+      const dur = Number(apt.totalDuration) || 30;
+      const safeEndTime =
+        apt.endTime && !String(apt.endTime).includes("NaN")
+          ? apt.endTime
+          : minutesToTime(startM + dur);
 
-      let nextStatus = apt.status;
-      if (
-        apt.status === "upcoming" ||
-        apt.status === "confirmed" ||
-        apt.status === "pending"
-      ) {
-        const startM = timeToMinutes(apt.time);
-        const dur = apt.totalDuration || 30;
-        const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
-        const isPastDay = resolved.id < todayIso;
-        const isPastToday =
-          resolved.id === todayIso &&
-          (endM <= nowMinutes || startM < nowMinutes);
-
-        if (isPastDay || isPastToday) {
-          nextStatus = apt.status === "pending" ? "cancelled" : "completed";
-        }
-      }
-
-      return {
+      const normalizedApt: Appointment = {
         ...apt,
-        status: nextStatus,
+        totalDuration: dur,
+        endTime: safeEndTime,
         dayId: resolved.id,
         date: resolved.id,
         appointment_date: resolved.id,
         appointment_time: apt.time,
         dateLabel: resolved.chipLabel,
+      };
+
+      let nextStatus = normalizedApt.status;
+      if (
+        normalizedApt.status === "upcoming" ||
+        normalizedApt.status === "confirmed" ||
+        normalizedApt.status === "pending"
+      ) {
+        if (isAppointmentPast(normalizedApt)) {
+          nextStatus =
+            normalizedApt.status === "pending" ? "cancelled" : "completed";
+        }
+      }
+
+      return {
+        ...normalizedApt,
+        status: nextStatus,
       };
     })
     .sort((a, b) => {
@@ -1369,8 +1400,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         })
         .map((a) => {
           const startM = timeToMinutes(a.appointment_time || a.time);
-          const dur = a.totalDuration || 30;
-          const endM = a.endTime ? timeToMinutes(a.endTime) : startM + dur;
+          const duration = Number(a.totalDuration) || 30;
+          const slotCount = Math.ceil(duration / 30);
+          const rawEndM =
+            a.endTime && !String(a.endTime).includes("NaN")
+              ? timeToMinutes(a.endTime)
+              : startM + duration;
+          const endM = Math.max(
+            Number.isFinite(rawEndM) && rawEndM > startM ? rawEndM : startM + duration,
+            startM + slotCount * 30
+          );
           return { ...a, startM, endM };
         });
 
@@ -1486,8 +1525,16 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const vCode =
         newAptData.verificationCode ||
         (safeStatus === "pending" ? generateVerificationCode() : undefined);
+      const safeDuration = Number(newAptData.totalDuration) || 30;
+      const startMinutes = timeToMinutes(newAptData.time);
+      const safeEndTime =
+        newAptData.endTime && !String(newAptData.endTime).includes("NaN")
+          ? newAptData.endTime
+          : minutesToTime(startMinutes + safeDuration);
       const newApt: Appointment = {
         ...newAptData,
+        totalDuration: safeDuration,
+        endTime: safeEndTime,
         status: safeStatus,
         requiresDeposit: isBlacklisted || newAptData.requiresDeposit,
         isBlacklisted: isBlacklisted || newAptData.isBlacklisted,
@@ -2142,11 +2189,13 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       if (!target) return undefined;
 
       const selectedDate = toStrictIsoDate(newDayId);
+      const duration = Number(target.totalDuration) || 30;
       const newEndTime = minutesToTime(
-        timeToMinutes(newTime) + target.totalDuration
+        timeToMinutes(newTime) + duration
       );
       const updatedApt: Appointment = {
         ...target,
+        totalDuration: duration,
         dayId: selectedDate,
         date: selectedDate,
         appointment_date: selectedDate,
@@ -2195,12 +2244,14 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
         const targetDayId = toStrictIsoDate(newDayId || getAppointmentIsoDate(target));
         const targetDateLabel = newDateLabel || target.dateLabel;
+        const duration = Number(target.totalDuration) || 30;
         const newEndTime = minutesToTime(
-          timeToMinutes(newTime) + (target.totalDuration || 30)
+          timeToMinutes(newTime) + duration
         );
 
         movedApt = {
           ...target,
+          totalDuration: duration,
           dayId: targetDayId,
           date: targetDayId,
           appointment_date: targetDayId,

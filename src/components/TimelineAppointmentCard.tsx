@@ -3,6 +3,7 @@
 import React, { memo } from "react";
 import type { Appointment } from "@/data/mockData";
 import { buildWhatsAppUrl, formatPhoneDisplay } from "@/lib/whatsapp";
+import { timeToMinutes, minutesToTime } from "@/context/BarberContext";
 
 /* -------------------------------------------------------------------------- */
 /*  Takvim Çizelgesi (Timeline) Randevu Kartı                                 */
@@ -132,7 +133,14 @@ function TimelineAppointmentCardBase({
   onDragStartApt,
   onDragEndApt,
 }: TimelineAppointmentCardProps) {
-  const duration = apt.totalDuration || slotCount * 30;
+  const duration = Number(apt.totalDuration) || 30;
+  const safeSlotCount = Math.ceil((Number(duration) || 30) / 30);
+  const safeHeightPx = safeSlotCount * 64;
+  const startMinutes = timeToMinutes(apt.time);
+  const endTimeLabel =
+    apt.endTime && !String(apt.endTime).includes("NaN")
+      ? apt.endTime
+      : minutesToTime(startMinutes + duration);
   const isCompleted = apt.status === "completed";
   const isPending = apt.status === "pending";
   const theme = getTimelineCardTheme(apt.status, isBlacklistApt);
@@ -140,7 +148,7 @@ function TimelineAppointmentCardBase({
   const phoneDisplay = formatPhoneDisplay(apt.customerPhone);
   const phoneHref = `tel:${(apt.customerPhone || "").replace(/[^\d+]/g, "")}`;
   const variant: "compact" | "hour" | "vip" =
-    slotCount >= 3 ? "vip" : slotCount === 2 ? "hour" : "compact";
+    safeSlotCount >= 3 ? "vip" : safeSlotCount === 2 ? "hour" : "compact";
 
   const statusLabel =
     isBlacklistApt && isPending
@@ -153,8 +161,8 @@ function TimelineAppointmentCardBase({
 
   const style: React.CSSProperties = {
     position: "absolute",
-    top: `${2 + offsetPx}px`,
-    height: `calc(${heightPx}px - 4px)`,
+    top: `${2 + (Number.isFinite(offsetPx) ? offsetPx : 0)}px`,
+    height: `calc(${safeHeightPx}px - 4px)`,
     left: lanes > 1 ? `calc(${(lane / lanes) * 100}% + ${lane > 0 ? 2 : 0}px)` : 0,
     right:
       lanes > 1
@@ -271,7 +279,7 @@ function TimelineAppointmentCardBase({
           : "px-3 py-2 gap-1.5"
       }`}
     >
-      {/* ============================ 30 DK: KOMPAKT ============================ */}
+      {/* ============================ 15 / 30 DK: KOMPAKT (1 SLOT - 64px) ============================ */}
       {variant === "compact" && (
         <>
           <div className="flex items-center justify-between gap-1.5 min-w-0">
@@ -286,14 +294,17 @@ function TimelineAppointmentCardBase({
           </div>
           <div className="flex items-center gap-2 min-w-0 text-[11px] leading-tight text-stone-600 dark:text-stone-300">
             <span className="truncate min-w-0">✂️ {servicesSummary}</span>
-            <span className="hidden sm:inline truncate shrink-0 max-w-[35%] text-stone-500 dark:text-stone-400">
+            <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-800 dark:text-amber-300">
+              ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
+            </span>
+            <span className="hidden sm:inline truncate shrink-0 max-w-[30%] text-stone-500 dark:text-stone-400">
               💈 {apt.barberName}
             </span>
           </div>
         </>
       )}
 
-      {/* ========================= 60 DK: 1 SAATLİK DÜZEN ========================= */}
+      {/* ========================= 45 / 60 DK: 2 SLOT DÜZENİ (128px) ========================= */}
       {variant === "hour" && (
         <>
           <div className="flex items-start justify-between gap-2 min-w-0">
@@ -302,8 +313,8 @@ function TimelineAppointmentCardBase({
                 👤 {apt.customerName}
               </div>
               <div className="mt-1 flex items-center gap-1.5 min-w-0 overflow-hidden">
-                <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-700 dark:text-amber-300">
-                  ⏱️ {formatDurationLabel(duration)}
+                <span className="shrink-0 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] leading-none font-black text-amber-800 dark:text-amber-300">
+                  ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
                 </span>
                 {statusBadge}
                 {earlyBadge}
@@ -321,7 +332,7 @@ function TimelineAppointmentCardBase({
         </>
       )}
 
-      {/* ===================== 90 DK+: VIP / UZUN İŞLEM DÜZENİ ===================== */}
+      {/* ===================== 75 / 90 DK+: VIP / UZUN İŞLEM DÜZENİ (3+ SLOT - 192px+) ===================== */}
       {variant === "vip" && (
         <>
           {/* 1. Katman: Üst Başlık */}
@@ -332,7 +343,7 @@ function TimelineAppointmentCardBase({
               </div>
               <div className="mt-1 flex items-center gap-1.5 min-w-0 overflow-hidden">
                 <span className="shrink-0 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 px-2 py-0.5 text-[9px] leading-none font-black text-amber-950 shadow-sm">
-                  👑 VIP Paket • {duration} Dk
+                  👑 VIP • ⏱️ {duration} Dk • Bitiş: {endTimeLabel}
                 </span>
                 {statusBadge}
                 {earlyBadge}
@@ -349,7 +360,7 @@ function TimelineAppointmentCardBase({
               <span className="font-black">✂️ İşlem:</span> {servicesSummary}
             </p>
             <p className="text-[10px] sm:text-[11px] leading-snug text-stone-600 dark:text-stone-400 truncate">
-              <span className="font-bold">🕒 Süreç:</span> {apt.time} - {apt.endTime} ({slotCount} Saat
+              <span className="font-bold">🕒 Süreç:</span> {apt.time} - {endTimeLabel} ({safeSlotCount} Saat
               Dilimi Kapalı) • <span className="font-bold">💈 Koltuk:</span> {apt.barberName}
             </p>
           </div>

@@ -707,7 +707,7 @@ export default function AdminDashboardPage() {
     0
   );
   const quickTotalDuration = quickSelectedServices.reduce(
-    (sum, s) => sum + s.duration,
+    (sum, s) => sum + (Number(s.duration) || 30),
     0
   );
   const isQuickDayToday =
@@ -715,25 +715,50 @@ export default function AdminDashboardPage() {
     toStrictIsoDate(quickDayId) === toStrictIsoDate(todayDay.id);
 
   const quickAvailableSlots = useMemo(() => {
-    const rawSlots = getSlotsForDay(
+    const allDaySlots = getSlotsForDay(
       quickDayId,
       quickSelectedBarber?.id
-    ).filter((slot) => slot.state === "available");
-
-    if (!isQuickDayToday) {
-      return rawSlots;
-    }
+    );
+    const rawSlots = allDaySlots.filter((slot) => slot.state === "available");
+    const duration = Number(quickTotalDuration) || 30;
+    const slotCount = Math.ceil(duration / 30);
+    const closeM = shopSettings?.closeTime
+      ? timeToMinutes(shopSettings.closeTime)
+      : 21 * 60;
 
     const nowTr = getTurkeyNow();
     const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
 
-    // Bugün için: Geçmiş saatleri filtrele (şu anki saat ve sonrasını göster)
-    // 5 dakikadan fazla geçmiş olan eski saatler elenir
     return rawSlots.filter((slot) => {
       const slotMinutes = timeToMinutes(slot.time);
-      return slotMinutes >= currentMinutes - 5;
+      // 1. Bugün için geçmiş saatleri filtrele
+      if (isQuickDayToday && slotMinutes < currentMinutes - 5) {
+        return false;
+      }
+      // 2. Kapanış saatini aşıyor mu?
+      if (slotMinutes + duration > closeM) {
+        return false;
+      }
+      // 3. 45 dk / 60 dk / 75 dk vb. işlemlerde Math.ceil ile hesaplanan ardışık tüm slotların boş olduğunu doğrula
+      if (slotCount > 1) {
+        for (let i = 1; i < slotCount; i++) {
+          const nextTime = minutesToTime(slotMinutes + i * 30);
+          const nextSlot = allDaySlots.find((s) => s.time === nextTime);
+          if (!nextSlot || nextSlot.state !== "available") {
+            return false;
+          }
+        }
+      }
+      return true;
     });
-  }, [getSlotsForDay, quickDayId, quickSelectedBarber?.id, isQuickDayToday]);
+  }, [
+    getSlotsForDay,
+    quickDayId,
+    quickSelectedBarber?.id,
+    isQuickDayToday,
+    quickTotalDuration,
+    shopSettings?.closeTime,
+  ]);
 
   // Hızlı ekle sekmesinde saat varsayılan olarak şu anki saate göre en yakın uygun saat seçili gelsin
   useEffect(() => {
@@ -773,6 +798,9 @@ export default function AdminDashboardPage() {
     const finalPhone =
       quickPhone.trim() || currentShop.phone || "0555 000 00 00";
     const strictQuickDate = toStrictIsoDate(quickSelectedDay.isoDate || quickSelectedDay.id);
+    const safeDuration = Number(quickTotalDuration) || 30;
+    const startMinutes = timeToMinutes(quickTime);
+    const safeEndTime = minutesToTime(startMinutes + safeDuration);
 
     const created = addAppointment({
       dayId: strictQuickDate,
@@ -781,9 +809,7 @@ export default function AdminDashboardPage() {
       appointment_time: quickTime,
       dateLabel: quickSelectedDay.chipLabel,
       time: quickTime,
-      endTime: minutesToTime(
-        timeToMinutes(quickTime) + (quickTotalDuration || 30)
-      ),
+      endTime: safeEndTime,
       customerName: finalName,
       customerPhone: finalPhone,
       barberId: quickSelectedBarber.id,
@@ -792,10 +818,10 @@ export default function AdminDashboardPage() {
       services: quickSelectedServices.map((s) => ({
         name: s.name,
         price: getServicePriceForBarber(s, quickSelectedBarber),
-        duration: s.duration,
+        duration: Number(s.duration) || 30,
       })),
       totalPrice: quickTotalPrice,
-      totalDuration: quickTotalDuration || 30,
+      totalDuration: safeDuration,
       trustBadge: "first_time",
       trustDetail: "Berber Tarafından Hızlı Eklendi",
       status: "upcoming",
@@ -978,9 +1004,13 @@ export default function AdminDashboardPage() {
     // Erken veya geç randevu varsa çizelgeyi dışına taşırmadan kapsayacak şekilde genişlet
     timelineAppointments.forEach((apt) => {
       const startM = timeToMinutes(apt.time);
-      const endM = apt.endTime
-        ? timeToMinutes(apt.endTime)
-        : startM + (apt.totalDuration || 30);
+      const duration = Number(apt.totalDuration) || 30;
+      const slotCount = Math.ceil(duration / 30);
+      const rawEndM =
+        apt.endTime && !String(apt.endTime).includes("NaN")
+          ? timeToMinutes(apt.endTime)
+          : startM + duration;
+      const endM = Math.max(rawEndM, startM + slotCount * 30);
       if (startM < openM) openM = startM;
       if (endM > closeM) closeM = endM;
     });
@@ -1031,8 +1061,13 @@ export default function AdminDashboardPage() {
     let cutoffM = activeM;
     timelineAppointments.forEach((apt) => {
       const startM = timeToMinutes(apt.time);
-      const dur = apt.totalDuration || 30;
-      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
+      const duration = Number(apt.totalDuration) || 30;
+      const slotCount = Math.ceil(duration / 30);
+      const rawEndM =
+        apt.endTime && !String(apt.endTime).includes("NaN")
+          ? timeToMinutes(apt.endTime)
+          : startM + duration;
+      const endM = Math.max(rawEndM, startM + slotCount * 30);
       if (startM < cutoffM && endM > activeM) {
         const alignedStartM = Math.floor(startM / 30) * 30;
         if (alignedStartM < cutoffM) cutoffM = alignedStartM;
@@ -1078,9 +1113,17 @@ export default function AdminDashboardPage() {
   const timelineSlotMap = useMemo(() => {
     const parsedApts = timelineAppointments.map((apt) => {
       const startM = timeToMinutes(apt.time);
-      const dur = apt.totalDuration || 30;
-      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
-      return { apt, startM, endM };
+      const duration = Number(apt.totalDuration) || 30;
+      const slotCount = Math.ceil(duration / 30);
+      const rawEndM =
+        apt.endTime && !String(apt.endTime).includes("NaN")
+          ? timeToMinutes(apt.endTime)
+          : startM + duration;
+      const endM = Math.max(
+        Number.isFinite(rawEndM) && rawEndM > startM ? rawEndM : startM + duration,
+        startM + slotCount * 30
+      );
+      return { apt, startM, endM, slotCount };
     });
 
     const map = new Map<
@@ -1152,24 +1195,58 @@ export default function AdminDashboardPage() {
 
   // Kesintisiz tek blok kartlar için yerleşim: her kayıt için başlangıç/bitiş dakikası,
   // çakışan kayıtlar (farklı berberler) yan yana şeritlere (lane) bölünür.
+  // 45 dk veya 15 dk katları olan işlemlerde Math.ceil((Number(duration) || 30) / 30) ile tam slot sayısı hesaplanır.
   const timelineBlockLayout = useMemo(() => {
     const items = timelineAppointments
       .map((apt) => {
         const startM = timeToMinutes(apt.time);
-        const dur = apt.totalDuration || 30;
-        const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
-        return { id: apt.id, startM, endM: Math.max(endM, startM + 30) };
+        const duration = Number(apt.totalDuration) || 30;
+        const slotCount = Math.ceil(duration / 30);
+        const visualEndM = startM + slotCount * 30;
+        return {
+          id: apt.id,
+          startM,
+          endM: visualEndM,
+          slotCount,
+          duration,
+        };
       })
       .sort((a, b) => a.startM - b.startM || b.endM - a.endM);
 
-    const layout = new Map<string, { startM: number; endM: number; lane: number; lanes: number }>();
-    let cluster: { id: string; startM: number; endM: number; lane: number }[] = [];
+    const layout = new Map<
+      string,
+      {
+        startM: number;
+        endM: number;
+        slotCount: number;
+        duration: number;
+        lane: number;
+        lanes: number;
+      }
+    >();
+    let cluster: {
+      id: string;
+      startM: number;
+      endM: number;
+      slotCount: number;
+      duration: number;
+      lane: number;
+    }[] = [];
     let laneEnds: number[] = [];
     let clusterEnd = -1;
 
     const flush = () => {
       const lanes = Math.max(1, laneEnds.length);
-      cluster.forEach((c) => layout.set(c.id, { startM: c.startM, endM: c.endM, lane: c.lane, lanes }));
+      cluster.forEach((c) =>
+        layout.set(c.id, {
+          startM: c.startM,
+          endM: c.endM,
+          slotCount: c.slotCount,
+          duration: c.duration,
+          lane: c.lane,
+          lanes,
+        })
+      );
       cluster = [];
       laneEnds = [];
     };
@@ -1191,17 +1268,19 @@ export default function AdminDashboardPage() {
     return layout;
   }, [timelineAppointments]);
 
-  // 30 dk = 64px (h-16). Kart, başladığı satırdan süresi kadar aşağı tek parça uzanır.
+  // 30 dk = 64px (h-16). Kart, başladığı satırdan slotCount * 64px kadar aşağı tek parça uzanır:
+  // 15 veya 30 dk = 1 slot (64px), 45 veya 60 dk = 2 slot (128px), 75 veya 90 dk = 3 slot (192px).
   const TIMELINE_SLOT_PX = 64;
   const getTimelineBlockStyle = (id: string, slotTime: string): React.CSSProperties => {
     const info = timelineBlockLayout.get(id);
     const slotM = timeToMinutes(slotTime);
     const startM = info?.startM ?? slotM;
-    const endM = info?.endM ?? slotM + 30;
+    const duration = info?.duration ?? 30;
+    const slotCount = info?.slotCount ?? Math.ceil((Number(duration) || 30) / 30);
     const lane = info?.lane ?? 0;
     const lanes = info?.lanes ?? 1;
-    const offsetPx = ((startM - slotM) / 30) * TIMELINE_SLOT_PX;
-    const heightPx = ((endM - startM) / 30) * TIMELINE_SLOT_PX;
+    const offsetPx = Math.max(0, Math.floor((startM - slotM) / 30)) * TIMELINE_SLOT_PX;
+    const heightPx = slotCount * TIMELINE_SLOT_PX;
     return {
       position: "absolute",
       top: `${2 + offsetPx}px`,
@@ -1217,11 +1296,12 @@ export default function AdminDashboardPage() {
     const info = timelineBlockLayout.get(id);
     const slotM = timeToMinutes(slotTime);
     const startM = info?.startM ?? slotM;
-    const endM = info?.endM ?? slotM + 30;
+    const duration = info?.duration ?? 30;
+    const slotCount = info?.slotCount ?? Math.ceil((Number(duration) || 30) / 30);
     return {
-      offsetPx: ((startM - slotM) / 30) * TIMELINE_SLOT_PX,
-      heightPx: ((endM - startM) / 30) * TIMELINE_SLOT_PX,
-      slotCount: Math.max(1, Math.round((endM - startM) / 30)),
+      offsetPx: Math.max(0, Math.floor((startM - slotM) / 30)) * TIMELINE_SLOT_PX,
+      heightPx: slotCount * TIMELINE_SLOT_PX,
+      slotCount,
       lane: info?.lane ?? 0,
       lanes: info?.lanes ?? 1,
     };
@@ -1322,9 +1402,11 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    const duration = draggedApt.totalDuration || 30;
+    const duration = Number(draggedApt.totalDuration) || 30;
+    const slotCount = Math.ceil(duration / 30);
     const startM = timeToMinutes(targetTime);
     const endM = startM + duration;
+    const blockedEndM = startM + slotCount * 30;
     const closeM = shopSettings?.closeTime ? timeToMinutes(shopSettings.closeTime) : 21 * 60;
 
     if (endM > closeM) {
@@ -1348,10 +1430,13 @@ export default function AdminDashboardPage() {
         return false;
       }
       const aStartM = timeToMinutes(a.time);
-      const aEndM = timeToMinutes(
-        a.endTime || minutesToTime(aStartM + (a.totalDuration || 30))
+      const aDur = Number(a.totalDuration) || 30;
+      const aSlotCount = Math.ceil(aDur / 30);
+      const aEndM = Math.max(
+        timeToMinutes(a.endTime || minutesToTime(aStartM + aDur)),
+        aStartM + aSlotCount * 30
       );
-      return startM < aEndM && endM > aStartM;
+      return startM < aEndM && blockedEndM > aStartM;
     });
 
     if (hasCollision) {
@@ -1589,21 +1674,45 @@ export default function AdminDashboardPage() {
     });
   }, []);
 
-  // Saati veya günü geçmiş randevu kontrolü (Örn: saat 14:25 iken sabah 09:30 randevusu geçmiş sayılır ve Bekleyen'de asla gösterilmez)
-  const isAppointmentTimePassed = useCallback(
-    (apt: Appointment) => {
+  // Saati veya günü geçmiş randevu kontrolü:
+  // Randevunun bitiş zamanını (başlangıç + süre veya başlangıç + 30 dk) şu anki gerçek zaman ile karşılaştırır.
+  const isAppointmentPast = useCallback(
+    (appointment: Appointment): boolean => {
       const todayIso = toStrictIsoDate(todayDay.id);
-      const aptDate = getAppointmentIsoDate(apt);
+      const aptDate = getAppointmentIsoDate(appointment);
       if (!aptDate) return false;
       if (aptDate < todayIso) return true;
       if (aptDate > todayIso) return false;
 
-      const startM = timeToMinutes(apt.time);
-      const dur = apt.totalDuration || 30;
-      const endM = apt.endTime ? timeToMinutes(apt.endTime) : startM + dur;
-      return startM < nowMinutes || endM <= nowMinutes;
+      const startM = timeToMinutes(appointment.appointment_time || appointment.time);
+      const dur = Number(appointment.totalDuration) || 30;
+      const computedEndM = startM + dur;
+      const rawEndM =
+        appointment.endTime && !String(appointment.endTime).includes("NaN")
+          ? timeToMinutes(appointment.endTime)
+          : computedEndM;
+      const endM =
+        Number.isFinite(rawEndM) && rawEndM > startM ? rawEndM : startM + 30;
+      return endM <= nowMinutes;
     },
     [todayDay.id, nowMinutes]
+  );
+
+  // Ciroya dahil edilecek randevu kontrolü:
+  // Durumu completed olanlar VEYA durumu confirmed/upcoming kalmış olsa bile saati geçtiği için Geçmiş'e düşenler (cancelled/no_show hariç).
+  const isCountedInRevenue = useCallback(
+    (apt: Appointment): boolean => {
+      if (apt.isBlockedSlot) return false;
+      if (
+        apt.status === "cancelled" ||
+        apt.status === "no_show" ||
+        apt.status === "pending"
+      ) {
+        return false;
+      }
+      return apt.status === "completed" || isAppointmentPast(apt);
+    },
+    [isAppointmentPast]
   );
 
   const activeAppointments = useMemo(
@@ -1614,10 +1723,10 @@ export default function AdminDashboardPage() {
             (apt.status === "pending" ||
               apt.status === "confirmed" ||
               apt.status === "upcoming") &&
-            !isAppointmentTimePassed(apt)
+            !isAppointmentPast(apt)
         )
       ),
-    [appointments, sortChronologically, isAppointmentTimePassed]
+    [appointments, sortChronologically, isAppointmentPast]
   );
 
   const historyAppointments = useMemo(
@@ -1629,18 +1738,18 @@ export default function AdminDashboardPage() {
             (apt.status === "completed" ||
               apt.status === "no_show" ||
               apt.status === "cancelled" ||
-              isAppointmentTimePassed(apt))
+              isAppointmentPast(apt))
         )
       ),
-    [appointments, sortChronologically, isAppointmentTimePassed]
+    [appointments, sortChronologically, isAppointmentPast]
   );
 
   const completedRevenue = useMemo(
     () =>
       appointments
-        .filter((apt) => apt.status === "completed")
-        .reduce((sum, apt) => sum + apt.totalPrice, 0),
-    [appointments]
+        .filter((apt) => isCountedInRevenue(apt))
+        .reduce((sum, apt) => sum + (Number(apt.totalPrice) || 0), 0),
+    [appointments, isCountedInRevenue]
   );
 
   // 👥 PERSONEL / KOLTUK BAZLI CİRO HESAPLAMA (GÜNLÜK & AYLIK)
@@ -1648,10 +1757,8 @@ export default function AdminDashboardPage() {
     const todayIso = toStrictIsoDate(todayDay.id);
     const currentMonthPrefix = todayIso.substring(0, 7); // "YYYY-MM"
 
-    // Sadece tamamlanan randevuların cirosunu hesapla
-    const completedApts = appointments.filter(
-      (a) => a.status === "completed" && !a.isBlockedSlot
-    );
+    // Tamamlanan veya saati geçtiği için otomatik Geçmiş'e düşen onaylı randevuların cirosunu hesapla (cancelled/no_show hariç)
+    const completedApts = appointments.filter((a) => isCountedInRevenue(a));
 
     return realBarbers.map((b) => {
       const barberCompleted = completedApts.filter(
@@ -1692,7 +1799,7 @@ export default function AdminDashboardPage() {
         totalCount: barberCompleted.length,
       };
     });
-  }, [realBarbers, appointments, todayDay.id]);
+  }, [realBarbers, appointments, todayDay.id, isCountedInRevenue]);
 
   // Canlı Günlük Özet Şeridi (Mini Dashboard) Metrikleri
   const todaySummaryMetrics = useMemo(() => {
@@ -1701,7 +1808,8 @@ export default function AdminDashboardPage() {
       (a) =>
         !a.isBlockedSlot &&
         getAppointmentIsoDate(a) === todayIso &&
-        a.status !== "cancelled"
+        a.status !== "cancelled" &&
+        a.status !== "no_show"
     );
     const revenue = todayAllApts.reduce(
       (sum, a) => sum + (Number(a.totalPrice) || 0),
@@ -1788,11 +1896,12 @@ export default function AdminDashboardPage() {
     return dayFilteredActiveAppointments.filter(
       (apt) =>
         apt.canComeEarly &&
+        !isAppointmentPast(apt) &&
         (apt.status === "upcoming" ||
           apt.status === "confirmed" ||
           apt.status === "pending")
     );
-  }, [dayFilteredActiveAppointments]);
+  }, [dayFilteredActiveAppointments, isAppointmentPast]);
 
   const displayedAppointments = useMemo(() => {
     let baseList = dayFilteredActiveAppointments;
@@ -2431,10 +2540,24 @@ export default function AdminDashboardPage() {
                     );
                   }
 
-                  const isCompleted = apt.status === "completed";
-                  const isPending = apt.status === "pending";
-                  const isCancelled = apt.status === "cancelled";
+                  const isPastApt = isAppointmentPast(apt);
+                  const isCompleted =
+                    apt.status === "completed" ||
+                    (!apt.isBlockedSlot &&
+                      apt.status !== "cancelled" &&
+                      apt.status !== "no_show" &&
+                      apt.status !== "pending" &&
+                      isPastApt);
+                  const isPending = apt.status === "pending" && !isPastApt;
+                  const isCancelled =
+                    apt.status === "cancelled" ||
+                    (apt.status === "pending" && isPastApt);
                   const isNoShow = apt.status === "no_show";
+                  const aptDuration = Number(apt.totalDuration) || 30;
+                  const aptEndTime =
+                    apt.endTime && !String(apt.endTime).includes("NaN")
+                      ? apt.endTime
+                      : minutesToTime(timeToMinutes(apt.time) + aptDuration);
                   const isBlacklistApt =
                     Boolean(apt.requiresDeposit) ||
                     Boolean(apt.isBlacklisted) ||
@@ -2515,12 +2638,13 @@ export default function AdminDashboardPage() {
                                   </span>
                                 )
                               )}
-                              {apt.status === "confirmed" && (
+                              {apt.status === "confirmed" && !isPastApt && (
                                 <span className="rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[10px] font-black text-emerald-300">
                                   Onaylandı ✅
                                 </span>
                               )}
                               {apt.canComeEarly &&
+                                !isPastApt &&
                                 (apt.status === "upcoming" ||
                                   apt.status === "confirmed" ||
                                   apt.status === "pending") && (
@@ -2531,7 +2655,7 @@ export default function AdminDashboardPage() {
                                 )}
                               {isCompleted && (
                                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[10px] font-black text-emerald-300">
-                                  Geldi
+                                  Tamamlandı ✅
                                 </span>
                               )}
                               {isCancelled && (
@@ -2546,7 +2670,7 @@ export default function AdminDashboardPage() {
                               )}
                             </div>
                             <p className="truncate text-[11px] font-medium text-stone-400">
-                              ✂️ {servicesSummary}
+                              ✂️ {servicesSummary} • ⏱️ {aptDuration} Dk (Bitiş: {aptEndTime})
                             </p>
                           </div>
                         </div>
@@ -5399,9 +5523,11 @@ export default function AdminDashboardPage() {
                       <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
                         {availableRescheduleSlots.map((slotTime) => {
                           const isCurrent = slotTime === mobileRescheduleApt.time;
-                          const duration = mobileRescheduleApt.totalDuration || 30;
+                          const duration = Number(mobileRescheduleApt.totalDuration) || 30;
+                          const slotCount = Math.ceil(duration / 30);
                           const targetStartM = timeToMinutes(slotTime);
                           const targetEndM = targetStartM + duration;
+                          const targetBlockedEndM = targetStartM + slotCount * 30;
                           const closeM = shopSettings?.closeTime
                             ? timeToMinutes(shopSettings.closeTime)
                             : 21 * 60;
@@ -5419,10 +5545,13 @@ export default function AdminDashboardPage() {
                               return false;
                             }
                             const aStartM = timeToMinutes(a.time);
-                            const aEndM = timeToMinutes(
-                              a.endTime || minutesToTime(aStartM + (a.totalDuration || 30))
+                            const aDur = Number(a.totalDuration) || 30;
+                            const aSlotCount = Math.ceil(aDur / 30);
+                            const aEndM = Math.max(
+                              timeToMinutes(a.endTime || minutesToTime(aStartM + aDur)),
+                              aStartM + aSlotCount * 30
                             );
-                            return targetStartM < aEndM && targetEndM > aStartM;
+                            return targetStartM < aEndM && targetBlockedEndM > aStartM;
                           });
 
                           return (

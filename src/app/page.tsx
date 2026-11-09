@@ -291,7 +291,9 @@ export default function CustomerBookingPage() {
   );
 
   const totalDuration = useMemo(
-    () => Math.max(30, selectedServices.reduce((sum, item) => sum + item.duration, 0)),
+    () =>
+      selectedServices.reduce((sum, item) => sum + (Number(item.duration) || 30), 0) ||
+      30,
     [selectedServices]
   );
 
@@ -301,11 +303,11 @@ export default function CustomerBookingPage() {
     [currentDaySlots]
   );
 
-  // Seçilen süreye (örn: 60 dk) ve çalışma saatlerine göre gerçek alınabilir slotlar
+  // Seçilen süreye (örn: 45 dk, 60 dk) ve çalışma saatlerine göre gerçek alınabilir slotlar
   const validAvailableSlots = useMemo(() => {
     const closeM = shopSettings?.closeTime ? timeToMinutes(shopSettings.closeTime) : 21 * 60;
     const step = 30;
-    const requiredBlocks = Math.ceil(totalDuration / step);
+    const slotCount = Math.ceil((Number(totalDuration) || 30) / step);
 
     return availableDaySlots.filter((slot) => {
       // 1. Bugün ise geçmiş saatleri ele
@@ -319,9 +321,9 @@ export default function CustomerBookingPage() {
         return false;
       }
 
-      // 3. 60 dk ve üzeri randevularda ardışık tüm slotların boş olduğunu doğrula
-      if (requiredBlocks > 1) {
-        for (let i = 1; i < requiredBlocks; i++) {
+      // 3. 45 dk, 60 dk ve üzeri randevularda Math.ceil ile hesaplanan ardışık tüm slotların boş olduğunu doğrula
+      if (slotCount > 1) {
+        for (let i = 1; i < slotCount; i++) {
           const nextTime = minutesToTime(startM + i * step);
           const nextSlot = currentDaySlots.find((s) => s.time === nextTime);
           if (!nextSlot || nextSlot.state !== "available") {
