@@ -773,9 +773,7 @@ export default function AdminDashboardPage() {
   }, [quickAvailableSlots, quickTime]);
 
   const toggleQuickService = (id: string) => {
-    setQuickServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setQuickServiceIds([id]);
   };
 
   const handleSaveQuickAdd = (e: React.FormEvent) => {
@@ -3595,13 +3593,13 @@ export default function AdminDashboardPage() {
                     >
                       <span className="flex items-center gap-2 font-extrabold">
                         <span
-                          className={`flex h-5 w-5 items-center justify-center rounded border ${
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
                             active
                               ? "border-emerald-400 bg-emerald-500 text-[#06150f]"
-                              : "border-white/25"
+                              : "border-white/25 bg-transparent text-transparent"
                           }`}
                         >
-                          {active && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                          {active && <Check className="h-2.5 w-2.5 stroke-[3]" />}
                         </span>
                         <span className="text-sm">{srv.name}</span>
                       </span>

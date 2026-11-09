@@ -234,10 +234,13 @@ export default function CustomerBookingPage() {
   useEffect(() => {
     setSelectedServiceIds((prev) => {
       const valid = prev.filter((id) => services.some((s) => s.id === id));
-      if (valid.length === 0 && services.length > 0) {
+      if (valid.length > 0) {
+        return [valid[0]]; // Her zaman tek seçim
+      }
+      if (services.length > 0) {
         return [services[0].id];
       }
-      return valid;
+      return [];
     });
   }, [services]);
 
@@ -372,9 +375,7 @@ export default function CustomerBookingPage() {
     currentShop.depositPolicy === "block_booking" && isNoShowPhone;
 
   const toggleService = (id: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setSelectedServiceIds([id]);
   };
 
   const calculateEndTime = (startTime: string, durationMinutes: number) => {
@@ -791,13 +792,13 @@ export default function CustomerBookingPage() {
                             {service.name}
                           </span>
                           <span
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition ${
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
                               isSelected
                                 ? "border-emerald-300 bg-emerald-500 text-[#081510]"
                                 : "border-white/20 bg-transparent text-transparent"
                             }`}
                           >
-                            <Check className="h-3 w-3 stroke-[3]" />
+                            <Check className="h-2.5 w-2.5 stroke-[3]" />
                           </span>
                         </div>
                         <div className="mt-2 flex w-full items-baseline justify-between border-t border-white/5 pt-1">
