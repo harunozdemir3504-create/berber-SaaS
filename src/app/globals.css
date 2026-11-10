@@ -58,6 +58,63 @@ textarea {
   scrollbar-width: none;
 }
 
+/* =================================================================== */
+/* LUXURY TECH ANIMATIONS: FLOAT, PULSE-GLOW & SHIMMER                 */
+/* =================================================================== */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-16px) rotate(0.4deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-150%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-float {
+  animation: float 4.5s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 5s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Custom subtle scrollbars for desktop */
 ::-webkit-scrollbar {
   width: 6px;
