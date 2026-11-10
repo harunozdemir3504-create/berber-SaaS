@@ -3447,155 +3447,338 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ===================================================================== */}
-        {/* SEKME 2: ➕ HIZLI EKLE (ULTRA KOMPAKT POS EKRANI - ZERO SCROLL)       */}
+        {/* SEKME 2: ➕ HIZLI EKLE (PREMIUM EXECUTIVE POS EKRANI)                 */}
         {/* ===================================================================== */}
         {bottomTab === "quick_add" && (
           <form
             onSubmit={handleSaveQuickAdd}
-            className="flex flex-col gap-2 rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-2.5 shadow-xl sm:p-3"
+            className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200 dark:border-[#dfc39e]/25 bg-white dark:bg-[#141416] p-3.5 sm:p-5 shadow-xl dark:shadow-2xl dark:shadow-black/60 flex flex-col gap-3.5 transition-all"
           >
-            {/* Satır 1 — Gün ve Koltuk/Usta Seçimi (Tek Kompakt Alan) */}
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
-              {/* Gün Seçimi (Bugün / Yarın) */}
-              <div className="flex items-center gap-1.5">
-                {liveDays.slice(0, 2).map((d) => {
-                  const isSelected =
-                    quickDayId === d.id ||
-                    toStrictIsoDate(quickDayId) === toStrictIsoDate(d.isoDate || d.id);
-                  return (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => {
-                        setQuickDayId(d.id);
-                        setQuickTime("");
-                      }}
-                      className={`cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        isSelected
-                          ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm"
-                          : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-600 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/30"
-                      }`}
-                    >
-                      {d.isToday ? "📅 Bugün" : d.isTomorrow ? "📅 Yarın" : d.chipLabel}
-                    </button>
-                  );
-                })}
+            {/* Üst Zarif Altın Vurgu Çizgisi */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#dfc39e] to-transparent opacity-80" />
+
+            {/* Başlık & Canlı Durum Özeti */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-stone-100 dark:border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#dfc39e] to-[#b38e5d] text-[#1a110b] shadow-md shadow-[#dfc39e]/20">
+                  <Zap className="h-4 w-4 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-black tracking-tight text-stone-900 dark:text-[#fdf8f5]">
+                    Hızlı Randevu Girişi
+                  </h2>
+                  <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">
+                    Seçimleri yapın, tek dokunuşla anında randevu oluşturun.
+                  </p>
+                </div>
+              </div>
+
+              {/* Canlı Seçim Özeti Rozeti */}
+              <div className="hidden sm:flex items-center gap-2 rounded-full bg-stone-100 dark:bg-white/[0.05] border border-stone-200 dark:border-white/10 px-3 py-1 text-xs">
+                <span className="font-extrabold text-[#dfc39e]">
+                  {quickSelectedDay?.isToday ? "Bugün" : quickSelectedDay?.isTomorrow ? "Yarın" : quickSelectedDay?.chipLabel}
+                </span>
+                <span className="text-stone-300 dark:text-stone-600">•</span>
+                <span className="font-bold text-stone-700 dark:text-stone-300">{quickSelectedBarber?.name}</span>
+                {quickTime && (
+                  <>
+                    <span className="text-stone-300 dark:text-stone-600">•</span>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">{quickTime}</span>
+                  </>
+                )}
+                {quickTotalPrice > 0 && (
+                  <>
+                    <span className="text-stone-300 dark:text-stone-600">•</span>
+                    <span className="font-black text-[#dfc39e]">{quickTotalPrice}₺</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Satır 1 — Gün ve Koltuk/Usta Seçimi (Adım 1) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {/* Gün Seçimi */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between px-0.5">
+                  <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    <CalendarDays className="h-3.5 w-3.5 text-[#dfc39e]" />
+                    <span>1. Tarih</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-stone-400">
+                    {quickSelectedDay?.dateStr || ""}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {liveDays.slice(0, 2).map((d) => {
+                    const isSelected =
+                      quickDayId === d.id ||
+                      toStrictIsoDate(quickDayId) === toStrictIsoDate(d.isoDate || d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          setQuickDayId(d.id);
+                          setQuickTime("");
+                        }}
+                        className={`cursor-pointer relative flex items-center justify-center gap-2 rounded-xl py-2 px-3 text-xs font-bold transition-all ${
+                          isSelected
+                            ? "bg-gradient-to-r from-[#dfc39e] to-[#cba37b] text-[#1a110b] font-black shadow-md shadow-[#dfc39e]/20 ring-1 ring-[#dfc39e]"
+                            : "border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#181411] text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-white/25 hover:bg-stone-100 dark:hover:bg-[#1f1a16]"
+                        }`}
+                      >
+                        <CalendarDays className={`h-3.5 w-3.5 ${isSelected ? "text-[#1a110b]" : "text-[#dfc39e]"}`} />
+                        <span>{d.isToday ? "Bugün" : d.isTomorrow ? "Yarın" : d.chipLabel}</span>
+                        {d.isToday && (
+                          <span
+                            className={`text-[9px] px-1 rounded font-black uppercase ${
+                              isSelected
+                                ? "bg-[#1a110b]/15 text-[#1a110b]"
+                                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                            }`}
+                          >
+                            Canlı
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Usta / Koltuk Seçimi */}
-              <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
-                {(realBarbers.length > 0 ? realBarbers : barbers).map((b) => {
-                  const isSelected =
-                    (quickBarberId || (realBarbers[0]?.id ?? barbers[0]?.id)) === b.id;
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between px-0.5">
+                  <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    <Scissors className="h-3.5 w-3.5 text-[#dfc39e]" />
+                    <span>Usta / Koltuk</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-stone-400 truncate max-w-[120px]">
+                    {quickSelectedBarber?.chairName || ""}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 custom-scrollbar">
+                  {(realBarbers.length > 0 ? realBarbers : barbers).map((b) => {
+                    const isSelected =
+                      (quickBarberId || (realBarbers[0]?.id ?? barbers[0]?.id)) === b.id;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setQuickBarberId(b.id)}
+                        className={`cursor-pointer shrink-0 flex items-center gap-1.5 rounded-xl py-2 px-3 text-xs font-bold transition-all ${
+                          isSelected
+                            ? "bg-gradient-to-r from-[#dfc39e] to-[#cba37b] text-[#1a110b] font-black shadow-md shadow-[#dfc39e]/20 ring-1 ring-[#dfc39e]"
+                            : "border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#181411] text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-white/25 hover:bg-stone-100 dark:hover:bg-[#1f1a16]"
+                        }`}
+                      >
+                        <Scissors className={`h-3.5 w-3.5 ${isSelected ? "text-[#1a110b]" : "text-[#dfc39e]"}`} />
+                        <span>{b.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Satır 2 — Hizmet Seçimi (Adım 2) */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                  <Scissors className="h-3.5 w-3.5 text-[#dfc39e]" />
+                  <span>2. Hizmet Seçimi</span>
+                </span>
+                {quickSelectedServices.length > 0 && (
+                  <span className="text-[11px] font-black text-[#dfc39e]">
+                    Toplam: {quickTotalPrice}₺ • {quickTotalDuration} dk
+                  </span>
+                )}
+              </div>
+
+              <div
+                className={`grid gap-2 ${
+                  services.length >= 4
+                    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                    : services.length === 3
+                    ? "grid-cols-3"
+                    : "grid-cols-2"
+                }`}
+              >
+                {services.map((srv) => {
+                  const isSelected = quickServiceIds.includes(srv.id);
+                  const price = getServicePriceForBarber(srv, quickSelectedBarber);
+                  const duration = Number(srv.duration) || 30;
                   return (
                     <button
-                      key={b.id}
+                      key={srv.id}
                       type="button"
-                      onClick={() => setQuickBarberId(b.id)}
-                      className={`cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shrink-0 ${
+                      onClick={() => toggleQuickService(srv.id)}
+                      className={`cursor-pointer group relative flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${
                         isSelected
-                          ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm"
-                          : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-600 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/30"
+                          ? "border-[#dfc39e] bg-[#dfc39e]/15 dark:bg-[#dfc39e]/15 shadow-sm ring-1 ring-[#dfc39e]"
+                          : "border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#181411] hover:border-stone-300 dark:hover:border-white/25 hover:bg-stone-100 dark:hover:bg-[#1f1a16]"
                       }`}
                     >
-                      ✂️ {b.name}
+                      <div className="flex items-start justify-between gap-1 mb-1.5">
+                        <span
+                          className={`text-xs font-black line-clamp-1 ${
+                            isSelected
+                              ? "text-stone-900 dark:text-[#fdf8f5]"
+                              : "text-stone-800 dark:text-stone-200"
+                          }`}
+                        >
+                          {srv.name}
+                        </span>
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-all ${
+                            isSelected
+                              ? "bg-[#dfc39e] text-[#1a110b]"
+                              : "border border-stone-300 dark:border-white/20 bg-transparent text-transparent"
+                          }`}
+                        >
+                          <Check className="h-2.5 w-2.5 stroke-[3]" />
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400">
+                          ⏱️ {duration} dk
+                        </span>
+                        <span
+                          className={`font-black ${
+                            isSelected
+                              ? "text-[#1a110b] dark:text-[#dfc39e]"
+                              : "text-stone-700 dark:text-stone-300"
+                          }`}
+                        >
+                          {price}₺
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Satır 2 — İşlem Seçimi (Yan Yana Kompakt Butonlar) */}
-            <div
-              className={`grid gap-1.5 ${
-                services.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"
-              }`}
-            >
-              {services.map((srv) => {
-                const isSelected = quickServiceIds.includes(srv.id);
-                const price = getServicePriceForBarber(srv, quickSelectedBarber);
-                return (
-                  <button
-                    key={srv.id}
-                    type="button"
-                    onClick={() => toggleQuickService(srv.id)}
-                    className={`cursor-pointer py-2 px-2.5 text-xs font-semibold rounded-lg transition-all text-center truncate ${
-                      isSelected
-                        ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm ring-1 ring-[#dfc39e]"
-                        : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-white/20"
-                    }`}
-                  >
-                    {srv.name} • {price}₺
-                  </button>
-                );
-              })}
+            {/* Satır 3 — Boş Saatler (Adım 3) */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>3. Uygun Saatler</span>
+                </span>
+                <span className="rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  {quickAvailableSlots.length > 0
+                    ? `${quickAvailableSlots.length} saat müsait`
+                    : "Müsait saat yok"}
+                </span>
+              </div>
+
+              {quickAvailableSlots.length === 0 ? (
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 p-3 text-center text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center justify-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>
+                    {isQuickDayToday
+                      ? "Bugün için seçilen personelde uygun boş saat kalmadı."
+                      : "Bu gün için seçilen personelde uygun boş saat kalmadı."}
+                  </span>
+                </div>
+              ) : (
+                <div className="max-h-[115px] overflow-y-auto pr-1 grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5 custom-scrollbar">
+                  {quickAvailableSlots.map((slot) => {
+                    const isSelected = quickTime === slot.time;
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        onClick={() => setQuickTime(slot.time)}
+                        className={`cursor-pointer py-2 px-1 text-xs font-black rounded-xl transition-all text-center ${
+                          isSelected
+                            ? "bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 text-stone-950 font-black shadow-md shadow-emerald-500/30 ring-2 ring-emerald-300 scale-[1.02]"
+                            : "border border-emerald-500/20 bg-emerald-500/5 dark:bg-[#131d17] text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-500/40"
+                        }`}
+                      >
+                        {slot.time}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Satır 3 — Boş Saatler (4'lü / 5'li Sıkı Grid) */}
-            {quickAvailableSlots.length === 0 ? (
-              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 py-2 px-3 text-center text-xs font-bold text-amber-700 dark:text-amber-400">
-                {isQuickDayToday
-                  ? "Bugün için uygun boş saat kalmadı."
-                  : "Bu gün için uygun boş saat kalmadı."}
+            {/* Satır 4 — Müşteri Adı ve Telefon (Adım 4) */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                  <User className="h-3.5 w-3.5 text-[#dfc39e]" />
+                  <span>4. Müşteri Bilgisi</span>
+                </span>
+                <span className="text-[10px] font-bold text-stone-400">
+                  İsim boşsa otomatik "Misafir" yazılır
+                </span>
               </div>
-            ) : (
-              <div className="max-h-[105px] overflow-y-auto pr-0.5 grid grid-cols-4 sm:grid-cols-5 gap-1.5">
-                {quickAvailableSlots.map((slot) => {
-                  const isSelected = quickTime === slot.time;
-                  return (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      onClick={() => setQuickTime(slot.time)}
-                      className={`cursor-pointer py-1.5 text-xs font-bold rounded-md transition-all text-center ${
-                        isSelected
-                          ? "bg-emerald-500 text-stone-950 font-black shadow-sm ring-1 ring-emerald-400"
-                          : "border border-stone-200 dark:border-emerald-500/20 bg-stone-50 dark:bg-[#151e18] text-emerald-800 dark:text-emerald-300 hover:border-emerald-400/50"
-                      }`}
-                    >
-                      {slot.time}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
 
-            {/* Satır 4 — Müşteri Adı ve Telefon (Yan Yana Tek Satırda) */}
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={quickName}
-                onChange={(e) => setQuickName(e.target.value)}
-                placeholder="Müşteri Adı (Boş: Misafir)"
-                className="h-9 w-full rounded-lg border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-[#181411] px-3 text-sm font-semibold text-stone-900 dark:text-white placeholder-stone-400 outline-none focus:border-[#dfc39e]"
-              />
-              <input
-                type="tel"
-                value={quickPhone}
-                onChange={(e) => setQuickPhone(e.target.value)}
-                placeholder="Telefon (İsteğe Bağlı)"
-                className="h-9 w-full rounded-lg border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-[#181411] px-3 text-sm font-semibold text-stone-900 dark:text-white placeholder-stone-400 outline-none focus:border-emerald-500"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="relative flex items-center">
+                  <div className="pointer-events-none absolute left-3 flex items-center text-[#dfc39e]">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={quickName}
+                    onChange={(e) => setQuickName(e.target.value)}
+                    placeholder="Müşteri Adı (Boş: Misafir)"
+                    className="h-10 w-full rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#181411] pl-9 pr-3 text-xs sm:text-sm font-semibold text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 outline-none transition-all focus:border-[#dfc39e] focus:ring-2 focus:ring-[#dfc39e]/20"
+                  />
+                </div>
+
+                <div className="relative flex items-center">
+                  <div className="pointer-events-none absolute left-3 flex items-center text-emerald-500">
+                    <Phone className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="tel"
+                    value={quickPhone}
+                    onChange={(e) => setQuickPhone(e.target.value)}
+                    placeholder="Telefon (İsteğe Bağlı: 05XX...)"
+                    className="h-10 w-full rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#181411] pl-9 pr-3 text-xs sm:text-sm font-semibold text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Satır 5 — Hızlı Kaydet Butonu */}
+            {/* Satır 5 — Hızlı Kaydet Butonu (Adım 5) */}
             {quickError && (
-              <div className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-500 dark:text-rose-300">
-                {quickError}
+              <div className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                <span>{quickError}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={!quickTime || quickAvailableSlots.length === 0}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 text-stone-950 font-black shadow-md shadow-emerald-500/20 transition hover:brightness-105 active:scale-[0.99] disabled:opacity-50 text-sm sm:text-base cursor-pointer"
+              className="cursor-pointer group relative flex h-12 w-full items-center justify-between rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 px-4 text-stone-950 font-black shadow-lg shadow-emerald-500/25 transition-all hover:brightness-105 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:filter-none"
             >
-              <span>⚡ Hemen Randevu Ekle</span>
-              {quickTotalPrice > 0 && (
-                <span className="rounded-md bg-stone-950/20 px-2 py-0.5 text-xs font-black">
-                  {quickTotalPrice}₺
+              <div className="flex items-center gap-2 text-sm sm:text-base">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-950/20 text-stone-950">
+                  <Zap className="h-4 w-4 fill-stone-950" />
                 </span>
-              )}
+                <span>Hemen Randevu Ekle</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {quickTime && (
+                  <span className="rounded-lg bg-stone-950/20 px-2.5 py-1 text-xs font-extrabold tracking-wide">
+                    ⏰ {quickTime}
+                  </span>
+                )}
+                {quickTotalPrice > 0 && (
+                  <span className="rounded-lg bg-stone-950 text-white dark:text-[#dfc39e] px-2.5 py-1 text-xs font-black shadow-sm">
+                    {quickTotalPrice}₺
+                  </span>
+                )}
+              </div>
             </button>
           </form>
         )}
