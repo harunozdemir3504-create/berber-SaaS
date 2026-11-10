@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone,
@@ -29,6 +30,8 @@ interface PwaInstallBannerProps {
 export default function PwaInstallBanner({
   mode = "admin",
 }: PwaInstallBannerProps) {
+  const pathname = usePathname();
+  const isAdminRoute = Boolean(pathname?.startsWith("/admin"));
   const isCustomer = mode === "customer";
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
@@ -39,7 +42,7 @@ export default function PwaInstallBanner({
   const [dismissed, setDismissed] = useState<boolean>(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !isAdminRoute) return;
 
     // 1. Register Service Worker so Chrome/Android enables PWA install prompt
     if ("serviceWorker" in navigator) {
@@ -103,10 +106,10 @@ export default function PwaInstallBanner({
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, [isCustomer]);
+  }, [isCustomer, isAdminRoute]);
 
-  // Do not render if already installed/running in standalone mode or dismissed
-  if (isStandalone || dismissed) {
+  // Sadece ve sadece /admin rotasında göster; ana tanıtım (/) veya müşteri sayfalarında kesinlikle gizle
+  if (!isAdminRoute || isStandalone || dismissed) {
     return null;
   }
 
