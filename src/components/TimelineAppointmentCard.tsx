@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import type { Appointment } from "@/data/mockData";
-import { buildWhatsAppUrl, formatPhoneDisplay } from "@/lib/whatsapp";
+import { buildWhatsAppUrl, formatPhoneDisplay, hasValidCustomerPhone } from "@/lib/whatsapp";
 import { timeToMinutes, minutesToTime } from "@/context/BarberContext";
 
 /* -------------------------------------------------------------------------- */
@@ -262,7 +262,13 @@ function TimelineAppointmentCardBase({
             </div>
             <div className="flex items-center justify-between gap-2 min-w-0 text-[11px] text-stone-500 dark:text-stone-400">
               <span className="truncate">💈 {apt.chairLabel || apt.barberName}</span>
-              {phoneDisplay && <span className="shrink-0 font-mono">📞 {phoneDisplay}</span>}
+              {hasValidCustomerPhone(apt.customerPhone) ? (
+                <span className="shrink-0 font-mono">📞 {phoneDisplay}</span>
+              ) : (
+                <span className="shrink-0 text-[10px] text-stone-400 dark:text-stone-500 font-medium">
+                  📵 Numara Girilmedi (Kapı Müşterisi)
+                </span>
+              )}
             </div>
           </div>
         </>
@@ -304,12 +310,16 @@ function TimelineAppointmentCardBase({
           </div>
 
           {/* 3. Katman: Alt Bilgi Barı */}
-          {phoneDisplay && (
-            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-0.5">
+          <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-0.5">
+            {hasValidCustomerPhone(apt.customerPhone) ? (
               <span className="font-mono font-bold">📞 {phoneDisplay}</span>
-              <span className="text-[10px] text-amber-600 dark:text-[#dfc39e] font-semibold">Dokunarak menüyü açın ➔</span>
-            </div>
-          )}
+            ) : (
+              <span className="text-[11px] text-stone-400 dark:text-stone-500 font-medium">
+                📵 Numara Girilmedi (Kapı Müşterisi)
+              </span>
+            )}
+            <span className="text-[10px] text-amber-600 dark:text-[#dfc39e] font-semibold">Dokunarak menüyü açın ➔</span>
+          </div>
         </>
       )}
     </div>

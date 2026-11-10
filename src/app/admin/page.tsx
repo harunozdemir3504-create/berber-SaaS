@@ -55,6 +55,7 @@ import {
   formatPhoneForWhatsApp,
   formatPhoneDisplay,
   buildWhatsAppUrl,
+  hasValidCustomerPhone,
   minutesToTime,
   timeToMinutes,
   getShopBookingUrl,
@@ -824,8 +825,8 @@ export default function AdminDashboardPage() {
     }
 
     const finalName = quickName.trim() || "Misafir";
-    const finalPhone =
-      quickPhone.trim() || currentShop.phone || "0555 000 00 00";
+    // KESİN KURAL: Müşteri telefonu boşsa ASLA dükkanın numarasını veya sahte numara atama! Boş string kaydedilir.
+    const finalPhone = quickPhone.trim() ? quickPhone.trim() : "";
     const strictQuickDate = toStrictIsoDate(quickSelectedDay.isoDate || quickSelectedDay.id);
     const safeDuration = Number(quickTotalDuration) || 30;
     const startMinutes = timeToMinutes(quickTime);
@@ -880,6 +881,14 @@ export default function AdminDashboardPage() {
 
   // Kara Liste İşlemleri
   const handleOpenNoShowModal = (apt: Appointment) => {
+    if (!hasValidCustomerPhone(apt.customerPhone)) {
+      triggerToast(
+        "Kara Listeye Alınamaz ⚠️",
+        "Bu randevuda telefon numarası bulunmuyor (Kapı Müşterisi). Kara listeye almak için önce geçerli bir numara girilmelidir.",
+        "warning"
+      );
+      return;
+    }
     setNoShowConfirmModal({
       isOpen: true,
       appointment: apt,
@@ -2570,7 +2579,8 @@ export default function AdminDashboardPage() {
                   const isBlacklistApt =
                     Boolean(apt.requiresDeposit) ||
                     Boolean(apt.isBlacklisted) ||
-                    Boolean(isPhoneBlacklisted(apt.customerPhone));
+                    (hasValidCustomerPhone(apt.customerPhone) &&
+                      Boolean(isPhoneBlacklisted(apt.customerPhone)));
                   const isExpanded = expandedAptId === apt.id;
                   const servicesSummary = apt.services
                     .map((s) => s.name)
@@ -2786,52 +2796,65 @@ export default function AdminDashboardPage() {
                                 </div>
                               ) : (
                                 <div className="inline-flex items-center gap-2">
-                                  <span className="font-mono text-sm font-black text-stone-900 dark:text-[#dfc39e]">
-                                    {formatPhoneDisplay(apt.customerPhone)}
-                                  </span>
+                                  {hasValidCustomerPhone(apt.customerPhone) ? (
+                                    <span className="font-mono text-sm font-black text-stone-900 dark:text-[#dfc39e]">
+                                      {formatPhoneDisplay(apt.customerPhone)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-stone-400 dark:text-stone-500">
+                                      📵 Numara Girilmedi (Kapı Müşterisi)
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setEditingPhoneAptId(apt.id);
-                                      setEditingPhoneValue(apt.customerPhone);
+                                      setEditingPhoneValue(hasValidCustomerPhone(apt.customerPhone) ? apt.customerPhone : "");
                                     }}
                                     className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-stone-300 hover:bg-white/10 transition cursor-pointer"
-                                    title="Numarayı Düzenle"
+                                    title={hasValidCustomerPhone(apt.customerPhone) ? "Numarayı Düzenle" : "Numara Ekle"}
                                   >
                                     <Edit3 className="h-2.5 w-2.5" />
-                                    <span>Düzenle</span>
+                                    <span>{hasValidCustomerPhone(apt.customerPhone) ? "Düzenle" : "+ Numara Ekle"}</span>
                                   </button>
                                 </div>
                               )}
                             </div>
 
                             {/* Doğrudan İletişim Butonları */}
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={`tel:${apt.customerPhone}`}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer"
-                              >
-                                <Phone className="h-3.5 w-3.5" />
-                                <span>📞 Müşteriyi Ara</span>
-                              </a>
-                              <a
-                                href={buildWhatsAppUrl(
-                                  apt.customerPhone,
-                                  `Merhaba ${apt.customerName}, ${currentShop.name} randevunuz hk: Tarih: ${cleanDateLabel}, Saat: ${apt.time}.`
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#25D366]/40 bg-[#25D366]/15 px-3 py-1.5 text-xs font-bold text-[#25D366] hover:bg-[#25D366]/25 transition cursor-pointer"
-                              >
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                <span>💬 WhatsApp</span>
-                              </a>
-                            </div>
+                            {hasValidCustomerPhone(apt.customerPhone) ? (
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={`tel:${apt.customerPhone}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer"
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                  <span>📞 Müşteriyi Ara</span>
+                                </a>
+                                <a
+                                  href={buildWhatsAppUrl(
+                                    apt.customerPhone,
+                                    `Merhaba ${apt.customerName}, ${currentShop.name} randevunuz hk: Tarih: ${cleanDateLabel}, Saat: ${apt.time}.`
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#25D366]/40 bg-[#25D366]/15 px-3 py-1.5 text-xs font-bold text-[#25D366] hover:bg-[#25D366]/25 transition cursor-pointer"
+                                >
+                                  <MessageCircle className="h-3.5 w-3.5" />
+                                  <span>💬 WhatsApp</span>
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 text-[11px] font-medium text-stone-400 dark:text-stone-500 italic">
+                                <span>📵 İletişim butonları kapalı (Kapı Müşterisi)</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* 🚨 Kara Liste / Kapora Bekliyor Uyarısı */}
-                          {(apt.status === "pending" || isPhoneBlacklisted(apt.customerPhone) || apt.requiresDeposit || apt.isBlacklisted) && (
+                          {((apt.status === "pending" && (apt.requiresDeposit || apt.isBlacklisted)) ||
+                            (hasValidCustomerPhone(apt.customerPhone) && isPhoneBlacklisted(apt.customerPhone))) && (
                             <div className="rounded-xl border border-rose-500/50 bg-rose-950/30 p-2.5 text-xs text-rose-200 flex flex-wrap items-center justify-between gap-2">
                               <span className="font-bold flex items-center gap-1.5">
                                 <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
@@ -2930,7 +2953,7 @@ export default function AdminDashboardPage() {
                                 <span>{updatingId === apt.id ? "Siliniyor..." : "🗑️ Sil / İptal Et"}</span>
                               </button>
 
-                              {isPhoneBlacklisted(apt.customerPhone) ? (
+                              {hasValidCustomerPhone(apt.customerPhone) && isPhoneBlacklisted(apt.customerPhone) ? (
                                 <button
                                   type="button"
                                   disabled={updatingId === apt.id}
@@ -2939,7 +2962,7 @@ export default function AdminDashboardPage() {
                                 >
                                   <span>Kara Listeden Çıkar</span>
                                 </button>
-                              ) : (
+                              ) : hasValidCustomerPhone(apt.customerPhone) ? (
                                 <button
                                   type="button"
                                   disabled={updatingId === apt.id}
@@ -2951,6 +2974,15 @@ export default function AdminDashboardPage() {
                                 >
                                   <AlertTriangle className="h-4 w-4" />
                                   <span>Kara Listeye Al</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  title="Telefon numarası bulunmadığı için kara listeye alınamaz"
+                                  className="flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 dark:border-white/10 bg-stone-100/50 dark:bg-white/5 py-2 px-3 text-xs font-semibold text-stone-400 dark:text-stone-500 opacity-50 cursor-not-allowed select-none"
+                                >
+                                  <span>📵 Numara Yok</span>
                                 </button>
                               )}
                             </div>
@@ -3347,7 +3379,8 @@ export default function AdminDashboardPage() {
                             const isBlacklistApt =
                               Boolean(apt.requiresDeposit) ||
                               Boolean(apt.isBlacklisted) ||
-                              Boolean(isPhoneBlacklisted(apt.customerPhone));
+                              (hasValidCustomerPhone(apt.customerPhone) &&
+                                Boolean(isPhoneBlacklisted(apt.customerPhone)));
                             return (
                               <TimelineAppointmentCard
                                 key={apt.id}
@@ -4389,39 +4422,55 @@ export default function AdminDashboardPage() {
                       </span>
                       {activeAppointments
                         .filter((a) => !a.isBlockedSlot)
-                        .map((apt) => (
-                          <div
-                            key={apt.id}
-                            className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] px-3 py-2 text-xs"
-                          >
-                            <span className="font-bold text-stone-900 dark:text-[#fdf8f5]">
-                              {apt.time} • {apt.customerName} (
-                              {apt.customerPhone})
-                            </span>
-                            {isPhoneBlacklisted(apt.customerPhone) ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenRemoveBlacklistModal(
-                                    apt.customerPhone,
-                                    apt.customerName
-                                  )
-                                }
-                                className="rounded-lg border border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-1 font-bold text-amber-900 dark:text-amber-300"
-                              >
-                                Kara Listeden Çıkar
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenNoShowModal(apt)}
-                                className="rounded-lg border border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-2.5 py-1 font-bold text-rose-900 dark:text-rose-300"
-                              >
-                                Kara Listeye Al
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                        .map((apt) => {
+                          const hasPhone = hasValidCustomerPhone(apt.customerPhone);
+                          const isBlacklisted = hasPhone && isPhoneBlacklisted(apt.customerPhone);
+                          return (
+                            <div
+                              key={apt.id}
+                              className="flex items-center justify-between gap-2 rounded-xl border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-[#101012] px-3 py-2 text-xs"
+                            >
+                              <span className="font-bold text-stone-900 dark:text-[#fdf8f5]">
+                                {apt.time} • {apt.customerName}
+                                {hasPhone ? (
+                                  <span className="ml-1 text-stone-500 dark:text-stone-400 font-mono">
+                                    ({apt.customerPhone})
+                                  </span>
+                                ) : (
+                                  <span className="ml-1.5 text-[11px] font-medium text-stone-400 dark:text-stone-500">
+                                    📵 Numara Girilmedi (Kapı Müşterisi)
+                                  </span>
+                                )}
+                              </span>
+                              {isBlacklisted ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOpenRemoveBlacklistModal(
+                                      apt.customerPhone,
+                                      apt.customerName
+                                    )
+                                  }
+                                  className="rounded-lg border border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-2.5 py-1 font-bold text-amber-900 dark:text-amber-300"
+                                >
+                                  Kara Listeden Çıkar
+                                </button>
+                              ) : hasPhone ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenNoShowModal(apt)}
+                                  className="rounded-lg border border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-2.5 py-1 font-bold text-rose-900 dark:text-rose-300"
+                                >
+                                  Kara Listeye Al
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-bold text-stone-400 dark:text-stone-500">
+                                  Numara Yok
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                     </div>
                   )}
 
@@ -5872,9 +5921,15 @@ export default function AdminDashboardPage() {
                   {/* Telefon Numarası */}
                   <div className="flex items-center justify-between pt-2 border-t border-stone-200 dark:border-white/5 text-xs">
                     <span className="font-bold text-stone-500 dark:text-stone-400">Telefon:</span>
-                    <span className="font-mono font-black text-stone-900 dark:text-[#dfc39e] tracking-wider">
-                      {formatPhoneDisplay(activeDetailApt.customerPhone)}
-                    </span>
+                    {hasValidCustomerPhone(activeDetailApt.customerPhone) ? (
+                      <span className="font-mono font-black text-stone-900 dark:text-[#dfc39e] tracking-wider">
+                        {formatPhoneDisplay(activeDetailApt.customerPhone)}
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-stone-400 dark:text-stone-500">
+                        📵 Numara Girilmedi (Kapı Müşterisi)
+                      </span>
+                    )}
                   </div>
 
                   {activeDetailApt.canComeEarly && (
@@ -5971,27 +6026,33 @@ export default function AdminDashboardPage() {
                   </button>
 
                   {/* 3. BUTONLAR: ARA & WHATSAPP (YAN YANA 2 BÜYÜK BUTON) */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <a
-                      href={`tel:${activeDetailApt.customerPhone}`}
-                      onClick={() => setSelectedDetailApt(null)}
-                      className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 py-3.5 px-2 text-xs sm:text-sm font-black text-emerald-800 dark:text-emerald-300 shadow-sm transition active:scale-[0.98] truncate"
-                    >
-                      <PhoneCall className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                      <span className="truncate">📞 Hemen Ara</span>
-                    </a>
+                  {hasValidCustomerPhone(activeDetailApt.customerPhone) ? (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <a
+                        href={`tel:${activeDetailApt.customerPhone}`}
+                        onClick={() => setSelectedDetailApt(null)}
+                        className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 py-3.5 px-2 text-xs sm:text-sm font-black text-emerald-800 dark:text-emerald-300 shadow-sm transition active:scale-[0.98] truncate"
+                      >
+                        <PhoneCall className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                        <span className="truncate">📞 Hemen Ara</span>
+                      </a>
 
-                    <a
-                      href={detailAptWaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setSelectedDetailApt(null)}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] py-3.5 px-2 text-xs sm:text-sm font-black text-[#041a0b] shadow-md shadow-[#25D366]/20 transition active:scale-[0.98] truncate"
-                    >
-                      <MessageCircle className="h-4 w-4 shrink-0 fill-current" />
-                      <span className="truncate">💬 WhatsApp</span>
-                    </a>
-                  </div>
+                      <a
+                        href={detailAptWaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setSelectedDetailApt(null)}
+                        className="flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] py-3.5 px-2 text-xs sm:text-sm font-black text-[#041a0b] shadow-md shadow-[#25D366]/20 transition active:scale-[0.98] truncate"
+                      >
+                        <MessageCircle className="h-4 w-4 shrink-0 fill-current" />
+                        <span className="truncate">💬 WhatsApp</span>
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-stone-200 dark:border-white/10 bg-stone-100/70 dark:bg-white/[0.03] py-3 px-3 text-xs font-semibold text-stone-400 dark:text-stone-500 select-none">
+                      <span>📵 Numara Girilmedi (Kapı Müşterisi — Arama & WhatsApp kapalı)</span>
+                    </div>
+                  )}
 
                   {/* 4. BUTON: RANDEVUYU SİL / İPTAL ET */}
                   <button

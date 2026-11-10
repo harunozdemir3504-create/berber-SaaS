@@ -1,6 +1,32 @@
 export const DEFAULT_SHOP_WHATSAPP_PHONE = "905550000000";
 
 /**
+ * Müşteri telefon numarasının geçerli, aranabilir gerçek bir cep numarası olup olmadığını denetler.
+ * Boş string, "-", "Belirtilmedi", eksik haneli veya sahte numaraları geçersiz sayar.
+ */
+export function hasValidCustomerPhone(phone?: string | null): boolean {
+  if (!phone) return false;
+  const trimmed = String(phone).trim();
+  if (
+    !trimmed ||
+    trimmed === "-" ||
+    trimmed === "--" ||
+    trimmed.toLowerCase() === "belirtilmedi" ||
+    trimmed.toLowerCase() === "telefon belirtilmedi" ||
+    trimmed.toLowerCase() === "numara yok" ||
+    trimmed.toLowerCase() === "numara girilmedi" ||
+    trimmed.toLowerCase() === "yok" ||
+    trimmed.toLowerCase() === "null" ||
+    trimmed.toLowerCase() === "undefined"
+  ) {
+    return false;
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  // Gerçek bir Türkiye cep telefonu en az 10 haneli olmalıdır (örn: 5XX XXX XX XX)
+  return digits.length >= 10;
+}
+
+/**
  * Müşterinin veya dükkanın telefon numarasını (başında 0, +90, 0090 olsun veya olmasın;
  * boşluklu, parantezli veya tireli yazılmış olsun) temizleyip sadece rakamlardan oluşan
  * 905XXXXXXXXX (veya sabit hat için 902XXXXXXXXX) formatına çevirir.
@@ -53,13 +79,21 @@ export function formatPhoneForWhatsApp(
 /**
  * Verilen telefon numarası ve mesaj metni ile https://wa.me/905XXXXXXXXX?text=...
  * formatında tam uyumlu WhatsApp bağlantısı üretir.
+ * Eğer telefon geçerli değilse "#" döndürerek boş/hatalı yönlendirmeyi önler.
  */
 export function buildWhatsAppUrl(
   phone: string | null | undefined,
   message: string,
-  fallbackPhone: string = DEFAULT_SHOP_WHATSAPP_PHONE
+  fallbackPhone?: string
 ): string {
-  const formattedPhone = formatPhoneForWhatsApp(phone, fallbackPhone);
+  if (!hasValidCustomerPhone(phone)) {
+    if (fallbackPhone && hasValidCustomerPhone(fallbackPhone)) {
+      const formatted = formatPhoneForWhatsApp(fallbackPhone);
+      return `https://wa.me/${formatted}?text=${encodeURIComponent(message)}`;
+    }
+    return "#";
+  }
+  const formattedPhone = formatPhoneForWhatsApp(phone);
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
 }
 
@@ -72,9 +106,9 @@ export function buildWhatsAppUrl(
  * "+905321234567" -> "0532 123 45 67"
  */
 export function formatPhoneDisplay(phone?: string | null): string {
-  if (!phone) return "";
-  let digits = phone.replace(/\D/g, "");
-  if (!digits) return phone;
+  if (!hasValidCustomerPhone(phone)) return "";
+  let digits = String(phone).replace(/\D/g, "");
+  if (!digits) return "";
 
   // Başta 0090 varsa kaldır
   if (digits.startsWith("0090")) {
@@ -103,5 +137,5 @@ export function formatPhoneDisplay(phone?: string | null): string {
     return digits.replace(/(\d{3,4})(?=\d)/g, "$1 ");
   }
 
-  return phone;
+  return String(phone);
 }

@@ -207,8 +207,8 @@ export default function QuickBookingModal({
 
     // İsim boşsa esnaf dostu varsayılan: "Misafir Müşteri"
     const finalName = customerName.trim() || "Misafir Müşteri";
-    // Telefon boşsa dükkan telefonu veya belirtilmemiş ibaresi
-    const finalPhone = customerPhone.trim() || currentShop.phone || "Telefon Belirtilmedi";
+    // Telefon boşsa asla dükkan numarası atanmaz, boş kaydedilir
+    const finalPhone = customerPhone.trim() ? customerPhone.trim() : "";
 
     const created: Appointment = addAppointment({
       dayId: selectedDay.id,

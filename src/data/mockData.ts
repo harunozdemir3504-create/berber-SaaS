@@ -790,7 +790,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     time: "16:30",
     endTime: "17:15",
     customerName: "Oğuzhan Yıldırım",
-    customerPhone: "0555 000 00 00",
+    customerPhone: "0539 888 77 66",
     barberId: "mert",
     barberName: "Stilist Mert",
     chairLabel: "Koltuk #2",
@@ -906,7 +906,7 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
 // ORTAK KARA LİSTE AĞI (Global No-Show Shield - 12 Kayıtlı Numara)
 export const INITIAL_GLOBAL_BLACKLIST: BlacklistEntry[] = [
   {
-    phone: "05550000000",
+    phone: "05398887766",
     name: "Kayıtlı No-Show Müşterisi (Test)",
     missedDate: "Geçen Hafta - 17:00",
     missedService: "Saç & Sakal Komple Bakım (550 TL)",

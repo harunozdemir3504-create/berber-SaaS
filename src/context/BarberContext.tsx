@@ -35,10 +35,12 @@ import {
 } from "@/data/mockData";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { triggerAutomaticBookingNotification } from "@/lib/notifications";
+import { hasValidCustomerPhone } from "@/lib/whatsapp";
 export {
   formatPhoneForWhatsApp,
   formatPhoneDisplay,
   buildWhatsAppUrl,
+  hasValidCustomerPhone,
   DEFAULT_SHOP_WHATSAPP_PHONE,
 } from "@/lib/whatsapp";
 export {
@@ -617,7 +619,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       if (savedBlacklist) {
         const parsedBl: BlacklistEntry[] = JSON.parse(savedBlacklist);
         if (Array.isArray(parsedBl) && parsedBl.length > 0) {
-          setGlobalBlacklist(parsedBl);
+          const safeBl = parsedBl.filter((entry) => {
+            const clean = normalizePhone(entry.phone);
+            return clean && clean.length >= 10 && clean !== "05550000000";
+          });
+          setGlobalBlacklist(safeBl);
         }
       }
 
@@ -987,6 +993,30 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       INITIAL_SHOPS[0]
     );
   }, [shops, currentShopSlug]);
+
+  // Dükkanın kendi telefon numarasının veya test numarasının yanlışlıkla kara listede kalmasını önleyen otomatik kilit
+  useEffect(() => {
+    const cleanShop = normalizePhone(currentShop.phone);
+    setGlobalBlacklist((prev) => {
+      const polluted = prev.some(
+        (b) => (cleanShop && normalizePhone(b.phone) === cleanShop) || normalizePhone(b.phone) === "05550000000"
+      );
+      if (polluted) {
+        const cleaned = prev.filter(
+          (b) =>
+            (!cleanShop || normalizePhone(b.phone) !== cleanShop) &&
+            normalizePhone(b.phone) !== "05550000000"
+        );
+        try {
+          localStorage.setItem(STORAGE_KEYS.GLOBAL_BLACKLIST, JSON.stringify(cleaned));
+        } catch {
+          // ignore
+        }
+        return cleaned;
+      }
+      return prev;
+    });
+  }, [currentShop.phone]);
 
   // Is the requested shop (via ?shop=slug) actually registered? (false if deleted)
   const currentShopExists = useMemo(() => {
@@ -1361,11 +1391,17 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   // GLOBAL BLACKLIST CHECK (Ortak Kara Liste Ağı)
   const isPhoneBlacklisted = useCallback(
     (phone: string): BlacklistEntry | undefined => {
+      if (!hasValidCustomerPhone(phone)) return undefined;
       const clean = normalizePhone(phone);
       if (!clean || clean.length < 10) return undefined;
+
+      // GÜVENLİK KİLİDİ: Dükkanın kendi numarası ASLA kara listeli sayılamaz!
+      const cleanShopPhone = normalizePhone(currentShop.phone);
+      if (cleanShopPhone && clean === cleanShopPhone) return undefined;
+
       return globalBlacklist.find((entry) => normalizePhone(entry.phone) === clean);
     },
-    [globalBlacklist]
+    [globalBlacklist, currentShop.phone]
   );
 
   // Custom Per-Barber Price Resolver
@@ -1666,7 +1702,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         time: input.startTime,
         endTime: finalEndTime,
         customerName: `Saat Kapatıldı: ${input.reason}`,
-        customerPhone: currentShop.phone,
+        customerPhone: "",
         barberId: input.barberId,
         barberName: input.barberName,
         chairLabel: input.chairLabel,
@@ -1894,44 +1930,53 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       }
 
       const cleanPhone = normalizePhone(targetApt.customerPhone);
+      const cleanShopPhone = normalizePhone(currentShop.phone);
       const depositToApply = typeof customDeposit === "number" && customDeposit >= 0
         ? customDeposit
         : currentShop.depositAmount || 100;
 
-      // 1. Add to Global Blacklist Network (Ortak Kara Liste Ağı)
-      setGlobalBlacklist((prev) => {
-        const exists = prev.some((b) => normalizePhone(b.phone) === cleanPhone);
-        const nextBl = exists
-          ? prev.map((b) =>
-              normalizePhone(b.phone) === cleanPhone
-                ? {
-                    ...b,
-                    missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
-                    missedService: `${targetApt.services
-                      .map((s) => s.name)
-                      .join(" + ")} (${targetApt.totalPrice} TL)`,
-                    requiredDeposit: depositToApply,
-                    reportedByShopSlug: currentShop.slug,
-                    reportedByShopName: currentShop.name,
-                  }
-                : b
-            )
-          : [
-              {
-                phone: cleanPhone,
-                name: targetApt.customerName,
-                missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
-                missedService: `${targetApt.services
-                  .map((s) => s.name)
-                  .join(" + ")} (${targetApt.totalPrice} TL)`,
-                requiredDeposit: depositToApply,
-                reportedByShopSlug: currentShop.slug,
-                reportedByShopName: currentShop.name,
-              },
-              ...prev,
-            ];
-        return nextBl;
-      });
+      // KESİN GÜVENLİK KİLİDİ: Numara geçerli değilse veya dükkanın kendi numarasıysa ASLA kara listeye ekleme!
+      const canAddToBlacklist =
+        hasValidCustomerPhone(targetApt.customerPhone) &&
+        cleanPhone.length >= 10 &&
+        (!cleanShopPhone || cleanPhone !== cleanShopPhone);
+
+      // 1. Add to Global Blacklist Network (Ortak Kara Liste Ağı) - Sadece geçerli müşteri numarası varsa!
+      if (canAddToBlacklist) {
+        setGlobalBlacklist((prev) => {
+          const exists = prev.some((b) => normalizePhone(b.phone) === cleanPhone);
+          const nextBl = exists
+            ? prev.map((b) =>
+                normalizePhone(b.phone) === cleanPhone
+                  ? {
+                      ...b,
+                      missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
+                      missedService: `${targetApt.services
+                        .map((s) => s.name)
+                        .join(" + ")} (${targetApt.totalPrice} TL)`,
+                      requiredDeposit: depositToApply,
+                      reportedByShopSlug: currentShop.slug,
+                      reportedByShopName: currentShop.name,
+                    }
+                  : b
+              )
+            : [
+                {
+                  phone: cleanPhone,
+                  name: targetApt.customerName,
+                  missedDate: `${targetApt.dateLabel} - ${targetApt.time}`,
+                  missedService: `${targetApt.services
+                    .map((s) => s.name)
+                    .join(" + ")} (${targetApt.totalPrice} TL)`,
+                  requiredDeposit: depositToApply,
+                  reportedByShopSlug: currentShop.slug,
+                  reportedByShopName: currentShop.name,
+                },
+                ...prev,
+              ];
+          return nextBl;
+        });
+      }
 
       const targetDate = getAppointmentIsoDate(targetApt);
 
