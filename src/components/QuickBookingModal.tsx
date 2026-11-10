@@ -152,7 +152,7 @@ export default function QuickBookingModal({
     if (!isPhoneDayToday) return raw;
     const nowTr = getTurkeyNow();
     const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
-    return raw.filter((s) => timeToMinutes(s.time) >= currentMinutes - 5);
+    return raw.filter((s) => timeToMinutes(s.time) + 30 > currentMinutes);
   }, [getSlotsForDay, dayId, barberId, isPhoneDayToday]);
 
   useEffect(() => {
@@ -507,7 +507,7 @@ export default function QuickBookingModal({
                       <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" /> Tarih *
                     </label>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {liveDays.map((d) => {
+                      {liveDays.slice(0, 2).map((d) => {
                         const closed = shopSettings.closedDays.includes(d.dayOfWeek);
                         return (
                           <button
@@ -656,7 +656,7 @@ export default function QuickBookingModal({
                       <CalendarDays className="h-3.5 w-3.5 text-[#c88a53]" /> Tarih *
                     </label>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {liveDays.map((d) => {
+                      {liveDays.slice(0, 2).map((d) => {
                         const closed = shopSettings.closedDays.includes(d.dayOfWeek);
                         return (
                           <button

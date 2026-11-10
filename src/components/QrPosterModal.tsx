@@ -9,6 +9,7 @@ import {
   getShopDisplayUrl,
   SITE_DOMAIN,
 } from "@/context/BarberContext";
+import ShopLogo from "@/components/ShopLogo";
 
 interface QrPosterModalProps {
   open: boolean;
@@ -17,7 +18,7 @@ interface QrPosterModalProps {
 
 /** Aynaya asılacak "QR Kod & Afiş" üreticisi — Yazdır / PDF İndir (window.print) */
 export default function QrPosterModal({ open, onClose }: QrPosterModalProps) {
-  const { currentShop, shopSettings } = useBarber();
+  const { currentShop, shopSettings, hydrated } = useBarber();
 
   // Resmi ve kalıcı domain: https://viprandevusistemi.com.tr/[slug]
   const bookingUrl = getShopBookingUrl(currentShop.slug);
@@ -90,9 +91,14 @@ export default function QrPosterModal({ open, onClose }: QrPosterModalProps) {
 
               <div className="relative flex flex-col items-center justify-center print:min-h-[100vh] print:py-16">
                 {/* Logo */}
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#e6ccb2]/60 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/40">
-                  <Scissors className="h-8 w-8 -rotate-45 stroke-[2.3]" />
-                </div>
+                <ShopLogo
+                  shopName={currentShop.name}
+                  logoUrl={currentShop.logo_url}
+                  isLoading={!hydrated}
+                  sizeClass="h-16 w-16"
+                  textClass="text-xl"
+                  ringClass="ring-2 ring-[#e6ccb2]/60 shadow-lg shadow-[#c88a53]/40"
+                />
                 <span className="mt-2 font-mono text-[10px] font-bold tracking-[0.35em] text-[#c88a53]">
                   {initials} • EST. VIP
                 </span>

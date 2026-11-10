@@ -186,6 +186,7 @@ export interface TenantShop {
   depositPolicy: DepositPolicyType;
   depositAmount: number;
   iban?: string;
+  logo_url?: string;
   barbers: Barber[];
   services: Service[];
   shopSettings: ShopSettings;

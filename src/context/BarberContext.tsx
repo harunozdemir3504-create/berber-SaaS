@@ -59,6 +59,7 @@ export interface UpdateShopDetailsInput {
   subtitle?: string;
   iban?: string;
   depositAmount?: number;
+  logo_url?: string;
 }
 
 interface NewShopInput {
@@ -1274,6 +1275,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               details.depositAmount !== undefined
                 ? Math.max(0, Number(details.depositAmount) || 0)
                 : s.depositAmount,
+            logo_url:
+              details.logo_url !== undefined
+                ? details.logo_url.trim() || undefined
+                : s.logo_url,
           };
         });
 

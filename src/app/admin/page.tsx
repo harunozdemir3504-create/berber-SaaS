@@ -66,6 +66,7 @@ import AdminPinGate, { lockAdminSession } from "@/components/AdminPinGate";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
 import TimelineAppointmentCard from "@/components/TimelineAppointmentCard";
 import QrPosterModal from "@/components/QrPosterModal";
+import ShopLogo from "@/components/ShopLogo";
 import {
   Appointment,
   Barber,
@@ -99,6 +100,7 @@ export default function AdminDashboardPage() {
   const {
     currentShop,
     currentShopSlug,
+    hydrated,
     appointments,
     waitlist,
     globalBlacklist,
@@ -145,6 +147,31 @@ export default function AdminDashboardPage() {
   const liveDays = useMemo(() => getLiveDaysMetadata(7), []);
   const todayDay = liveDays[0];
   const tomorrowDay = liveDays[1];
+
+  // 🕒 CANLI TÜRKİYE SAATİ (Her 15 sn'de bir otomatik güncellenir)
+  const [nowDate, setNowDate] = useState<Date>(() => getTurkeyNow());
+  const [showPastTimelineSlots, setShowPastTimelineSlots] = useState<boolean>(false);
+  const currentSlotRowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const updateClock = () => setNowDate(getTurkeyNow());
+    updateClock();
+    const timer = setInterval(updateClock, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nowMinutes = useMemo(
+    () => nowDate.getHours() * 60 + nowDate.getMinutes(),
+    [nowDate]
+  );
+
+  const nowTimeLabel = useMemo(
+    () =>
+      `${String(nowDate.getHours()).padStart(2, "0")}:${String(
+        nowDate.getMinutes()
+      ).padStart(2, "0")}`,
+    [nowDate]
+  );
 
   // Alt Navigasyon (3 Temiz Sekme: 📅 Randevular | ➕ Hızlı Ekle | ⚙️ Diğer)
   const [bottomTab, setBottomTab] = useState<BottomNavTab>("appointments");
@@ -221,6 +248,7 @@ export default function AdminDashboardPage() {
   const [shopPinInput, setShopPinInput] = useState<string>("");
   const [shopIbanInput, setShopIbanInput] = useState<string>("");
   const [shopDepositInput, setShopDepositInput] = useState<number>(100);
+  const [shopLogoUrlInput, setShopLogoUrlInput] = useState<string>("");
   const [isCopiedShopUrl, setIsCopiedShopUrl] = useState<boolean>(false);
 
   // ⛔ Saat Kapat / Mola Ekle Modalı State
@@ -249,6 +277,7 @@ export default function AdminDashboardPage() {
       setShopPinInput(currentShop.adminPin || "");
       setShopIbanInput(currentShop.iban || "TR33 0006 2000 0001 2345 6789 01");
       setShopDepositInput(currentShop.depositAmount || 100);
+      setShopLogoUrlInput(currentShop.logo_url || "");
     }
   }, [
     currentShop?.slug,
@@ -259,6 +288,7 @@ export default function AdminDashboardPage() {
     currentShop?.adminPin,
     currentShop?.iban,
     currentShop?.depositAmount,
+    currentShop?.logo_url,
   ]);
 
   const handleSaveShopInfo = (e: React.FormEvent) => {
@@ -292,6 +322,7 @@ export default function AdminDashboardPage() {
       subtitle: shopSubtitleInput.trim(),
       iban: shopIbanInput.trim(),
       depositAmount: Math.max(0, Number(shopDepositInput) || 0),
+      logo_url: shopLogoUrlInput.trim(),
     });
 
     if (shopDepositInput) {
@@ -727,13 +758,11 @@ export default function AdminDashboardPage() {
       ? timeToMinutes(shopSettings.closeTime)
       : 21 * 60;
 
-    const nowTr = getTurkeyNow();
-    const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
-
     return rawSlots.filter((slot) => {
       const slotMinutes = timeToMinutes(slot.time);
-      // 1. Bugün için geçmiş saatleri filtrele
-      if (isQuickDayToday && slotMinutes < currentMinutes - 5) {
+      // 1. Bugün için geçmiş saatleri filtrele (30 dakikalık dilimin bitiş saatini baz al:
+      // örn. 14:00 dilimi 14:29'a kadar açık kalır, saat 14:30 olduğunda geçmiş sayılır)
+      if (isQuickDayToday && slotMinutes + 30 <= nowMinutes) {
         return false;
       }
       // 2. Kapanış saatini aşıyor mu?
@@ -757,6 +786,7 @@ export default function AdminDashboardPage() {
     quickDayId,
     quickSelectedBarber?.id,
     isQuickDayToday,
+    nowMinutes,
     quickTotalDuration,
     shopSettings?.closeTime,
   ]);
@@ -963,31 +993,6 @@ export default function AdminDashboardPage() {
       return true;
     });
   }, [appointments, currentTimelineDayId, adminStaffFilter]);
-
-  // 🕒 CANLI TÜRKİYE SAATİ & TAKVİM AKTİF SAAT TAKİBİ (Her 15 sn'de bir otomatik güncellenir)
-  const [nowDate, setNowDate] = useState<Date>(() => getTurkeyNow());
-  const [showPastTimelineSlots, setShowPastTimelineSlots] = useState<boolean>(false);
-  const currentSlotRowRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const updateClock = () => setNowDate(getTurkeyNow());
-    updateClock();
-    const timer = setInterval(updateClock, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const nowMinutes = useMemo(
-    () => nowDate.getHours() * 60 + nowDate.getMinutes(),
-    [nowDate]
-  );
-
-  const nowTimeLabel = useMemo(
-    () =>
-      `${String(nowDate.getHours()).padStart(2, "0")}:${String(
-        nowDate.getMinutes()
-      ).padStart(2, "0")}`,
-    [nowDate]
-  );
 
   const isTimelineToday = useMemo(
     () => toStrictIsoDate(currentTimelineDayId) === toStrictIsoDate(todayDay.id),
@@ -1934,9 +1939,14 @@ export default function AdminDashboardPage() {
           <div className="flex items-center justify-between gap-3">
             {/* Sol: Logo + İsim + Durum */}
             <div className="flex items-center gap-3 min-w-0">
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-stone-950 shadow-md ring-2 ring-amber-400">
-                <Scissors className="h-5 w-5 stroke-[2.5]" />
-              </div>
+              <ShopLogo
+                shopName={currentShop.name}
+                logoUrl={currentShop.logo_url}
+                isLoading={!hydrated}
+                sizeClass="h-11 w-11"
+                textClass="text-sm"
+                ringClass="ring-2 ring-amber-400"
+              />
               <div className="min-w-0">
                 <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white uppercase truncate">
                   {currentShop.name}
@@ -1983,7 +1993,7 @@ export default function AdminDashboardPage() {
                 onClick={() => {
                   lockAdminSession(currentShop.slug);
                   if (typeof window !== "undefined") {
-                    window.location.href = "/admin";
+                    window.location.href = "/";
                   }
                 }}
                 title="Güvenli Çıkış Yap"
@@ -3511,8 +3521,8 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
-                  {liveDays.map((d) => (
+                <div className="grid grid-cols-2 gap-2 pb-1">
+                  {liveDays.slice(0, 2).map((d) => (
                     <button
                       key={d.id}
                       type="button"
@@ -3520,13 +3530,13 @@ export default function AdminDashboardPage() {
                         setQuickDayId(d.id);
                         setQuickTime("");
                       }}
-                      className={`shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${
+                      className={`rounded-xl border px-3 py-2 text-xs font-extrabold transition cursor-pointer ${
                         quickDayId === d.id
                           ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
                           : "border-white/10 bg-[#181411] text-stone-300 hover:border-white/30"
                       }`}
                     >
-                      {d.chipLabel}
+                      📅 {d.chipLabel}
                     </button>
                   ))}
                 </div>
@@ -3965,6 +3975,28 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
 
+                    <div>
+                      <label className="block text-xs font-bold text-stone-800 dark:text-[#f3e8dc]">
+                        🖼️ Dükkan Logosu (Görsel Linki / URL — Opsiyonel)
+                      </label>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <ShopLogo
+                          shopName={shopNameInput || currentShop.name}
+                          logoUrl={shopLogoUrlInput}
+                          isLoading={!hydrated}
+                          sizeClass="h-10 w-10"
+                          textClass="text-xs"
+                        />
+                        <input
+                          type="url"
+                          value={shopLogoUrlInput}
+                          onChange={(e) => setShopLogoUrlInput(e.target.value)}
+                          className="w-full rounded-xl border border-stone-300 dark:border-white/10 bg-white dark:bg-[#111113] px-3.5 py-2.5 text-xs font-bold text-stone-900 dark:text-[#fdf8f5] focus:border-[#dfc39e] focus:outline-none"
+                          placeholder="https://.../logo.png (Boş bırakılırsa baş harf rozeti gösterilir)"
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
                       <div className="text-[11px] font-semibold text-amber-900 dark:text-[#f3e8dc]/80">
                         ✨ Kaydettiğiniz tüm bilgiler tüm cihazlarda ve müşteri randevu sayfasında anında güncellenir.
@@ -4179,7 +4211,7 @@ export default function AdminDashboardPage() {
                     onClick={() => {
                       lockAdminSession(currentShop.slug);
                       if (typeof window !== "undefined") {
-                        window.location.href = "/admin";
+                        window.location.href = "/";
                       }
                     }}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400 dark:border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-3.5 py-2.5 text-xs font-black text-rose-900 dark:text-rose-300"
@@ -4929,7 +4961,16 @@ export default function AdminDashboardPage() {
             {/* 3. ➕ Hızlı Ekle */}
             <button
               type="button"
-              onClick={() => setBottomTab("quick_add")}
+              onClick={() => {
+                if (
+                  toStrictIsoDate(quickDayId) !== toStrictIsoDate(todayDay.id) &&
+                  toStrictIsoDate(quickDayId) !== toStrictIsoDate(tomorrowDay.id)
+                ) {
+                  setQuickDayId(todayDay.id);
+                  setQuickTime("");
+                }
+                setBottomTab("quick_add");
+              }}
               className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-xs font-black transition cursor-pointer ${
                 bottomTab === "quick_add"
                   ? "bg-gradient-to-r from-emerald-500 to-teal-400 text-[#06150f] shadow-lg shadow-emerald-500/25"
@@ -5498,14 +5539,13 @@ export default function AdminDashboardPage() {
 
                   {(() => {
                     const aptStartM = timeToMinutes(mobileRescheduleApt.time);
-                    // Aktif canlı saatten ve randevudan önceki saatleri gösterme!
-                    const minAllowedM = isTimelineToday
-                      ? Math.max(nowMinutes - 5, aptStartM)
-                      : aptStartM;
-
                     const availableRescheduleSlots = timelineSlots.filter((slotTime) => {
                       const slotM = timeToMinutes(slotTime);
-                      return slotM >= minAllowedM;
+                      // 30 dakikalık dilimin bitiş saatini (slotM + 30) baz al
+                      if (isTimelineToday && slotM + 30 <= nowMinutes) {
+                        return false;
+                      }
+                      return slotM >= aptStartM;
                     });
 
                     if (availableRescheduleSlots.length === 0) {

@@ -1,10 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Scissors,
   ShieldCheck,
   RotateCcw,
   Crown,
@@ -19,6 +18,7 @@ import {
 import { useBarber } from "@/context/BarberContext";
 import { useTheme } from "@/context/ThemeContext";
 import { lockAdminSession } from "@/components/AdminPinGate";
+import ShopLogo from "@/components/ShopLogo";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -26,9 +26,18 @@ export default function Navbar() {
     shops,
     currentShop,
     hasShopQueryParam,
+    hydrated,
     resetDemoData,
   } = useBarber();
   const { theme, toggleTheme } = useTheme();
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setIsDemoMode(params.get("demo") === "1");
+    }
+  }, [pathname, hasShopQueryParam]);
 
   const isSuperAdmin = pathname?.startsWith("/super-admin");
   const isShopAdmin = pathname?.startsWith("/admin");
@@ -78,29 +87,42 @@ export default function Navbar() {
             }
             className="group flex items-center gap-2.5 sm:gap-3"
           >
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-[#e6ccb2]/40 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] ring-2 ring-amber-500/40 shadow-md transition-transform duration-300 group-hover:scale-105 sm:h-10 sm:w-10">
-              <Scissors className="h-4 w-4 -rotate-45 stroke-[2.3] sm:h-5 sm:w-5" />
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
-                <span
-                  className={`relative inline-flex h-2.5 w-2.5 rounded-full border border-[#14100d] sm:h-3 sm:w-3 ${
-                    currentShop.subscriptionStatus === "active"
-                      ? "bg-emerald-400"
-                      : "bg-rose-500"
-                  }`}
-                ></span>
-              </span>
+            <div className="relative flex shrink-0 items-center justify-center transition-transform duration-300 group-hover:scale-105">
+              <ShopLogo
+                shopName={currentShop.name}
+                logoUrl={currentShop.logo_url}
+                isLoading={!hydrated}
+                sizeClass="h-8 w-8 sm:h-10 sm:w-10"
+                textClass="text-xs sm:text-sm"
+                ringClass="ring-2 ring-amber-500/40"
+              />
+              {hydrated && (
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
+                  <span
+                    className={`relative inline-flex h-2.5 w-2.5 rounded-full border border-[#14100d] sm:h-3 sm:w-3 ${
+                      currentShop.subscriptionStatus === "active"
+                        ? "bg-emerald-400"
+                        : "bg-rose-500"
+                    }`}
+                  ></span>
+                </span>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <span
-                  className={`text-sm font-extrabold tracking-tight sm:text-base ${
-                    isShopAdmin && theme === "light"
-                      ? "text-[#1a1a1a]"
-                      : "bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-transparent"
-                  }`}
-                >
-                  {currentShop.name.toUpperCase()}
-                </span>
+                {!hydrated ? (
+                  <span className="inline-block h-4 w-28 animate-pulse rounded-full bg-amber-500/20" />
+                ) : (
+                  <span
+                    className={`text-sm font-extrabold tracking-tight sm:text-base ${
+                      isShopAdmin && theme === "light"
+                        ? "text-[#1a1a1a]"
+                        : "bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-transparent"
+                    }`}
+                  >
+                    {currentShop.name.toUpperCase()}
+                  </span>
+                )}
                 {isShopAdmin && (
                   <span
                     className={`hidden rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest sm:inline-block ${
@@ -113,23 +135,27 @@ export default function Navbar() {
                   </span>
                 )}
               </div>
-              <p
-                className={`flex items-center gap-1.5 text-[10px] sm:gap-2 sm:text-[11px] ${
-                  isShopAdmin && theme === "light"
-                    ? "text-stone-600"
-                    : "text-stone-400"
-                }`}
-              >
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3" />
-                  {currentShop.district}
-                </span>
-                <span className="hidden text-stone-400 sm:inline">•</span>
-                <span className="hidden items-center gap-1 sm:inline-flex">
-                  <Phone className="h-3 w-3 text-emerald-500" />
-                  {currentShop.phone}
-                </span>
-              </p>
+              {!hydrated ? (
+                <span className="mt-1 block h-3 w-36 animate-pulse rounded-full bg-amber-500/15" />
+              ) : (
+                <p
+                  className={`flex items-center gap-1.5 text-[10px] sm:gap-2 sm:text-[11px] ${
+                    isShopAdmin && theme === "light"
+                      ? "text-stone-600"
+                      : "text-stone-400"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3" />
+                    {currentShop.district}
+                  </span>
+                  <span className="hidden text-stone-400 sm:inline">•</span>
+                  <span className="hidden items-center gap-1 sm:inline-flex">
+                    <Phone className="h-3 w-3 text-emerald-500" />
+                    {currentShop.phone}
+                  </span>
+                </p>
+              )}
             </div>
           </Link>
         )}
@@ -180,7 +206,7 @@ export default function Navbar() {
               onClick={() => {
                 lockAdminSession(currentShop.slug);
                 if (typeof window !== "undefined") {
-                  window.location.href = "/admin";
+                  window.location.href = "/";
                 }
               }}
               title="Oturumu Kapat / Çıkış Yap"
@@ -207,6 +233,20 @@ export default function Navbar() {
         ) : (
           /* Customer View (/) — Purely Customer-Facing Badge, No Admin Transition */
           <div className="flex items-center gap-1.5">
+            {isDemoMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = "/";
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-xl border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-[10px] font-black text-amber-200 transition hover:bg-amber-500/25 sm:px-3 sm:py-1.5 sm:text-xs cursor-pointer"
+              >
+                <LogOut className="h-3 w-3 text-amber-300" />
+                <span>Çıkış Yap</span>
+              </button>
+            )}
             <div className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-950/25 px-2.5 py-1 text-[10px] font-bold text-emerald-300 sm:px-3 sm:py-1.5 sm:text-xs">
               <Lock className="h-3 w-3 text-emerald-400" />
               <span>Online Randevu</span>

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useBarber } from "@/context/BarberContext";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
+import ShopLogo from "@/components/ShopLogo";
 
 export const PERSISTENT_ADMIN_SESSION_KEY =
   "vip_barber_persistent_admin_session_v1";
@@ -443,9 +444,14 @@ export default function AdminPinGate({
       >
         {/* Ortalanmış VIP İkon ve Başlık */}
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-lg shadow-[#c88a53]/25">
-            <Scissors className="h-6 w-6 -rotate-45 stroke-[2.5]" />
-          </div>
+          <ShopLogo
+            shopName={targetShop?.name}
+            logoUrl={targetShop?.logo_url}
+            isLoading={!hydrated}
+            sizeClass="h-12 w-12"
+            textClass="text-base"
+            ringClass="ring-2 ring-[#e6ccb2]/50 shadow-lg shadow-[#c88a53]/25"
+          />
           <h1 className="mt-3 text-base font-extrabold text-[#fdf8f5] sm:text-lg">
             Salon Yönetici Girişi
           </h1>
@@ -558,6 +564,20 @@ export default function AdminPinGate({
         <div className="mt-3.5 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-emerald-400/90">
           <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
           <span>Beni Hatırla: Cihazınız oturumu otomatik açık tutar</span>
+        </div>
+
+        <div className="mt-3 border-t border-white/10 pt-3 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.location.href = "/";
+              }
+            }}
+            className="text-xs font-bold text-stone-400 transition hover:text-[#e6ccb2] cursor-pointer"
+          >
+            ← Ana Tanıtım Sayfasına Dön
+          </button>
         </div>
       </motion.div>
     </div>

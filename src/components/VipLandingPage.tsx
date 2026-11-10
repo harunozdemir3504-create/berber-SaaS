@@ -184,14 +184,14 @@ export default function VipLandingPage({
         {/* =================================================================== */}
         <header className="sticky top-0 z-50 border-b border-white/10 bg-[#09090b]/80 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-3.5">
-            {/* Sol: Altın Makas/Taç İkonu ve VIP RANDEVU SİSTEMİ Logosu */}
+            {/* Sol: Yeni Ana Logo ve VIP RANDEVU SİSTEMİ Başlığı */}
             <a href="#" className="group flex items-center gap-2.5 shrink-0">
-              <div className="relative flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl border border-amber-400/60 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-600 text-[#09090b] shadow-lg shadow-amber-500/25 transition-transform duration-300 group-hover:scale-105">
-                <Crown className="h-5 w-5 sm:h-6 sm:w-6 stroke-[2.4]" />
-                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-[#09090b] bg-emerald-500 text-[#09090b]">
-                  <Scissors className="h-2.5 w-2.5 -rotate-45 stroke-[2.5]" />
-                </span>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icon-192.png?v=2"
+                alt="VIP Randevu Sistemi"
+                className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl border border-amber-400/60 object-cover shadow-lg shadow-amber-500/25 transition-transform duration-300 group-hover:scale-105"
+              />
               <div>
                 <div className="flex items-center gap-1.5">
                   <span
@@ -817,9 +817,12 @@ export default function VipLandingPage({
         <footer className="border-t border-white/10 bg-black/40 backdrop-blur-xl py-10 px-4 sm:px-6 pb-28 sm:pb-12">
           <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 text-[#09090b]">
-                <Crown className="h-4 w-4 stroke-[2.5]" />
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icon-192.png?v=2"
+                alt="VIP Randevu Sistemi"
+                className="h-8 w-8 rounded-lg border border-amber-400/50 object-cover"
+              />
               <span
                 className={`text-sm font-black tracking-wider ${GOLD_TEXT_GRADIENT}`}
               >

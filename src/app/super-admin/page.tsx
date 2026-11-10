@@ -48,6 +48,7 @@ import {
 } from "@/context/BarberContext";
 import { SubscriptionStatus, TenantShop } from "@/data/mockData";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import ShopLogo from "@/components/ShopLogo";
 
 export default function SuperAdminPage() {
   const {
@@ -743,15 +744,18 @@ export default function SuperAdminPage() {
                 >
                   <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                     <div className="flex items-start gap-3.5">
-                      <div
-                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-base font-black ${
+                      <ShopLogo
+                        shopName={shop.name}
+                        logoUrl={shop.logo_url}
+                        sizeClass="h-14 w-14"
+                        textClass="text-base"
+                        roundedClass="rounded-2xl"
+                        ringClass={
                           isActive
-                            ? "border-[#e6ccb2]/50 bg-gradient-to-br from-[#b47b48] via-[#c88a53] to-[#9a6334] text-[#1a110b] shadow-md shadow-[#c88a53]/20"
-                            : "border-red-500/60 bg-gradient-to-br from-red-500/25 to-amber-500/20 text-amber-300 shadow-md shadow-red-950/40"
-                        }`}
-                      >
-                        <Scissors className="h-6 w-6 -rotate-45" />
-                      </div>
+                            ? "ring-2 ring-[#e6ccb2]/50 shadow-md shadow-[#c88a53]/20"
+                            : "ring-2 ring-red-500/60 shadow-md shadow-red-950/40"
+                        }
+                      />
 
                       <div>
                         <div className="flex flex-wrap items-center gap-2">

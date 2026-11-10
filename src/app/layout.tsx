@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   title: "VIP Berber Online Randevu",
   description:
     "VIP berber ve kuaför salonları için hızlı ve güvenli online randevu sistemi.",
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=2",
   applicationName: "VIP Randevu",
   appleWebApp: {
     capable: true,
@@ -38,12 +38,15 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico?v=2", sizes: "any" },
+      { url: "/favicon-32x32.png?v=2", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png?v=2", sizes: "16x16", type: "image/png" },
+      { url: "/icon-192.png?v=2", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png?v=2", sizes: "512x512", type: "image/png" },
     ],
+    shortcut: [{ url: "/favicon.ico?v=2" }],
     apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon.png?v=2", sizes: "180x180", type: "image/png" },
     ],
   },
 };
@@ -56,9 +59,12 @@ export default function RootLayout({
   return (
     <html lang="tr" className="dark touch-manipulation">
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json?v=2" />
+        <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
         <meta name="theme-color" content="#c88a53" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

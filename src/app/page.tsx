@@ -19,7 +19,6 @@ import {
   CalendarX2,
   Copy,
   Ban,
-  Store,
   CalendarDays,
   MessageSquare,
   Zap,
@@ -94,7 +93,7 @@ export default function CustomerBookingPage() {
       currentShop;
     const sampleSlug = sampleShop?.slug || "atelier-noir";
     setCurrentShopSlug(sampleSlug);
-    router.push(`/?shop=${sampleSlug}`);
+    router.push(`/?shop=${sampleSlug}&demo=1`);
   }, [shops, currentShop, setCurrentShopSlug, router]);
 
   // Akıllı PWA Yönlendirmesi (Yalnızca telefon ana ekranına 'Admin' olarak kurulmuş PWA standalone ise)
@@ -138,14 +137,15 @@ export default function CustomerBookingPage() {
   const todayMeta = liveDays[0];
   const tomorrowMeta = liveDays[1] || liveDays[0];
 
-  // Slotun geçmiş olup olmadığını kontrol et (Bugün ise: şu anki saatten küçük veya 15 dk'dan az kalmışsa)
+  // Slotun geçmiş olup olmadığını kontrol et (Bugün ise: 30 dakikalık dilimin bitiş saatini baz al;
+  // örn. 14:00 dilimi 14:29'a kadar açık kalır, saat 14:30 olduğunda geçmiş sayılır)
   const isSlotPassedOrImminent = useCallback(
     (slotTime: string, isTodayDay: boolean): boolean => {
       if (!isTodayDay) return false;
       const nowTr = getTurkeyNow();
       const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
       const slotMinutes = timeToMinutes(slotTime);
-      return slotMinutes < currentMinutes + 15;
+      return slotMinutes + 30 <= currentMinutes;
     },
     []
   );
@@ -169,8 +169,8 @@ export default function CustomerBookingPage() {
     const tomDay = days[1] || days[0];
     const nowTr = getTurkeyNow();
     const currentMins = nowTr.getHours() * 60 + nowTr.getMinutes();
-    // 20:45 ve sonrasında bugün için randevu kalmamıştır
-    if (currentMins >= 21 * 60 - 15) {
+    // 21:00 kapanış sonrasında bugün için randevu kalmamıştır
+    if (currentMins >= 21 * 60) {
       return tomDay;
     }
     return tDay;
@@ -548,6 +548,25 @@ export default function CustomerBookingPage() {
     );
   }
 
+  // Veri yüklenene kadar varsayılan dükkan veya eski logo flash'ını önle
+  if (!hydrated) {
+    return (
+      <div className="mx-auto max-w-xl px-4 pb-20 pt-6">
+        <div className="rounded-2xl border border-[#dfc39e]/25 bg-[#141416] p-5 shadow-xl space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 shrink-0 animate-pulse bg-amber-500/20 rounded-full" />
+            <div className="space-y-2 flex-1">
+              <div className="h-4 w-40 animate-pulse rounded-full bg-amber-500/20" />
+              <div className="h-3 w-28 animate-pulse rounded-full bg-amber-500/10" />
+            </div>
+          </div>
+          <div className="h-24 w-full animate-pulse rounded-xl bg-white/5" />
+          <div className="h-32 w-full animate-pulse rounded-xl bg-white/5" />
+        </div>
+      </div>
+    );
+  }
+
   // SİLİNEN / BİLİNMEYEN DÜKKAN EKRANI
   if (hydrated && !currentShopExists) {
     return (
@@ -584,7 +603,7 @@ export default function CustomerBookingPage() {
   }
 
   const stepsBar = [
-    { num: 1, label: "1. Dükkan & Hizmet" },
+    { num: 1, label: "1. Usta & Hizmet" },
     { num: 2, label: "2. Gün & Saat" },
     { num: 3, label: "3. İsim & Onay" },
   ];
@@ -642,7 +661,7 @@ export default function CustomerBookingPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {/* ADIM 1: DÜKKAN VE HİZMET SEÇİMİ (KOMPAKT & SIKI IZGARA) */}
+          {/* ADIM 1: USTA VE HİZMET SEÇİMİ (KOMPAKT & SIKI IZGARA) */}
           {step === 1 && (
             <motion.div
               key="step-1"
@@ -652,61 +671,20 @@ export default function CustomerBookingPage() {
               transition={{ duration: 0.12 }}
               className="space-y-3.5"
             >
-              {/* Dükkan Seçimi */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-[#f3e8dc]">
-                  <Store className="h-3.5 w-3.5 text-[#dfc39e]" />
-                  <span>Berber Dükkanı Seçimi</span>
-                </label>
-
-                {!hasShopQueryParam && shops.length > 1 ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {shops.map((shop) => {
-                      const isCurrent = shop.slug === currentShop.slug;
-                      return (
-                        <button
-                          key={shop.slug}
-                          type="button"
-                          onClick={() => setCurrentShopSlug(shop.slug)}
-                          className={`flex flex-col items-start justify-between rounded-xl border-2 p-2.5 text-left transition ${
-                            isCurrent
-                              ? "border-[#f3e8dc] bg-[#1a191d] text-[#fdf8f5]"
-                              : "border-white/10 bg-[#141417] text-stone-300 hover:border-white/20"
-                          }`}
-                        >
-                          <div className="flex w-full items-center justify-between gap-1">
-                            <span className="truncate text-xs font-black text-[#fdf8f5]">
-                              {shop.name}
-                            </span>
-                            {isCurrent && (
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[#081510]">
-                                <Check className="h-2.5 w-2.5 stroke-[3]" />
-                              </span>
-                            )}
-                          </div>
-                          <span className="mt-0.5 truncate text-[10px] font-semibold text-[#dfc39e]">
-                            {shop.district}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between rounded-xl border border-[#dfc39e]/35 bg-[#141417] px-3 py-2">
-                    <div>
-                      <p className="text-sm font-black text-[#fdf8f5]">
-                        {currentShop.name}
-                      </p>
-                      <p className="text-[11px] font-semibold text-[#dfc39e]">
-                        {currentShop.district} • {shopSettings.openTime} -{" "}
-                        {shopSettings.closeTime}
-                      </p>
-                    </div>
-                    <span className="rounded-lg bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300">
-                      Seçili Salon ✓
-                    </span>
-                  </div>
-                )}
+              {/* Seçili Salon Bilgisi */}
+              <div className="flex items-center justify-between rounded-xl border border-[#dfc39e]/35 bg-[#141417] px-3 py-2">
+                <div>
+                  <p className="text-sm font-black text-[#fdf8f5]">
+                    {currentShop.name}
+                  </p>
+                  <p className="text-[11px] font-semibold text-[#dfc39e]">
+                    {currentShop.district} • {shopSettings.openTime} -{" "}
+                    {shopSettings.closeTime}
+                  </p>
+                </div>
+                <span className="rounded-lg bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300">
+                  Seçili Salon ✓
+                </span>
               </div>
 
               {/* Usta / Koltuk Seçimi (Kompakt Grid) */}
