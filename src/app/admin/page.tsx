@@ -823,7 +823,7 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    const finalName = quickName.trim() || "Misafir Müşteri";
+    const finalName = quickName.trim() || "Misafir";
     const finalPhone =
       quickPhone.trim() || currentShop.phone || "0555 000 00 00";
     const strictQuickDate = toStrictIsoDate(quickSelectedDay.isoDate || quickSelectedDay.id);
@@ -3447,82 +3447,22 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ===================================================================== */}
-        {/* SEKME 2: ➕ HIZLI EKLE (SADECE 3 KUTULUK EKRAN: İSİM, SAAT, HİZMET)   */}
+        {/* SEKME 2: ➕ HIZLI EKLE (ULTRA KOMPAKT POS EKRANI - ZERO SCROLL)       */}
         {/* ===================================================================== */}
         {bottomTab === "quick_add" && (
           <form
             onSubmit={handleSaveQuickAdd}
-            className="space-y-5 rounded-3xl border border-[#dfc39e]/50 bg-[#141416] p-4 shadow-2xl sm:p-6"
+            className="flex flex-col gap-2 rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-2.5 shadow-xl sm:p-3"
           >
-            <div className="border-b border-white/10 pb-3">
-              <h2 className="text-lg font-black text-[#fdf8f5] sm:text-xl">
-                ➕ Hızlı Randevu Ekle
-              </h2>
-              <p className="text-xs text-stone-400">
-                İsim, saat ve hizmeti seçip tek tuşla kaydedin.
-              </p>
-            </div>
-
-            {/* KUTU 1: MÜŞTERİ İSMİ (ve İsteğe Bağlı Telefon) */}
-            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
-              <label className="mb-2 flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
-                <User className="h-4 w-4 text-[#dfc39e]" />
-                <span>1. Müşteri İsmi</span>
-              </label>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                <input
-                  type="text"
-                  value={quickName}
-                  onChange={(e) => setQuickName(e.target.value)}
-                  placeholder="Müşteri Adı (Boşsa: Misafir Müşteri)"
-                  className="w-full rounded-xl border-2 border-white/15 bg-[#181411] px-4 py-3.5 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none focus:border-[#dfc39e]"
-                />
-                <input
-                  type="tel"
-                  value={quickPhone}
-                  onChange={(e) => setQuickPhone(e.target.value)}
-                  placeholder="Telefon (İsteğe Bağlı: 05XX...)"
-                  className="w-full rounded-xl border-2 border-white/15 bg-[#181411] px-4 py-3.5 text-base font-bold text-[#fdf8f5] placeholder-stone-500 outline-none focus:border-emerald-400"
-                />
-              </div>
-
-              {realBarbers.length > 1 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {realBarbers.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => setQuickBarberId(b.id)}
-                      className={`rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${
-                        quickBarberId === b.id
-                          ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
-                          : "border-white/10 bg-[#181411] text-stone-300"
-                      }`}
-                    >
-                      {b.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* KUTU 2: SAAT SEÇİMİ */}
-            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
-              <div className="mb-2.5 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
-                    <Clock className="h-4 w-4 text-emerald-400" />
-                    <span>2. Gün & Saat Seçin ({quickSelectedDay.chipLabel})</span>
-                  </label>
-                  {quickTime && (
-                    <span className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs font-black text-emerald-300 border border-emerald-500/30">
-                      Seçili: {quickTime}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pb-1">
-                  {liveDays.slice(0, 2).map((d) => (
+            {/* Satır 1 — Gün ve Koltuk/Usta Seçimi (Tek Kompakt Alan) */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              {/* Gün Seçimi (Bugün / Yarın) */}
+              <div className="flex items-center gap-1.5">
+                {liveDays.slice(0, 2).map((d) => {
+                  const isSelected =
+                    quickDayId === d.id ||
+                    toStrictIsoDate(quickDayId) === toStrictIsoDate(d.isoDate || d.id);
+                  return (
                     <button
                       key={d.id}
                       type="button"
@@ -3530,110 +3470,132 @@ export default function AdminDashboardPage() {
                         setQuickDayId(d.id);
                         setQuickTime("");
                       }}
-                      className={`rounded-xl border px-3 py-2 text-xs font-extrabold transition cursor-pointer ${
-                        quickDayId === d.id
-                          ? "border-[#f3e8dc] bg-[#dfc39e] text-[#1a110b]"
-                          : "border-white/10 bg-[#181411] text-stone-300 hover:border-white/30"
+                      className={`cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                        isSelected
+                          ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm"
+                          : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-600 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/30"
                       }`}
                     >
-                      📅 {d.chipLabel}
+                      {d.isToday ? "📅 Bugün" : d.isTomorrow ? "📅 Yarın" : d.chipLabel}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {quickAvailableSlots.length === 0 ? (
-                <p className="rounded-xl bg-amber-500/10 p-3 text-center text-xs font-bold text-amber-300">
-                  {isQuickDayToday
-                    ? "Bugün için bu saatten sonra boş saat kalmadı. Başka bir gün seçebilirsiniz."
-                    : "Bu gün için boş saat kalmadı. Başka bir gün seçiniz."}
-                </p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                  {quickAvailableSlots.map((slot) => {
-                    const active = quickTime === slot.time;
-                    return (
-                      <button
-                        key={slot.time}
-                        type="button"
-                        onClick={() => setQuickTime(slot.time)}
-                        className={`rounded-xl border-2 py-3 text-base font-black transition ${
-                          active
-                            ? "border-emerald-200 bg-emerald-500 text-[#06150f] shadow-md"
-                            : "border-emerald-500/30 bg-[#151e18] text-emerald-300 hover:border-emerald-400"
-                        }`}
-                      >
-                        {slot.time}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* KUTU 3: HİZMET SEÇİMİ */}
-            <div className="rounded-2xl border border-white/10 bg-[#101012] p-4">
-              <div className="mb-2.5 flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm font-black uppercase text-[#f3e8dc]">
-                  <Scissors className="h-4 w-4 text-[#dfc39e]" />
-                  <span>3. Hizmet Seçin</span>
-                </label>
-                <span className="text-sm font-black text-[#dfc39e]">
-                  Toplam: {quickTotalPrice} TL
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {services.map((srv) => {
-                  const active = quickServiceIds.includes(srv.id);
-                  const price = getServicePriceForBarber(
-                    srv,
-                    quickSelectedBarber
                   );
+                })}
+              </div>
+
+              {/* Usta / Koltuk Seçimi */}
+              <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                {(realBarbers.length > 0 ? realBarbers : barbers).map((b) => {
+                  const isSelected =
+                    (quickBarberId || (realBarbers[0]?.id ?? barbers[0]?.id)) === b.id;
                   return (
                     <button
-                      key={srv.id}
+                      key={b.id}
                       type="button"
-                      onClick={() => toggleQuickService(srv.id)}
-                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3.5 py-3 text-left transition ${
-                        active
-                          ? "border-[#f3e8dc] bg-[#dfc39e]/25 text-[#fdf8f5]"
-                          : "border-white/10 bg-[#181411] text-stone-300"
+                      onClick={() => setQuickBarberId(b.id)}
+                      className={`cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shrink-0 ${
+                        isSelected
+                          ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm"
+                          : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-600 dark:text-stone-300 hover:border-stone-400 dark:hover:border-white/30"
                       }`}
                     >
-                      <span className="flex items-center gap-2 font-extrabold">
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
-                            active
-                              ? "border-emerald-400 bg-emerald-500 text-[#06150f]"
-                              : "border-white/25 bg-transparent text-transparent"
-                          }`}
-                        >
-                          {active && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                        </span>
-                        <span className="text-sm">{srv.name}</span>
-                      </span>
-                      <span className="shrink-0 text-sm font-black text-[#f3e8dc]">
-                        {price} TL
-                      </span>
+                      ✂️ {b.name}
                     </button>
                   );
                 })}
               </div>
             </div>
 
+            {/* Satır 2 — İşlem Seçimi (Yan Yana Kompakt Butonlar) */}
+            <div
+              className={`grid gap-1.5 ${
+                services.length >= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"
+              }`}
+            >
+              {services.map((srv) => {
+                const isSelected = quickServiceIds.includes(srv.id);
+                const price = getServicePriceForBarber(srv, quickSelectedBarber);
+                return (
+                  <button
+                    key={srv.id}
+                    type="button"
+                    onClick={() => toggleQuickService(srv.id)}
+                    className={`cursor-pointer py-2 px-2.5 text-xs font-semibold rounded-lg transition-all text-center truncate ${
+                      isSelected
+                        ? "bg-[#dfc39e] text-[#1a110b] font-bold shadow-sm ring-1 ring-[#dfc39e]"
+                        : "border border-stone-200 dark:border-white/10 bg-stone-100 dark:bg-[#181411] text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-white/20"
+                    }`}
+                  >
+                    {srv.name} • {price}₺
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Satır 3 — Boş Saatler (4'lü / 5'li Sıkı Grid) */}
+            {quickAvailableSlots.length === 0 ? (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 py-2 px-3 text-center text-xs font-bold text-amber-700 dark:text-amber-400">
+                {isQuickDayToday
+                  ? "Bugün için uygun boş saat kalmadı."
+                  : "Bu gün için uygun boş saat kalmadı."}
+              </div>
+            ) : (
+              <div className="max-h-[105px] overflow-y-auto pr-0.5 grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+                {quickAvailableSlots.map((slot) => {
+                  const isSelected = quickTime === slot.time;
+                  return (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      onClick={() => setQuickTime(slot.time)}
+                      className={`cursor-pointer py-1.5 text-xs font-bold rounded-md transition-all text-center ${
+                        isSelected
+                          ? "bg-emerald-500 text-stone-950 font-black shadow-sm ring-1 ring-emerald-400"
+                          : "border border-stone-200 dark:border-emerald-500/20 bg-stone-50 dark:bg-[#151e18] text-emerald-800 dark:text-emerald-300 hover:border-emerald-400/50"
+                      }`}
+                    >
+                      {slot.time}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Satır 4 — Müşteri Adı ve Telefon (Yan Yana Tek Satırda) */}
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="Müşteri Adı (Boş: Misafir)"
+                className="h-9 w-full rounded-lg border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-[#181411] px-3 text-sm font-semibold text-stone-900 dark:text-white placeholder-stone-400 outline-none focus:border-[#dfc39e]"
+              />
+              <input
+                type="tel"
+                value={quickPhone}
+                onChange={(e) => setQuickPhone(e.target.value)}
+                placeholder="Telefon (İsteğe Bağlı)"
+                className="h-9 w-full rounded-lg border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-[#181411] px-3 text-sm font-semibold text-stone-900 dark:text-white placeholder-stone-400 outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Satır 5 — Hızlı Kaydet Butonu */}
             {quickError && (
-              <p className="rounded-xl border border-rose-500/40 bg-rose-500/15 p-3 text-sm font-bold text-rose-300">
+              <div className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-500 dark:text-rose-300">
                 {quickError}
-              </p>
+              </div>
             )}
 
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300/80 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 py-4 text-lg font-black text-[#06150f] shadow-xl shadow-emerald-500/25 transition hover:brightness-110 active:scale-[0.99]"
+              disabled={!quickTime || quickAvailableSlots.length === 0}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 text-stone-950 font-black shadow-md shadow-emerald-500/20 transition hover:brightness-105 active:scale-[0.99] disabled:opacity-50 text-sm sm:text-base cursor-pointer"
             >
-              <Save className="h-5 w-5 stroke-[2.5]" />
-              <span>✅ Randevuyu Kaydet ({quickTotalPrice} TL)</span>
+              <span>⚡ Hemen Randevu Ekle</span>
+              {quickTotalPrice > 0 && (
+                <span className="rounded-md bg-stone-950/20 px-2 py-0.5 text-xs font-black">
+                  {quickTotalPrice}₺
+                </span>
+              )}
             </button>
           </form>
         )}
