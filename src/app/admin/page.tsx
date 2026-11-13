@@ -2030,7 +2030,7 @@ export default function AdminDashboardPage() {
             <div className="rounded-2xl border border-stone-200 dark:border-emerald-500/20 bg-stone-50 dark:bg-zinc-800/60 p-2 sm:p-2.5 shadow-sm">
               <div className="text-[10px] sm:text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1 truncate">
                 <span>✂️</span>
-                <span>Tıraş / Doluluk</span>
+                <span>Doluluk</span>
               </div>
               <div className="mt-0.5 font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm sm:text-lg tracking-tight truncate">
                 {todaySummaryMetrics.appointmentCount}{" "}

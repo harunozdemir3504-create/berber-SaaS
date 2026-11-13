@@ -74,6 +74,19 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                // Berber olarak ana ekrana kurulmuş PWA: tanıtım sayfası hiç görünmeden direkt panele git
+                try {
+                  var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+                  if (isStandalone && location.pathname === '/' && !new URLSearchParams(location.search).get('shop') && localStorage.getItem('vip_barber_pwa_role_v1') === 'admin') {
+                    var target = '/admin';
+                    try {
+                      var s = JSON.parse(localStorage.getItem('vip_barber_persistent_admin_session_v1') || 'null');
+                      if (s && s.shopSlug) target = '/admin?shop=' + encodeURIComponent(s.shopSlug);
+                    } catch(e) {}
+                    document.documentElement.style.visibility = 'hidden';
+                    location.replace(target);
+                  }
+                } catch(e) {}
                 try {
                   var t = localStorage.getItem('vip_barber_admin_theme_mode');
                   if (t === 'light') {

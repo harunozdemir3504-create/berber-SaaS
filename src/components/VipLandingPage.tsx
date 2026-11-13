@@ -1165,7 +1165,7 @@ export default function VipLandingPage({
                               </div>
                               <div className="rounded-2xl border border-white/10 bg-[#090a0f] p-4">
                                 <span className="text-[11px] font-bold text-[#94A3B8]">
-                                  Bugün Tıraş / Doluluk
+                                  Bugün Doluluk
                                 </span>
                                 <p className="mt-1 text-sm sm:text-base font-black text-[#FFFFFF]">
                                   {activeChairStat.cuts} Tıraş • {activeChairStat.fillRate}
