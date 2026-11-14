@@ -49,8 +49,10 @@ import {
 import { SubscriptionStatus, TenantShop } from "@/data/mockData";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import ShopLogo from "@/components/ShopLogo";
+import ReelsAdStudio from "@/components/ReelsAdStudio";
 
 export default function SuperAdminPage() {
+  const [reelsOpen, setReelsOpen] = useState<boolean>(false);
   const {
     shops,
     globalBlacklist,
@@ -554,6 +556,7 @@ export default function SuperAdminPage() {
       </AnimatePresence>
 
       {/* Super Admin Hero Header */}
+      {reelsOpen && <ReelsAdStudio onClose={() => setReelsOpen(false)} />}
       <div className="mb-4 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-center sm:gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -571,6 +574,13 @@ export default function SuperAdminPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => setReelsOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300/60 bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1.5 text-[11px] font-black text-black shadow-lg shadow-amber-500/25 transition hover:brightness-110 sm:px-3 sm:py-2 sm:text-xs"
+          >
+            <span>🎬 Reels Reklam Stüdyosu</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowPinChange((prev) => !prev)}

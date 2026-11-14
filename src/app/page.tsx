@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import VipLandingPage from "@/components/VipLandingPage";
+import ReelsAdStudio from "@/components/ReelsAdStudio";
 import {
   Scissors,
   Clock,
@@ -95,6 +96,21 @@ export default function CustomerBookingPage() {
     setCurrentShopSlug(sampleSlug);
     router.push(`/?shop=${sampleSlug}&demo=1`);
   }, [shops, currentShop, setCurrentShopSlug, router]);
+
+  // 🎬 /?reels → Tam Otomatik Sesli Reels Reklam Stüdyosu
+  const [reelsOpen, setReelsOpen] = useState<boolean>(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).has("reels")) {
+      setReelsOpen(true);
+    }
+  }, []);
+  const handleCloseReels = useCallback(() => {
+    setReelsOpen(false);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   // Akıllı PWA Yönlendirmesi (Yalnızca telefon ana ekranına 'Admin' olarak kurulmuş PWA standalone ise)
   useEffect(() => {
@@ -541,10 +557,13 @@ export default function CustomerBookingPage() {
   // ANA KÖK DİZİN (/): Hiçbir dükkan parametresi (?shop=) olmadan girildiğinde B2B SaaS Tanıtım ve Satış Vitrini açılır
   if (isRootLandingPage) {
     return (
-      <VipLandingPage
-        onOpenLiveDemo={handleOpenLiveDemo}
-        demoShopName={currentShop.name}
-      />
+      <>
+        <VipLandingPage
+          onOpenLiveDemo={handleOpenLiveDemo}
+          demoShopName={currentShop.name}
+        />
+        {reelsOpen && <ReelsAdStudio onClose={handleCloseReels} />}
+      </>
     );
   }
 
