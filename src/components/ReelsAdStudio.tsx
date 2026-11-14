@@ -19,7 +19,9 @@ import React, {
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Clapperboard,
+  Download,
   Maximize,
+  Music,
   Play,
   RotateCcw,
   Square,
@@ -141,6 +143,13 @@ export default function ReelsAdStudio({
   const [voiceURI, setVoiceURI] = useState("");
   const [scale, setScale] = useState(1);
   const [progress, setProgress] = useState(0);
+  // Robot sesi (speechSynthesis) varsayılan KAPALI; kullanıcı isterse açar
+  const [useTts, setUseTts] = useState(false);
+  const [voiceFileName, setVoiceFileName] = useState("");
+  const [voiceDur, setVoiceDur] = useState(0);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
+  const [recording, setRecording] = useState(false);
 
   const script = useMemo(
     () => REELS_SCRIPTS.find((s) => s.id === mode) ?? REELS_SCRIPTS[0],
@@ -148,6 +157,14 @@ export default function ReelsAdStudio({
   );
 
   const audioRef = useRef<ReelsAudio>(new ReelsAudio());
+  const stageElRef = useRef<HTMLDivElement | null>(null);
+  const useTtsRef = useRef(false);
+  const recRef = useRef<{
+    recorder: MediaRecorder;
+    display: MediaStream;
+    chunks: Blob[];
+    mime: string;
+  } | null>(null);
   const runIdRef = useRef(0);
   const mutedRef = useRef(false);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
@@ -177,6 +194,11 @@ export default function ReelsAdStudio({
   useEffect(() => {
     recordRef.current = recordMode;
   }, [recordMode]);
+
+  useEffect(() => {
+    useTtsRef.current = useTts;
+    if (!useTts && ttsSupported()) window.speechSynthesis.cancel();
+  }, [useTts]);
 
   // ---- 9:16 sahneyi ekrana sığdır
   useEffect(() => {
@@ -208,16 +230,70 @@ export default function ReelsAdStudio({
     fsRequestedRef.current = false;
   }, []);
 
+  /** Kaydı iptal et (indirmeden kapat). */
+  const discardRecording = useCallback(() => {
+    const r = recRef.current;
+    recRef.current = null;
+    if (!r) return;
+    try {
+      r.recorder.ondataavailable = null;
+      r.recorder.onstop = null;
+      if (r.recorder.state !== "inactive") r.recorder.stop();
+    } catch {
+      /* ignore */
+    }
+    r.display.getTracks().forEach((t) => t.stop());
+    setRecording(false);
+  }, []);
+
+  /** Kaydı bitir, dosyayı bilgisayara/telefona indir. */
+  const finishRecording = useCallback(async () => {
+    const r = recRef.current;
+    recRef.current = null;
+    if (!r) return;
+    await new Promise<void>((resolve) => {
+      r.recorder.onstop = () => resolve();
+      try {
+        if (r.recorder.state !== "inactive") r.recorder.stop();
+        else resolve();
+      } catch {
+        resolve();
+      }
+    });
+    r.display.getTracks().forEach((t) => t.stop());
+    setRecording(false);
+    const blob = new Blob(r.chunks, { type: r.mime });
+    if (blob.size < 1000) {
+      setNotice({ kind: "warn", text: "Kayıt boş çıktı, video indirilemedi. Tekrar dene." });
+      return;
+    }
+    const ext = r.mime.includes("mp4") ? "mp4" : "webm";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vip-berber-reklam.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setNotice({
+      kind: "ok",
+      text: `✅ vip-berber-reklam.${ext} indirildi (${(blob.size / 1048576).toFixed(1)} MB).`,
+    });
+  }, []);
+
   const stopAll = useCallback(() => {
     runIdRef.current++;
     cancelSpeech();
+    audioRef.current.stopVoice();
+    discardRecording();
     setStatus("idle");
     setCountdown(0);
     setActiveWord(-1);
     setStage(0);
     setSceneIdx(0);
     setProgress(0);
-  }, [cancelSpeech]);
+  }, [cancelSpeech, discardRecording]);
 
   const leaveRecordMode = useCallback(() => {
     stopAll();
@@ -271,13 +347,13 @@ export default function ReelsAdStudio({
 
   /** Tek sahneyi oynatır: TTS + kelime senkronu + aşama (stage) efektleri. */
   const playScene = useCallback(
-    (def: ReelsSceneDef, runId: number) =>
+    (def: ReelsSceneDef, runId: number, fixedMs?: number) =>
       new Promise<boolean>((resolve) => {
         const audio = audioRef.current;
         const words = tokenize(def.text);
         const total = words.length;
         const { spoken, starts } = buildSpeech(words);
-        const est = estimateSpeechMs(def.text, TTS_RATE);
+        const est = fixedMs ?? estimateSpeechMs(def.text, TTS_RATE);
         const t0 = performance.now();
 
         let speechStartAt: number | null = null;
@@ -288,7 +364,9 @@ export default function ReelsAdStudio({
         let lastWord = -1;
         let curStage = 0;
 
-        const useSpeech = ttsSupported() && !mutedRef.current;
+        const useSpeech =
+          !fixedMs && useTtsRef.current && ttsSupported() && !mutedRef.current;
+        const tail = fixedMs ? 0 : SCENE_TAIL_MS;
 
         const advance = (idx: number) => {
           if (idx <= lastWord) return;
@@ -385,12 +463,12 @@ export default function ReelsAdStudio({
             ? el >= est + (useSpeech ? 1800 : 0)
             : speechEnded;
 
-          if (doneAt === null && spokenDone && el >= def.minMs) {
+          if (doneAt === null && spokenDone && el >= (fixedMs ? 0 : def.minMs)) {
             doneAt = now;
             advance(total - 1);
           }
           const safety = el > est * 2.5 + 5000;
-          if ((doneAt !== null && now - doneAt >= SCENE_TAIL_MS) || safety) {
+          if ((doneAt !== null && now - doneAt >= tail) || safety) {
             cleanup();
             resolve(true);
           }
@@ -400,14 +478,48 @@ export default function ReelsAdStudio({
   );
 
   const startPlayback = useCallback(
-    async (record: boolean) => {
+    async (record: boolean, download = false) => {
       const audio = audioRef.current;
-      audio.setMuted(mutedRef.current);
-      audio.init(); // kullanıcı tıklaması içinde → ses kilidi açılır
+      setNotice(null);
 
+      // Video indirme: kayÄ±tta efekt/ses sessize alÄ±nmÄ±ÅŸ olmasÄ±n
+      if (download && mutedRef.current) {
+        mutedRef.current = false;
+        setMuted(false);
+      }
+      audio.setMuted(mutedRef.current);
+      audio.init(); // kullanÄ±cÄ± tÄ±klamasÄ± iÃ§inde â†’ ses kilidi aÃ§Ä±lÄ±r
       cancelSpeech();
-      if (ttsSupported() && !mutedRef.current) {
-        // iOS/Safari: konuşma motorunu kullanıcı hareketi içinde "uyandır"
+
+      // ğŸ’¾ Video indirme: ekran yakalama izni tÄ±klama anÄ±nda istenmeli
+      let display: MediaStream | null = null;
+      if (download) {
+        const md = navigator.mediaDevices as MediaDevices | undefined;
+        if (!md?.getDisplayMedia || typeof MediaRecorder === "undefined") {
+          setNotice({
+            kind: "warn",
+            text: "Bu tarayÄ±cÄ± video kaydÄ±nÄ± desteklemiyor. Bilgisayarda Chrome veya Edge kullan.",
+          });
+          return;
+        }
+        try {
+          display = await md.getDisplayMedia({
+            video: { frameRate: 30 },
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: "include",
+          } as unknown as DisplayMediaStreamOptions);
+        } catch {
+          setNotice({
+            kind: "warn",
+            text: "Ekran paylaÅŸÄ±mÄ± izni verilmedi. AÃ§Ä±lan pencerede bu sekmeyi seÃ§ip â€œPaylaÅŸâ€a bas.",
+          });
+          return;
+        }
+      }
+
+      if (ttsSupported() && useTtsRef.current && !mutedRef.current) {
+        // iOS/Safari: konuÅŸma motorunu kullanÄ±cÄ± hareketi iÃ§inde "uyandÄ±r"
         try {
           const prime = new SpeechSynthesisUtterance(" ");
           prime.volume = 0;
@@ -418,21 +530,92 @@ export default function ReelsAdStudio({
       }
 
       const runId = ++runIdRef.current;
-      setRecordMode(record);
-      recordRef.current = record;
+      const fullView = record || download;
+      setRecordMode(fullView);
+      recordRef.current = fullView;
       setSceneIdx(0);
       setActiveWord(-1);
       setStage(0);
       setProgress(0);
 
-      if (record) {
+      let cropped = true;
+      if (download && display) {
+        const dsp = display;
+        dsp.getVideoTracks()[0].onended = () => {
+          if (recRef.current) stopAll();
+        };
+        setStatus("countdown");
+        // Sahne tam ekran gÃ¶rÃ¼nÃ¼mde yeniden kurulsun
+        if (!(await sleep(350, runId))) {
+          dsp.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        // Region Capture: yalnÄ±zca 9:16 reklam alanÄ±nÄ± kÄ±rp
+        cropped = false;
         try {
-          if (!document.fullscreenElement) {
-            fsRequestedRef.current = true;
-            await document.documentElement.requestFullscreen?.();
+          const CT = (
+            window as unknown as {
+              CropTarget?: { fromElement(e: Element): Promise<unknown> };
+            }
+          ).CropTarget;
+          const tr = dsp.getVideoTracks()[0] as MediaStreamTrack & {
+            cropTo?: (t: unknown) => Promise<void>;
+          };
+          if (CT && tr.cropTo && stageElRef.current) {
+            await tr.cropTo(await CT.fromElement(stageElRef.current));
+            cropped = true;
           }
         } catch {
-          fsRequestedRef.current = false;
+          cropped = false;
+        }
+        const aStream = audio.getRecordingStream();
+        const tracks = [
+          ...dsp.getVideoTracks(),
+          ...(aStream ? aStream.getAudioTracks() : []),
+        ];
+        const mimes = [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+          "video/mp4;codecs=avc1,mp4a.40.2",
+          "video/mp4",
+        ];
+        const mime = mimes.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+        try {
+          const recorder = new MediaRecorder(
+            new MediaStream(tracks),
+            mime
+              ? { mimeType: mime, videoBitsPerSecond: 6_000_000 }
+              : undefined
+          );
+          const chunks: Blob[] = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
+          };
+          recRef.current = {
+            recorder,
+            display: dsp,
+            chunks,
+            mime: recorder.mimeType || mime || "video/webm",
+          };
+        } catch {
+          dsp.getTracks().forEach((t) => t.stop());
+          setNotice({ kind: "warn", text: "Video kaydedici baÅŸlatÄ±lamadÄ±." });
+          stopAll();
+          return;
+        }
+      }
+
+      if (fullView) {
+        if (record && !download) {
+          try {
+            if (!document.fullscreenElement) {
+              fsRequestedRef.current = true;
+              await document.documentElement.requestFullscreen?.();
+            }
+          } catch {
+            fsRequestedRef.current = false;
+          }
         }
         setStatus("countdown");
         for (let n = 3; n >= 1; n--) {
@@ -451,17 +634,87 @@ export default function ReelsAdStudio({
       cancelSpeech();
       if (!(await sleep(80, runId))) return;
 
+      // YÃ¼klenen ses varsa: sahne sÃ¼releri sesin sÃ¼resine gÃ¶re bÃ¶lÃ¼nÃ¼r
+      const hasVoice = audio.voiceDuration > 0;
+      let durs: number[] | null = null;
+      if (hasVoice) {
+        const w = script.scenes.map((s) => estimateSpeechMs(s.text, TTS_RATE));
+        const sum = w.reduce((a, b) => a + b, 0);
+        const total = audio.voiceDuration * 1000;
+        durs = w.map((x) => (total * x) / sum);
+      }
+
+      if (recRef.current) {
+        try {
+          recRef.current.recorder.start(250);
+          setRecording(true);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (hasVoice) audio.playVoice();
+
       for (let i = 0; i < script.scenes.length; i++) {
         setSceneIdx(i);
-        if (i > 0) audio.play("whoosh");
-        const alive = await playScene(script.scenes[i], runId);
+        if (i > 0) {
+          audio.play("bassHit");
+          audio.play("whoosh");
+        }
+        const alive = await playScene(
+          script.scenes[i],
+          runId,
+          durs ? Math.max(1200, durs[i]) : undefined
+        );
         if (!alive) return;
       }
       if (!(await sleep(900, runId))) return;
       setStatus("ended");
+
+      if (download) {
+        await finishRecording();
+        if (!cropped) {
+          setNotice((n) => ({
+            kind: "warn",
+            text: `${n?.text ?? ""} (TarayÄ±cÄ± alan kÄ±rpmayÄ± desteklemedi; videoda siyah kenarlar olabilir.)`.trim(),
+          }));
+        }
+        leaveRecordMode();
+      }
     },
-    [cancelSpeech, playScene, script, sleep]
+    [cancelSpeech, playScene, script, sleep, finishRecording, leaveRecordMode, stopAll]
   );
+
+  /** ğŸµ Ses dosyasÄ± seÃ§ (.mp3 / .wav / ElevenLabs) */
+  const handleVoiceFile = async (file: File | null) => {
+    if (!file) return;
+    setVoiceBusy(true);
+    setNotice(null);
+    try {
+      const dur = await audioRef.current.loadVoice(file);
+      setVoiceFileName(file.name);
+      setVoiceDur(dur);
+      setNotice({
+        kind: "ok",
+        text: `ğŸµ ${file.name} yÃ¼klendi (${dur.toFixed(1)} sn). AltyazÄ±lar bu sÃ¼reye gÃ¶re akacak.`,
+      });
+    } catch {
+      audioRef.current.clearVoice();
+      setVoiceFileName("");
+      setVoiceDur(0);
+      setNotice({
+        kind: "warn",
+        text: "Ses dosyasÄ± Ã§Ã¶zÃ¼lemedi. .mp3 veya .wav dosyasÄ± seÃ§.",
+      });
+    } finally {
+      setVoiceBusy(false);
+    }
+  };
+
+  const removeVoice = () => {
+    audioRef.current.clearVoice();
+    setVoiceFileName("");
+    setVoiceDur(0);
+  };
 
   const selectMode = (id: ReelsModeId) => {
     if (id === mode) return;
@@ -499,6 +752,7 @@ export default function ReelsAdStudio({
   // ---------------------------------------------------------------- 9:16 sahne
   const stageFrame = (
     <div
+      ref={stageElRef}
       style={{ width: STAGE_W * scale, height: STAGE_H * scale }}
       className={`relative shrink-0 overflow-hidden ${
         recordMode ? "" : "rounded-[28px] shadow-[0_0_60px_rgba(245,158,11,0.25)] ring-1 ring-white/15"
@@ -703,6 +957,95 @@ export default function ReelsAdStudio({
           ))}
         </div>
 
+        {/* ÜST KONTROL BARI: ses yükle · başlat · videoyu indir */}
+        <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] p-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              className={`flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black transition sm:text-sm ${
+                voiceDur > 0
+                  ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300"
+                  : "border-sky-400/50 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
+              } ${isBusy ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <Music className="h-4 w-4" />
+              {voiceBusy
+                ? "Yükleniyor…"
+                : voiceDur > 0
+                ? `🎵 ${voiceFileName.length > 22 ? voiceFileName.slice(0, 20) + "…" : voiceFileName} · ${voiceDur.toFixed(1)} sn`
+                : "🎵 Ses Dosyası Seç (.mp3 / ElevenLabs Sesi)"}
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                disabled={isBusy}
+                onChange={(e) => {
+                  void handleVoiceFile(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {voiceDur > 0 && !isBusy && (
+              <button
+                type="button"
+                onClick={removeVoice}
+                className="rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-white/70 hover:bg-white/10"
+                aria-label="Ses dosyasını kaldır"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+
+            {isBusy ? (
+              <button
+                type="button"
+                onClick={stopAll}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-500/50 bg-rose-500/15 px-3 py-2 text-xs font-black text-rose-300 sm:text-sm"
+              >
+                <Square className="h-4 w-4 fill-rose-300" /> Durdur
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => startPlayback(false)}
+                className="flex items-center gap-1.5 rounded-xl border border-amber-400/50 bg-amber-500/15 px-3 py-2 text-xs font-black text-amber-300 transition hover:bg-amber-500/25 sm:text-sm"
+              >
+                {status === "ended" ? "🔁 Tekrar Başlat" : "▶️ Başlat"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => startPlayback(true, true)}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-400 to-green-500 px-3.5 py-2 text-xs font-black text-black shadow-[0_0_22px_rgba(16,185,129,0.55)] transition hover:brightness-110 disabled:opacity-50 sm:text-sm"
+            >
+              <Download className="h-4 w-4" />
+              💾 Oynat &amp; Videoyu İndir
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-white/50">
+            {voiceDur > 0
+              ? "Seçtiğin ses ▶️ Başlat’a basınca çalar; altyazılar ve sahneler sesin süresine göre akar."
+              : "Ses dosyası seçilmedi: sadece altyazı + ses efektleri çalar. ElevenLabs’tan indirdiğin .mp3 dosyasını yükle."}{" "}
+            💾 butonu açılan pencerede <b>bu sekmeyi</b> seçmeni ister, bitince
+            <b> vip-berber-reklam.webm</b> otomatik iner (Chrome/Edge).
+          </p>
+          {notice && (
+            <div
+              className={`mt-2 rounded-lg border px-3 py-2 text-xs font-bold ${
+                notice.kind === "ok"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {notice.text}
+            </div>
+          )}
+          {recording && (
+            <div className="mt-2 text-xs font-black text-rose-400">● KAYIT SÜRÜYOR…</div>
+          )}
+        </div>
+
         <div className="mt-4 flex flex-col items-center gap-5 md:flex-row md:items-start md:justify-center">
           {/* Sahne */}
           <div className="flex flex-col items-center gap-3">{stageFrame}</div>
@@ -766,39 +1109,54 @@ export default function ReelsAdStudio({
               </button>
             </div>
 
-            {/* Ses ayarı */}
+            {/* Robot sesi (speechSynthesis) — varsayılan KAPALI */}
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
-              <div className="text-[11px] font-black uppercase tracking-wider text-white/60">
-                🎙 Spiker Sesi (tr-TR · rate 1.08 · pitch 0.92)
-              </div>
-              {ttsSupported() && voices.length > 0 ? (
-                <div className="mt-2 flex gap-2">
-                  <select
-                    value={voiceURI}
-                    onChange={(e) => setVoiceURI(e.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-zinc-900 px-2 py-2 text-xs font-bold text-white outline-none"
-                  >
-                    {voices.map((v) => (
-                      <option key={v.voiceURI} value={v.voiceURI}>
-                        {v.name} ({v.lang})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={testVoice}
-                    className="rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 text-xs font-black text-amber-300"
-                  >
-                    Dene
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-[11px] font-bold leading-relaxed text-amber-200">
-                  {ttsSupported()
-                    ? "Bu cihazda Türkçe (tr-TR) ses bulunamadı. Windows: Ayarlar → Zaman ve dil → Konuşma → Ses ekle → Türkçe. Altyazı ve ses efektleri yine de çalışır."
-                    : "Bu tarayıcı konuşma sentezini (speechSynthesis) desteklemiyor. Chrome / Edge / Safari kullanın. Altyazı ve ses efektleri yine de çalışır."}
-                </p>
-              )}
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={useTts}
+                  onChange={(e) => setUseTts(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-amber-500"
+                />
+                <span>
+                  <span className="block text-[11px] font-black uppercase tracking-wider text-white/70">
+                    🤖 Tarayıcı robot sesini kullan (isteğe bağlı)
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-white/45">
+                    Varsayılan kapalı. Kaliteli ses için yukarıdan MP3 yükle.
+                  </span>
+                </span>
+              </label>
+              {useTts &&
+                (ttsSupported() && voices.length > 0 ? (
+                  <div className="mt-2 flex gap-2">
+                    <select
+                      value={voiceURI}
+                      onChange={(e) => setVoiceURI(e.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-white/15 bg-zinc-900 px-2 py-2 text-xs font-bold text-white outline-none"
+                    >
+                      {voices.map((v) => (
+                        <option key={v.voiceURI} value={v.voiceURI}>
+                          {v.name} ({v.lang})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={testVoice}
+                      className="rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 text-xs font-black text-amber-300"
+                    >
+                      Dene
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-[11px] font-bold leading-relaxed text-amber-200">
+                    Bu cihazda Türkçe (tr-TR) ses bulunamadı veya tarayıcı desteklemiyor.
+                  </p>
+                ))}
+              <p className="mt-2 text-[10px] text-white/40">
+                Not: Robot sesi videoya kaydedilemez; sadece MP3 + efektler kaydedilir.
+              </p>
             </div>
 
             {/* Sahne listesi */}

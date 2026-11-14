@@ -19,7 +19,8 @@ export type SfxName =
   | "sparkle"
   | "womp"
   | "countBeep"
-  | "countGo";
+  | "countGo"
+  | "bassHit";
 
 type OscType = "sine" | "square" | "sawtooth" | "triangle";
 
@@ -49,8 +50,60 @@ interface NoiseOpts {
 export class ReelsAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** Efekt yolu: sfx → lowpass → master (yumuşatılmış) */
+  private sfx: GainNode | null = null;
+  private voiceBus: GainNode | null = null;
+  private streamDest: MediaStreamAudioDestinationNode | null = null;
+  private voiceBuffer: AudioBuffer | null = null;
+  private voiceSource: AudioBufferSourceNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   muted = false;
+
+  /** Yüklenmiş ses (MP3/WAV) süresi, sn. Yoksa 0. */
+  get voiceDuration(): number {
+    return this.voiceBuffer?.duration ?? 0;
+  }
+
+  /** Kullanıcının seçtiği ses dosyasını çözer. */
+  async loadVoice(file: File): Promise<number> {
+    if (!this.init() || !this.ctx) throw new Error("AudioContext yok");
+    const data = await file.arrayBuffer();
+    const buf = await new Promise<AudioBuffer>((resolve, reject) => {
+      this.ctx!.decodeAudioData(data, resolve, reject);
+    });
+    this.voiceBuffer = buf;
+    return buf.duration;
+  }
+
+  clearVoice() {
+    this.stopVoice();
+    this.voiceBuffer = null;
+  }
+
+  /** Yüklü sesi baştan çalar (hoparlör + kayıt akışı). */
+  playVoice() {
+    if (!this.ctx || !this.voiceBuffer || !this.voiceBus) return;
+    this.stopVoice();
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.voiceBuffer;
+    src.connect(this.voiceBus);
+    src.start(this.ctx.currentTime + 0.02);
+    this.voiceSource = src;
+  }
+
+  stopVoice() {
+    try {
+      this.voiceSource?.stop();
+    } catch {
+      /* ignore */
+    }
+    this.voiceSource = null;
+  }
+
+  /** MediaRecorder için efekt + ses karışımı akışı. */
+  getRecordingStream(): MediaStream | null {
+    return this.streamDest?.stream ?? null;
+  }
 
   /** Kullanıcı tıklamasından (user gesture) çağrılmalı. */
   init(): boolean {
@@ -71,6 +124,21 @@ export class ReelsAudio {
         this.master.gain.value = this.muted ? 0 : 0.9;
         this.master.connect(comp);
         comp.connect(this.ctx.destination);
+        this.streamDest = this.ctx.createMediaStreamDestination();
+        // Kayıt, sessize alınsa bile temiz karışımı alsın diye compressor çıkışından
+        comp.connect(this.streamDest);
+        // Efektler: yumuşak (lowpass) ve sesin altında
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = 7200;
+        lp.Q.value = 0.5;
+        this.sfx = this.ctx.createGain();
+        this.sfx.gain.value = 0.7;
+        this.sfx.connect(lp);
+        lp.connect(this.master);
+        this.voiceBus = this.ctx.createGain();
+        this.voiceBus.gain.value = 1;
+        this.voiceBus.connect(this.master);
       }
       if (this.ctx.state === "suspended") {
         void this.ctx.resume();
@@ -96,6 +164,10 @@ export class ReelsAudio {
     }
     this.ctx = null;
     this.master = null;
+    this.sfx = null;
+    this.voiceBus = null;
+    this.streamDest = null;
+    this.voiceSource = null;
     this.noiseBuffer = null;
   }
 
@@ -103,7 +175,7 @@ export class ReelsAudio {
 
   private tone(o: ToneOpts) {
     const ctx = this.ctx;
-    const master = this.master;
+    const master = this.sfx;
     if (!ctx || !master) return;
     const t0 = ctx.currentTime + (o.start ?? 0);
     const vol = o.vol ?? 0.25;
@@ -135,7 +207,7 @@ export class ReelsAudio {
 
   private noise(o: NoiseOpts) {
     const ctx = this.ctx;
-    const master = this.master;
+    const master = this.sfx;
     if (!ctx || !master) return;
     if (!this.noiseBuffer) {
       const len = ctx.sampleRate; // 1 sn beyaz gürültü
@@ -223,6 +295,8 @@ export class ReelsAudio {
         return this.sparkle();
       case "womp":
         return this.womp();
+      case "bassHit":
+        return this.bassHit();
       case "countBeep":
         return this.tone({ freq: 880, dur: 0.16, vol: 0.28, type: "sine" });
       case "countGo":
@@ -271,49 +345,60 @@ export class ReelsAudio {
     }
   }
 
-  /** Tok & lüks bildirim: iPhone / Apple Pay tarzı "Ding!". */
+  /** Tok & lüks bildirim: yumuşak, sıcak iki notalı "Ding!" (iPhone / Apple Pay hissi). */
   private ding() {
-    // yumuşak alt vuruş
-    this.tone({ freq: 196, freqEnd: 140, dur: 0.18, vol: 0.28, decay: true });
-    // iki notalı çan (E6 → B6)
-    this.bell(1318.5, 0, 1.5, 0.3);
-    this.bell(1975.5, 0.11, 1.7, 0.28);
-    this.tone({ freq: 2637, start: 0.11, dur: 0.9, vol: 0.06, decay: true });
+    // sıcak alt gövde
+    this.tone({ freq: 220, freqEnd: 165, dur: 0.22, vol: 0.2, decay: true, attack: 0.01 });
+    // saf sinüs çan: G5 → D6 (yumuşak, tiz üst sesler çok az)
+    this.tone({ freq: 784, start: 0, dur: 1.4, vol: 0.26, decay: true, attack: 0.006 });
+    this.tone({ freq: 1568, start: 0, dur: 0.8, vol: 0.07, decay: true, attack: 0.006 });
+    this.tone({ freq: 1175, start: 0.12, dur: 1.7, vol: 0.26, decay: true, attack: 0.006 });
+    this.tone({ freq: 2350, start: 0.12, dur: 0.9, vol: 0.06, decay: true, attack: 0.006 });
+    this.tone({ freq: 587, start: 0.12, dur: 1.2, vol: 0.12, decay: true, attack: 0.01 });
   }
 
-  /** Kasa tıkırtısı: kısa mekanik tık. */
+  /** Kasa tıkırtısı: yumuşak, kısa "tık". */
   private cashTick() {
-    this.noise({ dur: 0.03, vol: 0.18, filter: "highpass", freq: 3200, q: 0.7 });
-    this.tone({ freq: 2300, dur: 0.03, vol: 0.1, type: "square" });
-    this.tone({ freq: 190, freqEnd: 90, dur: 0.07, vol: 0.2, decay: true });
+    this.noise({ dur: 0.04, vol: 0.09, filter: "bandpass", freq: 2400, q: 1.2 });
+    this.tone({ freq: 1100, freqEnd: 900, dur: 0.05, vol: 0.09, type: "triangle", decay: true });
+    this.tone({ freq: 160, freqEnd: 90, dur: 0.07, vol: 0.14, decay: true });
   }
 
-  /** Kasa çekmecesi açılışı: "ka-ching!" */
+  /** Kasa çekmecesi açılışı: tok "ka-ching" (yumuşatılmış). */
   private cashRegister() {
-    this.noise({ dur: 0.08, vol: 0.25, filter: "highpass", freq: 2500 });
-    this.tone({ freq: 140, freqEnd: 70, dur: 0.14, vol: 0.3, decay: true });
-    this.bell(2637, 0.07, 1.1, 0.26);
-    this.bell(3322, 0.2, 1.3, 0.22);
+    this.noise({ dur: 0.1, vol: 0.12, filter: "bandpass", freq: 1800, q: 0.8 });
+    this.tone({ freq: 150, freqEnd: 80, dur: 0.16, vol: 0.24, decay: true });
+    this.tone({ freq: 1568, start: 0.07, dur: 1.0, vol: 0.2, decay: true, attack: 0.005 });
+    this.tone({ freq: 3136, start: 0.07, dur: 0.5, vol: 0.05, decay: true, attack: 0.005 });
+    this.tone({ freq: 2093, start: 0.19, dur: 1.2, vol: 0.19, decay: true, attack: 0.005 });
+    this.tone({ freq: 4186, start: 0.19, dur: 0.5, vol: 0.04, decay: true, attack: 0.005 });
+  }
+
+  /** Hafif sinematik bas vuruşu (sahne geçişi). */
+  private bassHit() {
+    this.tone({ freq: 90, freqEnd: 42, dur: 0.7, vol: 0.5, decay: true, attack: 0.008 });
+    this.tone({ freq: 45, freqEnd: 32, dur: 0.9, vol: 0.4, decay: true, attack: 0.01 });
+    this.noise({ dur: 0.25, vol: 0.05, filter: "lowpass", freq: 500, freqEnd: 120 });
   }
 
   private whoosh() {
     this.noise({
-      dur: 0.38,
-      vol: 0.16,
+      dur: 0.45,
+      vol: 0.07,
       filter: "bandpass",
-      freq: 350,
-      freqEnd: 3800,
-      q: 0.9,
+      freq: 300,
+      freqEnd: 2200,
+      q: 0.6,
     });
   }
 
   private pop() {
-    this.tone({ freq: 520, freqEnd: 980, dur: 0.1, vol: 0.22, decay: true });
+    this.tone({ freq: 520, freqEnd: 900, dur: 0.1, vol: 0.14, decay: true });
   }
 
   private thud() {
-    this.tone({ freq: 130, freqEnd: 38, dur: 0.35, vol: 0.5, decay: true });
-    this.noise({ dur: 0.1, vol: 0.14, filter: "lowpass", freq: 600 });
+    this.tone({ freq: 110, freqEnd: 40, dur: 0.5, vol: 0.45, decay: true, attack: 0.008 });
+    this.noise({ dur: 0.1, vol: 0.06, filter: "lowpass", freq: 500 });
   }
 
   private scan() {

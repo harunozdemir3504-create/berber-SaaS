@@ -554,6 +554,11 @@ export default function CustomerBookingPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  // 🎬 /?reels → şifresiz, doğrudan Reels Stüdyosu (landing/hydration beklemeden)
+  if (reelsOpen) {
+    return <ReelsAdStudio onClose={handleCloseReels} />;
+  }
+
   // ANA KÖK DİZİN (/): Hiçbir dükkan parametresi (?shop=) olmadan girildiğinde B2B SaaS Tanıtım ve Satış Vitrini açılır
   if (isRootLandingPage) {
     return (
