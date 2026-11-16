@@ -18,13 +18,19 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  CheckCircle2,
   Clapperboard,
   Download,
+  ExternalLink,
+  Film,
+  Folder,
+  FolderDown,
   Maximize,
   Music,
   Play,
   RotateCcw,
   Square,
+  Video,
   Volume2,
   VolumeX,
   X,
@@ -122,6 +128,24 @@ function CapCutSubtitles({
   );
 }
 
+export function getModeSlug(modeId: ReelsModeId): string {
+  switch (modeId) {
+    case 1:
+      return "reklam-1-telefon-cilesi";
+    case 2:
+      return "reklam-2-kara-liste-ve-kapora";
+    case 3:
+      return "reklam-3-aynadaki-qr-sov";
+  }
+}
+
+export interface SavedReelsFile {
+  name: string;
+  sizeFormatted: string;
+  mtime: string;
+  publicUrl: string;
+}
+
 // ------------------------------------------------------------------ stüdyo
 
 export default function ReelsAdStudio({
@@ -132,6 +156,31 @@ export default function ReelsAdStudio({
   initialMode?: ReelsModeId;
 }) {
   const [mode, setMode] = useState<ReelsModeId>(initialMode);
+  const modeRef = useRef<ReelsModeId>(initialMode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  const [savedFiles, setSavedFiles] = useState<SavedReelsFile[]>([]);
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const [previewVideoTitle, setPreviewVideoTitle] = useState<string>("");
+
+  const refreshSavedFiles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/save-reels-video");
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.files)) {
+        setSavedFiles(data.files);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSavedFiles();
+  }, [refreshSavedFiles]);
+
   const [status, setStatus] = useState<Status>("idle");
   const [recordMode, setRecordMode] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -268,19 +317,41 @@ export default function ReelsAdStudio({
       return;
     }
     const ext = r.mime.includes("mp4") ? "mp4" : "webm";
+    const currentMode = modeRef.current;
+    const slug = getModeSlug(currentMode);
+    const filename = `${slug}.${ext}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `vip-berber-reklam.${ext}`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+    // Otomatik sunucu klasörüne kaydet (reels-videolari/)
+    try {
+      const fd = new FormData();
+      fd.append("file", blob, filename);
+      fd.append("filename", filename);
+      fd.append("modeId", String(currentMode));
+      fetch("/api/save-reels-video", { method: "POST", body: fd })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.ok) {
+            void refreshSavedFiles();
+          }
+        })
+        .catch(() => {});
+    } catch {
+      /* ignore */
+    }
+
     setNotice({
       kind: "ok",
-      text: `✅ vip-berber-reklam.${ext} indirildi (${(blob.size / 1048576).toFixed(1)} MB).`,
+      text: `✅ ${filename} bilgisayarınıza indirildi ve reels-videolari/ klasörüne kaydedildi (${(blob.size / 1048576).toFixed(1)} MB).`,
     });
-  }, []);
+  }, [refreshSavedFiles]);
 
   const stopAll = useCallback(() => {
     runIdRef.current++;
@@ -478,9 +549,17 @@ export default function ReelsAdStudio({
   );
 
   const startPlayback = useCallback(
-    async (record: boolean, download = false) => {
+    async (record: boolean, download = false, targetMode?: ReelsModeId) => {
       const audio = audioRef.current;
       setNotice(null);
+
+      const activeMode = targetMode ?? modeRef.current;
+      if (targetMode && targetMode !== modeRef.current) {
+        setMode(targetMode);
+        modeRef.current = targetMode;
+      }
+      const activeScript =
+        REELS_SCRIPTS.find((s) => s.id === activeMode) ?? script;
 
       // Video indirme: kayÄ±tta efekt/ses sessize alÄ±nmÄ±ÅŸ olmasÄ±n
       if (download && mutedRef.current) {
@@ -634,11 +713,13 @@ export default function ReelsAdStudio({
       cancelSpeech();
       if (!(await sleep(80, runId))) return;
 
-      // YÃ¼klenen ses varsa: sahne sÃ¼releri sesin sÃ¼resine gÃ¶re bÃ¶lÃ¼nÃ¼r
+      // Yüklenen ses varsa: sahne süreleri sesin süresine göre bölünür
       const hasVoice = audio.voiceDuration > 0;
       let durs: number[] | null = null;
       if (hasVoice) {
-        const w = script.scenes.map((s) => estimateSpeechMs(s.text, TTS_RATE));
+        const w = activeScript.scenes.map((s) =>
+          estimateSpeechMs(s.text, TTS_RATE)
+        );
         const sum = w.reduce((a, b) => a + b, 0);
         const total = audio.voiceDuration * 1000;
         durs = w.map((x) => (total * x) / sum);
@@ -654,14 +735,14 @@ export default function ReelsAdStudio({
       }
       if (hasVoice) audio.playVoice();
 
-      for (let i = 0; i < script.scenes.length; i++) {
+      for (let i = 0; i < activeScript.scenes.length; i++) {
         setSceneIdx(i);
         if (i > 0) {
           audio.play("bassHit");
           audio.play("whoosh");
         }
         const alive = await playScene(
-          script.scenes[i],
+          activeScript.scenes[i],
           runId,
           durs ? Math.max(1200, durs[i]) : undefined
         );
@@ -957,6 +1038,99 @@ export default function ReelsAdStudio({
           ))}
         </div>
 
+        {/* 📁 3 VİDEO KLASÖRÜ (AYRI AYRI KAYDEDİLDİ) */}
+        <div className="mt-4 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-[#1b1712] via-[#141210] to-[#0d0c0a] p-3.5 shadow-xl sm:p-4">
+          <div className="flex flex-col gap-2 border-b border-white/10 pb-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <FolderDown className="h-5 w-5 text-amber-400" />
+                <h3 className="text-sm font-black text-white sm:text-base">
+                  📁 3 Video Klasörü (Ayrı Ayrı Kaydedildi)
+                </h3>
+                <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black text-emerald-300">
+                  ✓ 3 Video Klasörde Hazır
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/60">
+                Tüm videolar 9:16 dikey formatta ve ses efektleriyle{" "}
+                <span className="font-mono text-amber-300">
+                  reels-videolari/
+                </span>{" "}
+                klasörüne kaydedildi. Doğrudan izleyebilir veya bilgisayarınıza indirebilirsiniz:
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-mono text-white/60">
+              <Folder className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <span className="truncate max-w-[280px]">.../reels-videolari/</span>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            {REELS_SCRIPTS.map((s) => {
+              const slug = getModeSlug(s.id);
+              const isCurrent = mode === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`relative flex flex-col justify-between rounded-xl border p-3 transition ${
+                    isCurrent
+                      ? "border-amber-400/80 bg-amber-500/15 shadow-lg shadow-amber-500/10"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/20"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-amber-400">
+                      <span>{s.tabLabel}</span>
+                      <span className="text-white/40">~{s.approxSeconds} sn</span>
+                    </div>
+                    <h4 className="mt-1 text-xs font-bold text-white line-clamp-1">
+                      {s.title}
+                    </h4>
+                    <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-white/50">
+                      <Film className="h-3 w-3 text-emerald-400 shrink-0" />
+                      <span className="truncate">{slug}.mp4</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-1.5 border-t border-white/10 pt-2.5">
+                    <a
+                      href={`/reels-videolari/${slug}.mp4`}
+                      download={`${slug}.mp4`}
+                      className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-emerald-400/50 bg-emerald-500/20 py-1.5 text-center text-[11px] font-black text-emerald-300 transition hover:bg-emerald-500/30"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>İndir (MP4)</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewVideoUrl(`/reels-videolari/${slug}.mp4`);
+                        setPreviewVideoTitle(s.title);
+                      }}
+                      className="flex items-center justify-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/20"
+                      title="Önizle / İzle"
+                    >
+                      <Play className="h-3 w-3 fill-white" />
+                      <span>İzle</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectMode(s.id);
+                        void startPlayback(true, true, s.id);
+                      }}
+                      className="flex items-center justify-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/20 px-2 py-1.5 text-[11px] font-bold text-amber-300 transition hover:bg-amber-500/30"
+                      title="Stüdyoda Canlı Yeniden Kaydet"
+                    >
+                      <Video className="h-3 w-3 text-amber-300" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ÜST KONTROL BARI: ses yükle · başlat · videoyu indir */}
         <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] p-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -1193,6 +1367,58 @@ export default function ReelsAdStudio({
           </div>
         </div>
       </div>
+
+      {/* VİDEO ÖNİZLEME MODALI */}
+      {previewVideoUrl && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+          <div className="relative flex max-h-[95vh] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-white/20 bg-zinc-950 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Film className="h-4 w-4 text-amber-400" />
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  {previewVideoTitle || "Video Önizleme"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewVideoUrl(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                aria-label="Kapat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="relative aspect-[9/16] w-full overflow-hidden rounded-2xl bg-black shadow-inner">
+              <video
+                src={previewVideoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="h-full w-full object-contain"
+              />
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <a
+                href={previewVideoUrl}
+                download
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2.5 text-xs font-black text-black transition hover:brightness-110"
+              >
+                <Download className="h-4 w-4" />
+                Bilgisayara İndir (MP4)
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewVideoUrl(null)}
+                className="rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -205,7 +205,8 @@ export default function CustomerBookingPage() {
   // Adım 3: İsim, Telefon ve Onay
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
-  const [canComeEarly, setCanComeEarly] = useState<boolean>(true);
+  const [canComeEarly, setCanComeEarly] = useState<boolean>(false);
+  const [whatsappClicked, setWhatsappClicked] = useState<boolean>(false);
   const [stage, setStage] = useState<VerificationStage>("idle");
   const [cardNumber, setCardNumber] = useState<string>("4543 •••• •••• 8890");
   const [formError, setFormError] = useState<string>("");
@@ -235,6 +236,8 @@ export default function CustomerBookingPage() {
         setSelectedBarberId(firstReal.id);
       }
       setSelectedSlot(null);
+      setCanComeEarly(false);
+      setWhatsappClicked(false);
       setStage("idle");
       setConfirmedAppointment(null);
     }
@@ -445,9 +448,10 @@ export default function CustomerBookingPage() {
       verificationCode,
       reminderSent: false,
       bookingSource: "online",
-      canComeEarly,
+      canComeEarly: Boolean(canComeEarly),
     });
 
+    setWhatsappClicked(false);
     setConfirmedAppointment(created);
     setStage("confirmed");
   };
@@ -501,6 +505,8 @@ export default function CustomerBookingPage() {
     setSelectedSlot(null);
     setCustomerName("");
     setCustomerPhone("");
+    setCanComeEarly(false);
+    setWhatsappClicked(false);
     setConfirmedAppointment(null);
     setStage("idle");
     setIsEditingPhoneOnConfirm(false);
@@ -1248,7 +1254,7 @@ export default function CustomerBookingPage() {
                 </div>
               )}
 
-              {/* WHATSAPP ONAY KODU VE DOĞRULAMA EKRANI (OTOMATİK ONAY) */}
+              {/* WHATSAPP ONAY KODU VE DOĞRULAMA EKRANI (2 AŞAMALI SON EKRAN) */}
               {stage === "confirmed" && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96 }}
@@ -1256,9 +1262,9 @@ export default function CustomerBookingPage() {
                   className={`rounded-3xl border-2 p-5 text-center shadow-2xl sm:p-7 transition-all ${
                     isCancelledOnConfirm
                       ? "border-rose-500/50 bg-gradient-to-b from-rose-950/40 via-[#181313] to-[#110e0e]"
-                      : confirmedAppointment?.status === "confirmed"
+                      : confirmedAppointment?.status === "confirmed" && whatsappClicked
                       ? "border-emerald-500/70 bg-gradient-to-b from-emerald-950/40 via-[#141517] to-[#0f1012]"
-                      : "border-amber-500/70 bg-gradient-to-b from-amber-950/40 via-[#181513] to-[#111113]"
+                      : "border-amber-500/80 bg-gradient-to-b from-amber-950/40 via-[#181513] to-[#111113]"
                   }`}
                 >
                   {isCancelledOnConfirm ? (
@@ -1288,17 +1294,262 @@ export default function CustomerBookingPage() {
                   ) : (
                     <>
                       {(() => {
-                        const checkPhone =
+                        const rawCode =
+                          confirmedAppointment?.verificationCode || "#4829";
+                        const vCode = rawCode.startsWith("#") ? rawCode : `#${rawCode}`;
+                        const barberText =
+                          confirmedAppointment?.barberName || selectedBarber?.name || "Usta";
+                        const dateText =
+                          selectedDay.fullDate ||
+                          confirmedAppointment?.dateLabel ||
+                          selectedDay.chipLabel;
+                        const timeText =
+                          confirmedAppointment?.time || selectedSlot?.time || "";
+                        const serviceNamesText =
+                          confirmedAppointment?.services?.map((s) => s.name).join(" + ") ||
+                          selectedServices.map((s) => s.name).join(" + ") ||
+                          "Saç Kesimi";
+                        const isEarlyEligible = Boolean(
+                          confirmedAppointment?.canComeEarly ?? canComeEarly
+                        );
+
+                        const displayPhone =
                           confirmedAppointment?.customerPhone || customerPhone || "";
-                        const isBlacklistMatch =
-                          Boolean(isPhoneBlacklisted(checkPhone)) ||
+                        const isBlacklistUser =
+                          Boolean(isPhoneBlacklisted(displayPhone)) ||
                           Boolean(confirmedAppointment?.isBlacklisted) ||
                           Boolean(confirmedAppointment?.requiresDeposit);
 
                         const shopIban =
                           currentShop.iban || "TR33 0006 2000 0001 2345 6789 01";
 
-                        if (isBlacklistMatch) {
+                        // 4. WHATSAPP BİLDİRİM ŞABLONU
+                        const waMessage = isBlacklistUser
+                          ? [
+                              `🚨 *KARA LİSTE / KAPORA ONAY TALEBİ* (${vCode})`,
+                              `👤 *Müşteri:* ${customerName.trim()} (${displayPhone})`,
+                              `📅 *Tarih:* ${dateText} - ${timeText} | *Usta:* ${barberText}`,
+                              `💳 *Not:* Kapora ödemesini yaptım, dekontu iletiyorum. Onayınızı bekliyorum.`,
+                            ].join("\n")
+                          : [
+                              `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
+                              `👤 *Müşteri:* ${customerName.trim()}`,
+                              `📞 *Kayıtlı Numara:* ${displayPhone}`,
+                              `💈 *Usta:* ${barberText}`,
+                              `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
+                              `📋 *İşlem:* ${serviceNamesText}`,
+                              ...(isEarlyEligible
+                                ? ["⚡ Not: Erken boşluk olursa gelebilir."]
+                                : []),
+                            ].join("\n");
+
+                        // Seçilen ustanın kendi WhatsApp numarası varsa (barber.phone doluysa) ona,
+                        // boş bırakılmışsa dükkanın ana telefon numarasına (currentShop.phone) yönlendir.
+                        const appointedBarber =
+                          (confirmedAppointment?.barberId
+                            ? barbers.find((b) => b.id === confirmedAppointment.barberId)
+                            : null) || selectedBarber;
+
+                        const targetWhatsAppPhone =
+                          (selectedBarber?.phone && selectedBarber.phone.trim() !== ""
+                            ? selectedBarber.phone.trim()
+                            : appointedBarber?.phone && appointedBarber.phone.trim() !== ""
+                            ? appointedBarber.phone.trim()
+                            : null) || currentShop?.phone;
+
+                        const shopFallbackPhone = formatPhoneForWhatsApp(
+                          currentShop?.phone,
+                          DEFAULT_SHOP_WHATSAPP_PHONE
+                        );
+
+                        const waHref = buildWhatsAppUrl(
+                          targetWhatsAppPhone,
+                          waMessage,
+                          shopFallbackPhone
+                        );
+
+                        const handleOpenWhatsApp = () => {
+                          setWhatsappClicked(true);
+                          if (typeof window !== "undefined") {
+                            window.open(waHref, "_blank", "noopener,noreferrer");
+                          }
+                        };
+
+                        const summaryCardEl = (
+                          <div className="rounded-2xl border border-white/15 bg-[#141417] p-3.5 sm:p-4 text-left shadow-xl space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-xs font-bold text-stone-400">
+                                💈 Seçilen Usta:
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
+                                {barberText}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-xs font-bold text-stone-400">
+                                📅 Tarih:
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
+                                {dateText}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-xs font-bold text-stone-400">
+                                ⏰ Saat:
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-amber-300">
+                                {timeText}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-xs font-bold text-stone-400">
+                                📋 İşlem:
+                              </span>
+                              <span className="text-xs sm:text-sm font-bold text-[#fdf8f5] text-right truncate max-w-[200px] sm:max-w-[240px]">
+                                {serviceNamesText}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-0.5">
+                              <span className="text-xs font-bold text-[#dfc39e]">
+                                🔑 Onay Kodu:
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-base font-black tracking-wider text-[#fdf8f5]">
+                                  {vCode}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyCode(vCode)}
+                                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-300 hover:bg-white/10"
+                                >
+                                  {copiedCode ? "Kopyalandı" : "Kopyala"}
+                                </button>
+                              </div>
+                            </div>
+
+                            {isEarlyEligible && (
+                              <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2 py-1 text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                                <Zap className="h-3 w-3 fill-amber-300 shrink-0" />
+                                <span>⚡ Erken boşluk olursa haber verilecek</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+
+                        const phoneEditorEl = !isEditingPhoneOnConfirm ? (
+                          <div className="rounded-2xl border-2 border-amber-400/50 bg-gradient-to-br from-amber-500/15 via-[#1a1714] to-amber-500/10 p-3 sm:p-4 text-left shadow-lg shadow-amber-500/10">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                  <Phone className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <span className="block text-xs font-bold text-amber-300 tracking-wide">
+                                    📞 Kayıtlı Numaranız:
+                                  </span>
+                                  <span className="font-mono text-base sm:text-lg font-black tracking-wider text-[#fdf8f5]">
+                                    {displayPhone}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTempPhoneOnConfirm(displayPhone);
+                                  setPhoneEditError("");
+                                  setIsEditingPhoneOnConfirm(true);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-stone-200 hover:bg-white/20 hover:text-white transition active:scale-95 cursor-pointer self-start sm:self-auto"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 text-amber-300" />
+                                <span>✏️ Numarayı Düzenle</span>
+                              </button>
+                            </div>
+
+                            {phoneEditSuccess && (
+                              <div className="mt-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                <Check className="h-3.5 w-3.5" />
+                                <span>Telefon numaranız başarıyla güncellendi! WhatsApp linki yenilendi.</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border-2 border-amber-400 bg-[#161412] p-3.5 sm:p-4 text-left shadow-xl space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5">
+                                <Phone className="h-4 w-4" />
+                                Telefon Numaranızı Düzeltin
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingPhoneOnConfirm(false)}
+                                className="text-xs text-stone-400 hover:text-stone-200 cursor-pointer"
+                              >
+                                Vazgeç ✕
+                              </button>
+                            </div>
+
+                            <div className="space-y-1">
+                              <input
+                                type="tel"
+                                autoFocus
+                                value={tempPhoneOnConfirm}
+                                onChange={(e) => {
+                                  setTempPhoneOnConfirm(e.target.value);
+                                  setPhoneEditError("");
+                                }}
+                                placeholder="05XX XXX XX XX"
+                                className="w-full rounded-xl border border-amber-400/50 bg-[#0d0c0b] px-3.5 py-2.5 font-mono text-sm sm:text-base font-bold text-[#fdf8f5] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 placeholder:text-stone-500"
+                              />
+                              {phoneEditError && (
+                                <p className="text-[11px] font-bold text-rose-400">{phoneEditError}</p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cleaned = tempPhoneOnConfirm.trim();
+                                  if (!cleaned || cleaned.replace(/\D/g, "").length < 10) {
+                                    setPhoneEditError(
+                                      "Lütfen geçerli bir cep telefonu numarası girin (örn: 0532 123 45 67)."
+                                    );
+                                    return;
+                                  }
+                                  if (confirmedAppointment?.id) {
+                                    updateAppointmentPhone(confirmedAppointment.id, cleaned);
+                                    setConfirmedAppointment((prev) =>
+                                      prev ? { ...prev, customerPhone: cleaned } : null
+                                    );
+                                  }
+                                  setCustomerPhone(cleaned);
+                                  setIsEditingPhoneOnConfirm(false);
+                                  setPhoneEditSuccess(true);
+                                  setTimeout(() => setPhoneEditSuccess(false), 3500);
+                                }}
+                                className="flex-1 rounded-xl bg-amber-400 py-2.5 text-xs sm:text-sm font-black text-[#14120e] hover:bg-amber-300 transition active:scale-95 cursor-pointer text-center"
+                              >
+                                Kaydet ve Güncelle
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingPhoneOnConfirm(false)}
+                                className="rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-bold text-stone-300 hover:bg-white/10 cursor-pointer"
+                              >
+                                İptal
+                              </button>
+                            </div>
+                          </div>
+                        );
+
+                        // 1) KARA LİSTEDEKİ (KAPORA BEKLEYEN) MÜŞTERİ AKIŞI (Aynen Korunur)
+                        if (isBlacklistUser) {
                           return (
                             <>
                               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-lg shadow-rose-500/25">
@@ -1364,314 +1615,110 @@ export default function CustomerBookingPage() {
                                   </div>
                                 </div>
                               </div>
+
+                              <div className="mx-auto max-w-md space-y-3">
+                                {summaryCardEl}
+                                {phoneEditorEl}
+
+                                <button
+                                  type="button"
+                                  onClick={handleOpenWhatsApp}
+                                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-3 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99] cursor-pointer"
+                                >
+                                  <MessageSquare className="h-5 w-5 fill-[#081510] shrink-0" />
+                                  <span className="text-center">
+                                    💬 WhatsApp&apos;tan Gönder ve Kesinleştir
+                                  </span>
+                                </button>
+
+                                <div className="pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelCurrentAppointment}
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                    <span>Randevumu İptal Et (Saati Boşa Çıkar)</span>
+                                  </button>
+                                </div>
+                              </div>
                             </>
                           );
                         }
 
+                        // 2) NORMAL MÜŞTERİ: 2 AŞAMALI SON EKRAN
+                        // AŞAMA 1: Henüz WhatsApp Butonuna Basılmadı (whatsappClicked === false)
+                        if (!whatsappClicked) {
+                          return (
+                            <div className="mx-auto max-w-md space-y-4">
+                              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-amber-500 bg-amber-500/20 text-amber-500 shadow-lg shadow-amber-500/30">
+                                <Clock className="h-8 w-8 animate-pulse stroke-[2.5]" />
+                              </div>
+
+                              <div className="rounded-2xl border-2 border-amber-500 bg-amber-500/15 p-4 text-center shadow-lg shadow-amber-500/15 space-y-2">
+                                <h3 className="text-lg sm:text-xl font-black text-amber-400">
+                                  ⏳ Son Bir Adım Kaldı!
+                                </h3>
+                                <p className="text-xs sm:text-sm font-extrabold leading-relaxed text-[#fdf8f5]">
+                                  Randevunuzun geçerli olması için aşağıdaki yeşil butona basıp WhatsApp onay mesajını gönderin.
+                                </p>
+                              </div>
+
+                              {/* Yanıp Sönen / Dikkat Çeken Büyük Yeşil WhatsApp Butonu */}
+                              <button
+                                type="button"
+                                onClick={handleOpenWhatsApp}
+                                className="flex w-full animate-pulse items-center justify-center gap-2.5 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-4 text-sm sm:text-base font-black text-[#081510] shadow-2xl shadow-emerald-500/40 ring-4 ring-emerald-500/30 transition hover:animate-none hover:brightness-110 active:scale-[0.99] cursor-pointer"
+                              >
+                                <MessageSquare className="h-5 w-5 fill-[#081510] shrink-0" />
+                                <span className="text-center">
+                                  💬 WhatsApp İle Randevuyu Onayla ve Bitir
+                                </span>
+                              </button>
+
+                              {phoneEditorEl}
+
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelCurrentAppointment}
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  <span>Randevumu İptal Et (Saati Boşa Çıkar)</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // AŞAMA 2: WhatsApp Butonuna Basıldıktan Sonraki Durum (whatsappClicked === true)
                         return (
-                          <>
-                            {confirmedAppointment?.status === "confirmed" ? (
-                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
-                                <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
-                              </div>
-                            ) : (
-                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20">
-                                <Clock className="h-7 w-7 animate-pulse stroke-[2.5]" />
-                              </div>
-                            )}
+                          <div className="mx-auto max-w-md space-y-3.5">
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
+                              <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+                            </div>
 
-                            {confirmedAppointment?.status === "confirmed" ? (
-                              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
-                                ✅ ONAYLANDI • RANDEVUNUZ KESİNLEŞTİ
-                              </span>
-                            ) : (
-                              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/20 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
-                                ⏳ ONAY BEKLİYOR • WHATSAPP İLE GÖNDERİN
-                              </span>
-                            )}
-
-                            <h3 className="mt-2 text-xl font-black text-[#fdf8f5] sm:text-2xl">
-                              {confirmedAppointment?.status === "confirmed"
-                                ? `Harika, Randevunuz Kesinleşti ${customerName}!`
-                                : `Randevunuz Alındı, ${customerName}!`}
+                            <h3 className="text-xl font-black text-emerald-300 sm:text-2xl">
+                              ✅ Randevunuz Başarıyla Oluşturuldu!
                             </h3>
 
-                            <div className="mx-auto my-3.5 max-w-md rounded-2xl border-2 border-amber-400 bg-amber-500/20 p-3.5 sm:p-4 text-center shadow-lg shadow-amber-500/15">
-                              <p className="text-xs sm:text-sm font-black leading-relaxed text-amber-200">
-                                ⚠️ SON ADIM: Randevunuzun geçerli olması için aşağıdaki yeşil butona basarak randevu fişinizi WhatsApp&apos;tan berberinize göndermeniz ZORUNLUDUR.
-                              </p>
-                            </div>
-                          </>
-                        );
-                      })()}
+                            {summaryCardEl}
 
-                      {/* 3. EKRANDA ŞIK VE KOMPAKT RANDEVU ÖZETİ KARTI VE BUTON */}
-                      {(() => {
-                        const rawCode =
-                          confirmedAppointment?.verificationCode || "#4829";
-                        const vCode = rawCode.startsWith("#") ? rawCode : `#${rawCode}`;
-                        const barberText =
-                          confirmedAppointment?.barberName || selectedBarber?.name || "Usta";
-                        const dateText =
-                          selectedDay.fullDate ||
-                          confirmedAppointment?.dateLabel ||
-                          selectedDay.chipLabel;
-                        const timeText =
-                          confirmedAppointment?.time || selectedSlot?.time || "";
-                        const serviceNamesText =
-                          confirmedAppointment?.services?.map((s) => s.name).join(" + ") ||
-                          selectedServices.map((s) => s.name).join(" + ") ||
-                          "Saç Kesimi";
-                        const isEarlyEligible = Boolean(
-                          confirmedAppointment?.canComeEarly ?? canComeEarly
-                        );
+                            {phoneEditorEl}
 
-                        const displayPhone =
-                          confirmedAppointment?.customerPhone || customerPhone || "";
-                        const isBlacklistUser =
-                          Boolean(isPhoneBlacklisted(displayPhone)) ||
-                          Boolean(confirmedAppointment?.isBlacklisted) ||
-                          Boolean(confirmedAppointment?.requiresDeposit);
-
-                        // 4. WHATSAPP BİLDİRİM ŞABLONU
-                        const waMessage = isBlacklistUser
-                          ? [
-                              `🚨 *KARA LİSTE / KAPORA ONAY TALEBİ* (${vCode})`,
-                              `👤 *Müşteri:* ${customerName.trim()} (${displayPhone})`,
-                              `📅 *Tarih:* ${dateText} - ${timeText} | *Usta:* ${barberText}`,
-                              `💳 *Not:* Kapora ödemesini yaptım, dekontu iletiyorum. Onayınızı bekliyorum.`,
-                            ].join("\n")
-                          : [
-                              `✂️ *YENİ RANDEVU ONAYI* (${vCode})`,
-                              `👤 *Müşteri:* ${customerName.trim()}`,
-                              `📞 *Kayıtlı Numara:* ${displayPhone}`,
-                              `💈 *Usta:* ${barberText}`,
-                              `📅 *Tarih:* ${dateText} | ⏰ *Saat:* ${timeText}`,
-                              `📋 *İşlem:* ${serviceNamesText}`,
-                              ...(isEarlyEligible
-                                ? ["⚡ Not: Erken boşluk olursa gelebilir."]
-                                : []),
-                            ].join("\n");
-
-                        // Seçilen ustanın kendi WhatsApp numarası varsa (barber.phone doluysa) ona,
-                        // boş bırakılmışsa dükkanın ana telefon numarasına (currentShop.phone) yönlendir.
-                        const appointedBarber =
-                          (confirmedAppointment?.barberId
-                            ? barbers.find((b) => b.id === confirmedAppointment.barberId)
-                            : null) || selectedBarber;
-
-                        const targetWhatsAppPhone =
-                          (selectedBarber?.phone && selectedBarber.phone.trim() !== ""
-                            ? selectedBarber.phone.trim()
-                            : appointedBarber?.phone && appointedBarber.phone.trim() !== ""
-                            ? appointedBarber.phone.trim()
-                            : null) || currentShop?.phone;
-
-                        const shopFallbackPhone = formatPhoneForWhatsApp(
-                          currentShop?.phone,
-                          DEFAULT_SHOP_WHATSAPP_PHONE
-                        );
-
-                        const waHref = buildWhatsAppUrl(
-                          targetWhatsAppPhone,
-                          waMessage,
-                          shopFallbackPhone
-                        );
-
-                        const handleOpenWhatsApp = () => {
-                          if (typeof window !== "undefined") {
-                            window.open(waHref, "_blank", "noopener,noreferrer");
-                          }
-                        };
-
-                        return (
-                          <div className="mx-auto max-w-md space-y-3">
-                            {/* Randevu Özeti Kartı (Usta, Tarih, Saat, İşlem, #OnayKodu) */}
-                            <div className="rounded-2xl border border-white/15 bg-[#141417] p-3.5 sm:p-4 text-left shadow-xl space-y-2.5">
-                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                <span className="text-xs font-bold text-stone-400">
-                                  💈 Seçilen Usta:
-                                </span>
-                                <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
-                                  {barberText}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                <span className="text-xs font-bold text-stone-400">
-                                  📅 Tarih:
-                                </span>
-                                <span className="text-xs sm:text-sm font-black text-[#fdf8f5]">
-                                  {dateText}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                <span className="text-xs font-bold text-stone-400">
-                                  ⏰ Saat:
-                                </span>
-                                <span className="text-xs sm:text-sm font-black text-amber-300">
-                                  {timeText}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                <span className="text-xs font-bold text-stone-400">
-                                  📋 İşlem:
-                                </span>
-                                <span className="text-xs sm:text-sm font-bold text-[#fdf8f5] text-right truncate max-w-[200px] sm:max-w-[240px]">
-                                  {serviceNamesText}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-0.5">
-                                <span className="text-xs font-bold text-[#dfc39e]">
-                                  🔑 Onay Kodu:
-                                </span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-mono text-base font-black tracking-wider text-[#fdf8f5]">
-                                    {vCode}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyCode(vCode)}
-                                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-stone-300 hover:bg-white/10"
-                                  >
-                                    {copiedCode ? "Kopyalandı" : "Kopyala"}
-                                  </button>
-                                </div>
-                              </div>
-
-                              {isEarlyEligible && (
-                                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2 py-1 text-[11px] font-bold text-amber-300 flex items-center gap-1">
-                                  <Zap className="h-3 w-3 fill-amber-300 shrink-0" />
-                                  <span>⚡ Erken boşluk olursa haber verilecek</span>
-                                </div>
-                              )}
+                            {/* Yedek Link: WhatsApp açılmadıysa tekrar tıklayın */}
+                            <div className="pt-1 text-center">
+                              <button
+                                type="button"
+                                onClick={handleOpenWhatsApp}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-4 transition cursor-pointer"
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                                <span>WhatsApp açılmadıysa tekrar tıklayın</span>
+                              </button>
                             </div>
 
-                            {/* 📞 Kayıtlı Numaranız Kontrolü ve Düzenleme (Yeşil Butonun Hemen Üstünde) */}
-                            {!isEditingPhoneOnConfirm ? (
-                              <div className="rounded-2xl border-2 border-amber-400/50 bg-gradient-to-br from-amber-500/15 via-[#1a1714] to-amber-500/10 p-3 sm:p-4 text-left shadow-lg shadow-amber-500/10">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                                      <Phone className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                      <span className="block text-xs font-bold text-amber-300 tracking-wide">
-                                        📞 Kayıtlı Numaranız:
-                                      </span>
-                                      <span className="font-mono text-base sm:text-lg font-black tracking-wider text-[#fdf8f5]">
-                                        {displayPhone}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setTempPhoneOnConfirm(displayPhone);
-                                      setPhoneEditError("");
-                                      setIsEditingPhoneOnConfirm(true);
-                                    }}
-                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-stone-200 hover:bg-white/20 hover:text-white transition active:scale-95 cursor-pointer self-start sm:self-auto"
-                                  >
-                                    <Edit2 className="h-3.5 w-3.5 text-amber-300" />
-                                    <span>✏️ Numarayı Düzenle</span>
-                                  </button>
-                                </div>
-
-                                {phoneEditSuccess && (
-                                  <div className="mt-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                                    <Check className="h-3.5 w-3.5" />
-                                    <span>Telefon numaranız başarıyla güncellendi! WhatsApp linki yenilendi.</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="rounded-2xl border-2 border-amber-400 bg-[#161412] p-3.5 sm:p-4 text-left shadow-xl space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5">
-                                    <Phone className="h-4 w-4" />
-                                    Telefon Numaranızı Düzeltin
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsEditingPhoneOnConfirm(false)}
-                                    className="text-xs text-stone-400 hover:text-stone-200 cursor-pointer"
-                                  >
-                                    Vazgeç ✕
-                                  </button>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <input
-                                    type="tel"
-                                    autoFocus
-                                    value={tempPhoneOnConfirm}
-                                    onChange={(e) => {
-                                      setTempPhoneOnConfirm(e.target.value);
-                                      setPhoneEditError("");
-                                    }}
-                                    placeholder="05XX XXX XX XX"
-                                    className="w-full rounded-xl border border-amber-400/50 bg-[#0d0c0b] px-3.5 py-2.5 font-mono text-sm sm:text-base font-bold text-[#fdf8f5] outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 placeholder:text-stone-500"
-                                  />
-                                  {phoneEditError && (
-                                    <p className="text-[11px] font-bold text-rose-400">{phoneEditError}</p>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const cleaned = tempPhoneOnConfirm.trim();
-                                      if (!cleaned || cleaned.replace(/\D/g, "").length < 10) {
-                                        setPhoneEditError(
-                                          "Lütfen geçerli bir cep telefonu numarası girin (örn: 0532 123 45 67)."
-                                        );
-                                        return;
-                                      }
-                                      if (confirmedAppointment?.id) {
-                                        updateAppointmentPhone(confirmedAppointment.id, cleaned);
-                                        setConfirmedAppointment((prev) =>
-                                          prev ? { ...prev, customerPhone: cleaned } : null
-                                        );
-                                      }
-                                      setCustomerPhone(cleaned);
-                                      setIsEditingPhoneOnConfirm(false);
-                                      setPhoneEditSuccess(true);
-                                      setTimeout(() => setPhoneEditSuccess(false), 3500);
-                                    }}
-                                    className="flex-1 rounded-xl bg-amber-400 py-2.5 text-xs sm:text-sm font-black text-[#14120e] hover:bg-amber-300 transition active:scale-95 cursor-pointer text-center"
-                                  >
-                                    Kaydet ve Güncelle
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsEditingPhoneOnConfirm(false)}
-                                    className="rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-bold text-stone-300 hover:bg-white/10 cursor-pointer"
-                                  >
-                                    İptal
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* BÜYÜK YEŞİL WHATSAPP BUTONU (window.open ile yeni sekmede açılır) */}
-                            <button
-                              type="button"
-                              onClick={handleOpenWhatsApp}
-                              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 py-4 px-3 text-sm sm:text-base font-black text-[#081510] shadow-xl shadow-emerald-500/30 transition hover:brightness-110 active:scale-[0.99] cursor-pointer"
-                            >
-                              <MessageSquare className="h-5 w-5 fill-[#081510] shrink-0" />
-                              <span className="text-center">
-                                💬 WhatsApp&apos;tan Gönder ve Kesinleştir
-                              </span>
-                            </button>
-
-                            {/* ❌ MÜŞTERİ BU EKRANDAYKEN RANDERVUSUNU İPTAL EDEBİLİR */}
                             <div className="pt-1">
                               <button
                                 type="button"
