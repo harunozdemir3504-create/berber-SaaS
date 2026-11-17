@@ -648,7 +648,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   );
   const [currentShopSlug, setCurrentShopSlugState] = useState<string>("atelier-noir");
   const [hasShopQueryParam, setHasShopQueryParam] = useState<boolean>(false);
-  const [masterPin, setMasterPinState] = useState<string>("1923");
+  const [masterPin, setMasterPinState] = useState<string>("2006");
   const [hydrated, setHydrated] = useState(false);
 
   // Realtime çakışmasını (echo / ping-pong döngüsünü) önleyen istemci ve işlem kilitleri
@@ -672,17 +672,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           const filtered = parsed
             .map(sanitizeShopDates)
             .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
-          if (filtered.length === 0) {
-            setShops(INITIAL_SHOPS.map(sanitizeShopDates));
+          // Sadece hafızada HİÇ dükkan yoksa başlangıç demo dükkanlarını yükle; mevcut veriyi ASLA ezme
+          if (filtered.length > 0) {
+            setShops(filtered);
           } else {
-            // Varsayılan demo dükkanlarından silinmemiş olanları (örn. salon-harun) koru
-            const existingSlugs = new Set(filtered.map((s) => s.slug.toLowerCase()));
-            const missingDefaults = INITIAL_SHOPS.filter(
-              (d) =>
-                !existingSlugs.has(d.slug.toLowerCase()) &&
-                !deletedSlugs.has(d.slug.toLowerCase())
-            ).map(sanitizeShopDates);
-            setShops(missingDefaults.length > 0 ? [...filtered, ...missingDefaults] : filtered);
+            setShops(INITIAL_SHOPS.map(sanitizeShopDates));
           }
         }
       }
@@ -769,7 +763,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         const params = new URLSearchParams(window.location.search);
         const initialSlug = params.get("shop");
         if (initialSlug && initialSlug.trim()) {
-          setCurrentShopSlugState(initialSlug.trim().toLowerCase());
+          const normalized = slugifyShopName(initialSlug) || initialSlug.trim().toLowerCase();
+          setCurrentShopSlugState(normalized);
           setHasShopQueryParam(true);
         } else {
           setHasShopQueryParam(false);
@@ -780,7 +775,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             if (savedSessionRaw) {
               const parsed = JSON.parse(savedSessionRaw);
               if (parsed?.shopSlug) {
-                setCurrentShopSlugState(String(parsed.shopSlug).toLowerCase());
+                const rawSessionSlug = String(parsed.shopSlug);
+                setCurrentShopSlugState(
+                  slugifyShopName(rawSessionSlug) || rawSessionSlug.trim().toLowerCase()
+                );
               }
             }
           } catch {
@@ -807,19 +805,21 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               masterPin?: string;
             };
 
-            if (isMounted && Array.isArray(remote.shops)) {
+            if (isMounted && Array.isArray(remote.shops) && remote.shops.length > 0) {
               const deletedSlugs = getDeletedShopSlugs();
               const sanitizedRemote = remote.shops
                 .map(sanitizeShopDates)
                 .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
-              isApplyingRemoteRef.current = true;
-              setShops(sanitizedRemote);
-              try {
-                localStorage.setItem(
-                  STORAGE_KEYS.SHOPS,
-                  JSON.stringify(sanitizedRemote)
-                );
-              } catch {}
+              if (sanitizedRemote.length > 0) {
+                isApplyingRemoteRef.current = true;
+                setShops(sanitizedRemote);
+                try {
+                  localStorage.setItem(
+                    STORAGE_KEYS.SHOPS,
+                    JSON.stringify(sanitizedRemote)
+                  );
+                } catch {}
+              }
             }
 
             if (isMounted && Array.isArray(remote.globalBlacklist)) {
@@ -832,11 +832,21 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               setMasterPinState(remote.masterPin);
             }
           } else {
-            // Tablo boş ise eldeki varsayılan dükkanları buluta ilk tohumlama (seed) olarak gönder
+            // Tablo boş ise mevcut localStorage verisini (yoksa varsayılan dükkanları) buluta ilk tohumlama olarak gönder
+            let seedShops = INITIAL_SHOPS;
+            try {
+              const localRaw = localStorage.getItem(STORAGE_KEYS.SHOPS);
+              if (localRaw) {
+                const parsedLocal: TenantShop[] = JSON.parse(localRaw);
+                if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
+                  seedShops = parsedLocal.map(sanitizeShopDates);
+                }
+              }
+            } catch {}
             const seedPayload = {
-              shops: INITIAL_SHOPS,
+              shops: seedShops,
               globalBlacklist: INITIAL_GLOBAL_BLACKLIST,
-              masterPin: "1923",
+              masterPin: "2006",
               updatedByClientId: clientIdRef.current,
             };
             await supabase.from("app_state").upsert({
@@ -982,7 +992,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
 
-    // A) LocalStorage kaydet
+    // A) LocalStorage kaydet (Boş dizi yazarak mevcut dükkanları asla silme)
+    if (!shops || shops.length === 0) return;
     try {
       localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(shops));
       localStorage.setItem(
@@ -1044,7 +1055,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
   const handleUrlSlugChange = useCallback((slugFromUrl: string | null) => {
     if (slugFromUrl && slugFromUrl.trim()) {
-      const cleaned = slugFromUrl.trim().toLowerCase();
+      const cleaned =
+        slugifyShopName(slugFromUrl) || slugFromUrl.trim().toLowerCase();
       setCurrentShopSlugState((prev) => (prev === cleaned ? prev : cleaned));
       setHasShopQueryParam(true);
     } else {
@@ -1053,32 +1065,40 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setCurrentShopSlug = useCallback((slug: string) => {
-    const cleaned = slug.trim().toLowerCase();
+    const cleaned = slugifyShopName(slug) || slug.trim().toLowerCase();
     setCurrentShopSlugState(cleaned);
   }, []);
 
   const currentShop = useMemo(() => {
+    const targetSlug = slugifyShopName(currentShopSlug) || currentShopSlug.toLowerCase();
     const found = shops.find(
-      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
+      (s) => (slugifyShopName(s.slug) || s.slug.toLowerCase()) === targetSlug
     );
     if (found) return found;
-    if (hasShopQueryParam && currentShopSlug) {
-      return buildFallbackShopFromSlug(currentShopSlug);
+    if (hasShopQueryParam && targetSlug) {
+      return buildFallbackShopFromSlug(targetSlug);
     }
     return shops[0] || INITIAL_SHOPS[0];
   }, [shops, currentShopSlug, hasShopQueryParam]);
 
-  // URL'de ?shop=herhangi-bir-isim varsa ve listede yoksa otomatik oluşturup state + localStorage'a kaydet
+  // URL'de ?shop=herhangi-bir-isim varsa ve listede yoksa mevcut listeyi SİLMEDEN otomatik ekle
   useEffect(() => {
     if (!hydrated || !hasShopQueryParam || !currentShopSlug) return;
+    const targetSlug = slugifyShopName(currentShopSlug) || currentShopSlug.toLowerCase();
     const exists = shops.some(
-      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
+      (s) => (slugifyShopName(s.slug) || s.slug.toLowerCase()) === targetSlug
     );
     if (exists) return;
 
-    const recoveredShop = buildFallbackShopFromSlug(currentShopSlug);
+    const recoveredShop = buildFallbackShopFromSlug(targetSlug);
     setShops((prev) => {
-      if (prev.some((s) => s.slug.toLowerCase() === recoveredShop.slug.toLowerCase())) {
+      if (
+        prev.some(
+          (s) =>
+            (slugifyShopName(s.slug) || s.slug.toLowerCase()) ===
+            recoveredShop.slug.toLowerCase()
+        )
+      ) {
         return prev;
       }
       const next = [...prev, recoveredShop];
@@ -2760,7 +2780,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const resetDemoData = useCallback(() => {
     setShops(INITIAL_SHOPS);
     setGlobalBlacklist(INITIAL_GLOBAL_BLACKLIST);
-    setMasterPinState("1923");
+    setMasterPinState("2006");
     try {
       localStorage.removeItem(STORAGE_KEYS.SHOPS);
       localStorage.removeItem(STORAGE_KEYS.GLOBAL_BLACKLIST);
