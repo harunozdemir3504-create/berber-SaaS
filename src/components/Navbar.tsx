@@ -10,7 +10,6 @@ import {
   MapPin,
   Phone,
   ExternalLink,
-  Lock,
   LogOut,
   Sun,
   Moon,
@@ -46,15 +45,24 @@ export default function Navbar() {
   // Berber Yönetim Paneli (/admin) ve Ana Tanıtım Vitrini (/) kendi özel Sticky VIP Header'ını kullanır
   if (isShopAdmin || isRootLandingPage) return null;
 
+  // Müşteri randevu ekranı: Minimalist lüks bar (admin / süper admin görünümü etkilenmez)
+  const isCustomerView = !isShopAdmin && !isSuperAdmin;
+
   return (
     <header
       className={`sticky top-0 z-40 border-b backdrop-blur-xl print:hidden transition-colors duration-200 ${
         isShopAdmin && theme === "light"
           ? "border-stone-200 bg-white/95 text-[#1a1a1a] shadow-sm"
+          : isCustomerView
+          ? "border-slate-800/70 bg-[#090A0F]/85 text-slate-100"
           : "border-white/10 bg-[#0b0a09]/90 text-[#fdf8f5]"
       }`}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2.5 sm:px-6 sm:py-3">
+      <div
+        className={`mx-auto flex max-w-6xl items-center justify-between ${
+          isCustomerView ? "px-3 py-2 sm:px-6" : "px-3 py-2.5 sm:px-6 sm:py-3"
+        }`}
+      >
         {/* Brand Identity — Strictly Isolated by Route (/ vs /admin vs /super-admin) */}
         {isSuperAdmin ? (
           <Link href="/super-admin" className="group flex items-center gap-2.5 sm:gap-3">
@@ -92,9 +100,9 @@ export default function Navbar() {
                 shopName={currentShop.name}
                 logoUrl={currentShop.logo_url}
                 isLoading={!hydrated}
-                sizeClass="h-8 w-8 sm:h-10 sm:w-10"
-                textClass="text-xs sm:text-sm"
-                ringClass="ring-2 ring-amber-500/40"
+                sizeClass={isCustomerView ? "h-7 w-7 sm:h-8 sm:w-8" : "h-8 w-8 sm:h-10 sm:w-10"}
+                textClass={isCustomerView ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}
+                ringClass={isCustomerView ? "ring-1 ring-amber-500/40" : "ring-2 ring-amber-500/40"}
               />
               {hydrated && (
                 <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
@@ -114,9 +122,15 @@ export default function Navbar() {
                   <span className="inline-block h-4 w-28 animate-pulse rounded-full bg-amber-500/20" />
                 ) : (
                   <span
-                    className={`text-sm font-extrabold tracking-tight sm:text-base ${
+                    className={`font-extrabold ${
+                      isCustomerView
+                        ? "text-[13px] tracking-[0.08em] sm:text-sm bg-gradient-to-r from-slate-50 via-[#FCD34D] to-[#F59E0B] bg-clip-text text-transparent"
+                        : "text-sm tracking-tight sm:text-base"
+                    } ${
                       isShopAdmin && theme === "light"
                         ? "text-[#1a1a1a]"
+                        : isCustomerView
+                        ? ""
                         : "bg-gradient-to-r from-[#fdf8f5] via-[#e6ccb2] to-[#c88a53] bg-clip-text text-transparent"
                     }`}
                   >
@@ -139,19 +153,35 @@ export default function Navbar() {
                 <span className="mt-1 block h-3 w-36 animate-pulse rounded-full bg-amber-500/15" />
               ) : (
                 <p
-                  className={`flex items-center gap-1.5 text-[10px] sm:gap-2 sm:text-[11px] ${
+                  className={`flex items-center gap-1.5 sm:gap-2 ${
+                    isCustomerView ? "text-[10px] leading-tight" : "text-[10px] sm:text-[11px]"
+                  } ${
                     isShopAdmin && theme === "light"
                       ? "text-stone-600"
+                      : isCustomerView
+                      ? "text-slate-500"
                       : "text-stone-400"
                   }`}
                 >
                   <span className="inline-flex items-center gap-1">
-                    <MapPin className="h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3" />
+                    <MapPin
+                      className={
+                        isCustomerView
+                          ? "h-2.5 w-2.5 text-[#F59E0B]"
+                          : "h-2.5 w-2.5 text-sky-400 sm:h-3 sm:w-3"
+                      }
+                    />
                     {currentShop.district}
                   </span>
-                  <span className="hidden text-stone-400 sm:inline">•</span>
+                  <span className="hidden text-slate-600 sm:inline">•</span>
                   <span className="hidden items-center gap-1 sm:inline-flex">
-                    <Phone className="h-3 w-3 text-emerald-500" />
+                    <Phone
+                      className={
+                        isCustomerView
+                          ? "h-2.5 w-2.5 text-[#10B981]"
+                          : "h-3 w-3 text-emerald-500"
+                      }
+                    />
                     {currentShop.phone}
                   </span>
                 </p>
@@ -247,8 +277,8 @@ export default function Navbar() {
                 <span>Çıkış Yap</span>
               </button>
             )}
-            <div className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-950/25 px-2.5 py-1 text-[10px] font-bold text-emerald-300 sm:px-3 sm:py-1.5 sm:text-xs">
-              <Lock className="h-3 w-3 text-emerald-400" />
+            <div className="inline-flex items-center gap-1 rounded-full border border-[#10B981]/25 bg-[#10B981]/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 sm:px-2.5 sm:py-1">
+              <ShieldCheck className="h-3 w-3 text-[#10B981]" />
               <span>Online Randevu</span>
             </div>
           </div>
