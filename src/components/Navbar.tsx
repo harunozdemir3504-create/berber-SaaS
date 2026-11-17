@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ShieldCheck,
-  RotateCcw,
   Crown,
   MapPin,
   Phone,
@@ -26,21 +25,16 @@ export default function Navbar() {
     currentShop,
     hasShopQueryParam,
     hydrated,
-    resetDemoData,
   } = useBarber();
   const { theme, toggleTheme } = useTheme();
-  const [isDemoMode, setIsDemoMode] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setIsDemoMode(params.get("demo") === "1");
-    }
-  }, [pathname, hasShopQueryParam]);
 
   const isSuperAdmin = pathname?.startsWith("/super-admin");
   const isShopAdmin = pathname?.startsWith("/admin");
-  const isRootLandingPage = pathname === "/" && !hasShopQueryParam;
+  const hasUrlShop =
+    hasShopQueryParam ||
+    (typeof window !== "undefined" &&
+      Boolean(new URLSearchParams(window.location.search).get("shop")?.trim()));
+  const isRootLandingPage = pathname === "/" && !hasUrlShop;
 
   // Berber Yönetim Paneli (/admin) ve Ana Tanıtım Vitrini (/) kendi özel Sticky VIP Header'ını kullanır
   if (isShopAdmin || isRootLandingPage) return null;
@@ -250,33 +244,10 @@ export default function Navbar() {
             </button>
           </div>
         ) : isSuperAdmin ? (
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={resetDemoData}
-              title="Tüm Demo Verilerini Varsayılana Sıfırla"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-[#171412] px-2.5 py-1.5 text-[11px] font-bold text-stone-300 transition hover:border-amber-400/60 hover:text-amber-200 sm:px-3 sm:py-2 sm:text-xs"
-            >
-              <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Demo Verilerini Sıfırla</span>
-            </button>
-          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2" />
         ) : (
           /* Customer View (/) — Purely Customer-Facing Badge, No Admin Transition */
           <div className="flex items-center gap-1.5">
-            {isDemoMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    window.location.href = "/";
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded-xl border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-[10px] font-black text-amber-200 transition hover:bg-amber-500/25 sm:px-3 sm:py-1.5 sm:text-xs cursor-pointer"
-              >
-                <LogOut className="h-3 w-3 text-amber-300" />
-                <span>Çıkış Yap</span>
-              </button>
-            )}
             <div className="inline-flex items-center gap-1 rounded-full border border-[#10B981]/25 bg-[#10B981]/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 sm:px-2.5 sm:py-1">
               <ShieldCheck className="h-3 w-3 text-[#10B981]" />
               <span>Online Randevu</span>

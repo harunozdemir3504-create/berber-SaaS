@@ -74,14 +74,21 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                // Berber olarak ana ekrana kurulmuş PWA: tanıtım sayfası hiç görünmeden direkt panele git
+                // Berber girişi kilitliyse (pwa_locked_role === 'barber_admin') parametresiz '/' açılışında doğrudan berber paneline git; ?shop= her zaman 1. önceliktir
                 try {
+                  var params = new URLSearchParams(location.search);
+                  var hasShop = Boolean(params.get('shop') && params.get('shop').trim());
+                  var hasLanding = params.has('landing');
+                  var hasReels = params.has('reels');
+                  var lockedRole = localStorage.getItem('pwa_locked_role');
                   var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-                  if (isStandalone && location.pathname === '/' && !new URLSearchParams(location.search).get('shop') && localStorage.getItem('vip_barber_pwa_role_v1') === 'admin') {
+                  if (location.pathname === '/' && !hasShop && !hasLanding && !hasReels && (lockedRole === 'barber_admin' || (isStandalone && localStorage.getItem('vip_barber_pwa_role_v1') === 'admin'))) {
                     var target = '/admin';
                     try {
+                      var lockedShopId = localStorage.getItem('pwa_locked_shop_id');
                       var s = JSON.parse(localStorage.getItem('vip_barber_persistent_admin_session_v1') || 'null');
-                      if (s && s.shopSlug) target = '/admin?shop=' + encodeURIComponent(s.shopSlug);
+                      var slug = lockedShopId || (s && s.shopSlug);
+                      if (slug) target = '/admin?shop=' + encodeURIComponent(slug);
                     } catch(e) {}
                     document.documentElement.style.visibility = 'hidden';
                     location.replace(target);

@@ -646,8 +646,30 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const [globalBlacklist, setGlobalBlacklist] = useState<BlacklistEntry[]>(
     INITIAL_GLOBAL_BLACKLIST
   );
-  const [currentShopSlug, setCurrentShopSlugState] = useState<string>("atelier-noir");
-  const [hasShopQueryParam, setHasShopQueryParam] = useState<boolean>(false);
+  const [currentShopSlug, setCurrentShopSlugState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const shopQ = params.get("shop");
+      if (shopQ && shopQ.trim()) {
+        return slugifyShopName(shopQ) || shopQ.trim().toLowerCase();
+      }
+      try {
+        const lockedId = localStorage.getItem("pwa_locked_shop_id");
+        if (lockedId && lockedId.trim()) {
+          return slugifyShopName(lockedId) || lockedId.trim().toLowerCase();
+        }
+      } catch {}
+    }
+    return "atelier-noir";
+  });
+  const [hasShopQueryParam, setHasShopQueryParam] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const shopQ = params.get("shop");
+      if (shopQ && shopQ.trim()) return true;
+    }
+    return false;
+  });
   const [masterPin, setMasterPinState] = useState<string>("2006");
   const [hydrated, setHydrated] = useState(false);
 
@@ -769,10 +791,15 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         } else {
           setHasShopQueryParam(false);
           try {
+            const lockedShopId = localStorage.getItem("pwa_locked_shop_id");
             const savedSessionRaw = localStorage.getItem(
               "vip_barber_persistent_admin_session_v1"
             );
-            if (savedSessionRaw) {
+            if (lockedShopId && lockedShopId.trim()) {
+              setCurrentShopSlugState(
+                slugifyShopName(lockedShopId) || lockedShopId.trim().toLowerCase()
+              );
+            } else if (savedSessionRaw) {
               const parsed = JSON.parse(savedSessionRaw);
               if (parsed?.shopSlug) {
                 const rawSessionSlug = String(parsed.shopSlug);

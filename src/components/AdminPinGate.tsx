@@ -24,6 +24,8 @@ import ShopLogo from "@/components/ShopLogo";
 export const PERSISTENT_ADMIN_SESSION_KEY =
   "vip_barber_persistent_admin_session_v1";
 export const PWA_INSTALL_ROLE_KEY = "vip_barber_pwa_role_v1";
+export const PWA_LOCKED_ROLE_KEY = "pwa_locked_role";
+export const PWA_LOCKED_SHOP_ID_KEY = "pwa_locked_shop_id";
 
 export interface PersistentAdminSession {
   shopId: string;
@@ -152,6 +154,11 @@ export default function AdminPinGate({
       }
 
       // Valid persistent session -> auto-login without asking password!
+      try {
+        localStorage.setItem(PWA_LOCKED_ROLE_KEY, "barber_admin");
+        localStorage.setItem(PWA_LOCKED_SHOP_ID_KEY, rememberedShop.slug);
+        localStorage.setItem(PWA_INSTALL_ROLE_KEY, "admin");
+      } catch {}
       setSelectedSlug(rememberedShop.slug);
       setCurrentShopSlug(rememberedShop.slug);
       setAuthenticatedSlug(rememberedShop.slug);
@@ -191,6 +198,11 @@ export default function AdminPinGate({
         sessionStorage.getItem(sessionKey(initialSlug));
       const expectedPin = (matchedShop?.adminPin || "1234").trim();
       if (matchedShop && savedToken === expectedPin) {
+        try {
+          localStorage.setItem(PWA_LOCKED_ROLE_KEY, "barber_admin");
+          localStorage.setItem(PWA_LOCKED_SHOP_ID_KEY, matchedShop.slug);
+          localStorage.setItem(PWA_INSTALL_ROLE_KEY, "admin");
+        } catch {}
         setAuthenticatedSlug(matchedShop.slug);
         router.replace(`/admin?shop=${matchedShop.slug}`, { scroll: false });
       } else {
@@ -361,6 +373,8 @@ export default function AdminPinGate({
           PERSISTENT_ADMIN_SESSION_KEY,
           JSON.stringify(persistentSession)
         );
+        localStorage.setItem(PWA_LOCKED_ROLE_KEY, "barber_admin");
+        localStorage.setItem(PWA_LOCKED_SHOP_ID_KEY, targetShop.slug);
         localStorage.setItem(PWA_INSTALL_ROLE_KEY, "admin");
         localStorage.setItem(sessionKey(targetShop.slug), correctPin);
         sessionStorage.setItem(sessionKey(targetShop.slug), correctPin);
@@ -571,7 +585,7 @@ export default function AdminPinGate({
             type="button"
             onClick={() => {
               if (typeof window !== "undefined") {
-                window.location.href = "/";
+                window.location.href = "/?landing=1";
               }
             }}
             className="text-xs font-bold text-stone-400 transition hover:text-[#e6ccb2] cursor-pointer"
@@ -588,6 +602,8 @@ export function lockAdminSession(slug?: string) {
   try {
     localStorage.removeItem(PERSISTENT_ADMIN_SESSION_KEY);
     localStorage.removeItem(PWA_INSTALL_ROLE_KEY);
+    localStorage.removeItem(PWA_LOCKED_ROLE_KEY);
+    localStorage.removeItem(PWA_LOCKED_SHOP_ID_KEY);
     if (slug) {
       localStorage.removeItem(sessionKey(slug));
       sessionStorage.removeItem(sessionKey(slug));

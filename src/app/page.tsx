@@ -86,7 +86,12 @@ export default function CustomerBookingPage() {
     findCustomerAppointments,
   } = useBarber();
 
-  const isRootLandingPage = pathname === "/" && !hasShopQueryParam;
+  // 1. Öncelik: URL'de ?shop=slug varsa her zaman doğrudan müşteri randevu ekranını aç
+  const hasUrlShopParam =
+    hasShopQueryParam ||
+    (typeof window !== "undefined" &&
+      Boolean(new URLSearchParams(window.location.search).get("shop")?.trim()));
+  const isRootLandingPage = pathname === "/" && !hasUrlShopParam;
 
   const handleOpenLiveDemo = useCallback(() => {
     const sampleShop =
@@ -95,7 +100,7 @@ export default function CustomerBookingPage() {
       currentShop;
     const sampleSlug = sampleShop?.slug || "salon-harun";
     setCurrentShopSlug(sampleSlug);
-    router.push(`/?shop=${sampleSlug}&demo=1`);
+    router.push(`/?shop=${sampleSlug}`);
   }, [shops, currentShop, setCurrentShopSlug, router]);
 
   const handleOpenShopFromLanding = useCallback(
@@ -107,11 +112,16 @@ export default function CustomerBookingPage() {
     [setCurrentShopSlug, router]
   );
 
-  // 🎬 /?reels → Tam Otomatik Sesli Reels Reklam Stüdyosu
+  // 🎬 /?reels → Tam Otomatik Sesli Reels Reklam Stüdyosu (?shop= varsa asla açılmaz, localStorage'a kaydedilmez)
   const [reelsOpen, setReelsOpen] = useState<boolean>(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (new URLSearchParams(window.location.search).has("reels")) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("shop")?.trim()) {
+      setReelsOpen(false);
+      return;
+    }
+    if (params.has("reels")) {
       setReelsOpen(true);
     }
   }, []);
@@ -122,28 +132,51 @@ export default function CustomerBookingPage() {
     }
   }, []);
 
-  // Akıllı PWA Yönlendirmesi (Yalnızca telefon ana ekranına 'Admin' olarak kurulmuş PWA standalone ise)
+  // Akıllı Berber Kısayol (PWA) Yönlendirmesi:
+  // 1) ?shop= varsa KESİNLİKLE müşteri randevu ekranında kal
+  // 2) ?landing veya ?reels varsa tanıtım ekranında kal (localStorage'a hiçbir şey yazma)
+  // 3) Parametresiz '/' açıldığında pwa_locked_role === 'barber_admin' ise doğrudan berberin yönetim panelini aç
   useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("shop")?.trim()) return;
+    if (params.has("landing") || params.has("reels")) return;
 
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone ===
-        true;
-
-    if (isStandalone) {
+    if (window.location.pathname === "/") {
       try {
+        const lockedRole = localStorage.getItem("pwa_locked_role");
+        const lockedShopId = localStorage.getItem("pwa_locked_shop_id");
+        const isStandalone =
+          window.matchMedia("(display-mode: standalone)").matches ||
+          (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+            true;
         const installedRole = localStorage.getItem(PWA_INSTALL_ROLE_KEY);
-        // Sadece URL'de ?shop=... yoksa ve özel admin rolüyle kurulmuşsa admin'e yönlendir
-        const params = new URLSearchParams(window.location.search);
-        if (installedRole === "admin" && !params.get("shop")) {
-          router.replace("/admin");
+
+        if (
+          lockedRole === "barber_admin" ||
+          (isStandalone && installedRole === "admin")
+        ) {
+          let targetSlug = lockedShopId || "";
+          if (!targetSlug) {
+            const savedSessionRaw = localStorage.getItem(
+              "vip_barber_persistent_admin_session_v1"
+            );
+            if (savedSessionRaw) {
+              const parsed = JSON.parse(savedSessionRaw);
+              if (parsed?.shopSlug) targetSlug = String(parsed.shopSlug);
+            }
+          }
+          router.replace(
+            targetSlug
+              ? `/admin?shop=${encodeURIComponent(targetSlug)}`
+              : "/admin"
+          );
         }
       } catch {
         // ignore storage errors
       }
     }
-  }, [hydrated, router]);
+  }, [router]);
 
   // 3 Adımlı Ultra-Sade Randevu Sihirbazı (1: Dükkan & Hizmet, 2: Gün & Saat, 3: İsim, Telefon & Onay)
   const [step, setStep] = useState<number>(1);
@@ -570,8 +603,8 @@ export default function CustomerBookingPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  // 🎬 /?reels → şifresiz, doğrudan Reels Stüdyosu (landing/hydration beklemeden)
-  if (reelsOpen) {
+  // 🎬 /?reels → şifresiz, doğrudan Reels Stüdyosu (?shop= varsa 1. öncelik müşteri randevu ekranıdır)
+  if (reelsOpen && !hasUrlShopParam) {
     return <ReelsAdStudio onClose={handleCloseReels} />;
   }
 
