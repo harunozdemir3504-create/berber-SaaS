@@ -154,15 +154,15 @@ export default function CustomerBookingPage() {
   const todayMeta = liveDays[0];
   const tomorrowMeta = liveDays[1] || liveDays[0];
 
-  // Slotun geçmiş olup olmadığını kontrol et (Bugün ise: 30 dakikalık dilimin bitiş saatini baz al;
-  // örn. 14:00 dilimi 14:29'a kadar açık kalır, saat 14:30 olduğunda geçmiş sayılır)
+  // Slotun geçmiş olup olmadığını kontrol et (Bugün ise: slot başlangıç saati şu anki saatten küçük veya eşitse geçmiş sayılır;
+  // örn. saat 18:45 ise 18:30 dilimi geçmiş sayılır ve müşteri seçemez)
   const isSlotPassedOrImminent = useCallback(
     (slotTime: string, isTodayDay: boolean): boolean => {
       if (!isTodayDay) return false;
       const nowTr = getTurkeyNow();
       const currentMinutes = nowTr.getHours() * 60 + nowTr.getMinutes();
       const slotMinutes = timeToMinutes(slotTime);
-      return slotMinutes + 30 <= currentMinutes;
+      return slotMinutes <= currentMinutes;
     },
     []
   );
