@@ -93,10 +93,19 @@ export default function CustomerBookingPage() {
       shops.find((s) => s.subscriptionStatus === "active") ||
       shops[0] ||
       currentShop;
-    const sampleSlug = sampleShop?.slug || "atelier-noir";
+    const sampleSlug = sampleShop?.slug || "salon-harun";
     setCurrentShopSlug(sampleSlug);
     router.push(`/?shop=${sampleSlug}&demo=1`);
   }, [shops, currentShop, setCurrentShopSlug, router]);
+
+  const handleOpenShopFromLanding = useCallback(
+    (slug: string) => {
+      const clean = slug.trim().toLowerCase();
+      setCurrentShopSlug(clean);
+      router.push(`/?shop=${encodeURIComponent(clean)}`);
+    },
+    [setCurrentShopSlug, router]
+  );
 
   // 🎬 /?reels → Tam Otomatik Sesli Reels Reklam Stüdyosu
   const [reelsOpen, setReelsOpen] = useState<boolean>(false);
@@ -573,6 +582,8 @@ export default function CustomerBookingPage() {
         <VipLandingPage
           onOpenLiveDemo={handleOpenLiveDemo}
           demoShopName={currentShop.name}
+          shops={shops}
+          onOpenShop={handleOpenShopFromLanding}
         />
         {reelsOpen && <ReelsAdStudio onClose={handleCloseReels} />}
       </>

@@ -579,6 +579,66 @@ function ShopUrlQuerySync({
   return null;
 }
 
+// Otomatik Dükkan Kurtarma (Fallback): URL'deki slug localStorage veya DB'de yoksa anında hazır VIP dükkan üretir
+function formatSlugToVipName(slug: string): string {
+  const words = slug
+    .trim()
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toLocaleUpperCase("tr-TR") + w.slice(1));
+  if (words.length === 0) return "VIP Berber Salonu";
+  const joined = words.join(" ");
+  return /vip$/i.test(joined) ? joined : `${joined} VIP`;
+}
+
+function buildFallbackShopFromSlug(slug: string): TenantShop {
+  const cleanSlug = slugifyShopName(slug) || slug.trim().toLowerCase() || "salon-harun";
+  const matchedDefault = INITIAL_SHOPS.find(
+    (s) => s.slug.toLowerCase() === cleanSlug.toLowerCase()
+  );
+  if (matchedDefault) {
+    return sanitizeShopDates({
+      ...matchedDefault,
+      subscriptionStatus: "active",
+    });
+  }
+
+  const template =
+    INITIAL_SHOPS.find((s) => s.slug === "salon-harun") || INITIAL_SHOPS[0];
+  const displayName = formatSlugToVipName(cleanSlug);
+
+  return sanitizeShopDates({
+    slug: cleanSlug,
+    name: displayName,
+    subtitle: "VIP Grooming & Gentlemen's Club",
+    phone: "0212 555 00 00",
+    district: "İstanbul",
+    monthlyFee: 1000,
+    subscriptionStatus: "active",
+    subscriptionEndDate: "30 Gün Sonra",
+    createdAt: new Date().toLocaleDateString("tr-TR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }),
+    adminPin: "1234",
+    depositPolicy: "require_deposit",
+    depositAmount: 100,
+    iban: "",
+    barbers: template.barbers.map((b) => ({ ...b, customPrices: { ...(b.customPrices || {}) } })),
+    services: template.services.map((s) => ({ ...s })),
+    shopSettings: { ...template.shopSettings },
+    appointments: [],
+    waitlist: [],
+    adminAlerts: [],
+    stats: {
+      savedRevenue: 0,
+      waitlistFilled: 0,
+      preventedNoShows: 0,
+    },
+  });
+}
+
 export function BarberProvider({ children }: { children: React.ReactNode }) {
   const [shops, setShops] = useState<TenantShop[]>(() =>
     INITIAL_SHOPS.map(sanitizeShopDates)
@@ -612,7 +672,18 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           const filtered = parsed
             .map(sanitizeShopDates)
             .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
-          setShops(filtered);
+          if (filtered.length === 0) {
+            setShops(INITIAL_SHOPS.map(sanitizeShopDates));
+          } else {
+            // Varsayılan demo dükkanlarından silinmemiş olanları (örn. salon-harun) koru
+            const existingSlugs = new Set(filtered.map((s) => s.slug.toLowerCase()));
+            const missingDefaults = INITIAL_SHOPS.filter(
+              (d) =>
+                !existingSlugs.has(d.slug.toLowerCase()) &&
+                !deletedSlugs.has(d.slug.toLowerCase())
+            ).map(sanitizeShopDates);
+            setShops(missingDefaults.length > 0 ? [...filtered, ...missingDefaults] : filtered);
+          }
         }
       }
 
@@ -987,12 +1058,34 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const currentShop = useMemo(() => {
-    return (
-      shops.find((s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()) ||
-      shops[0] ||
-      INITIAL_SHOPS[0]
+    const found = shops.find(
+      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
     );
-  }, [shops, currentShopSlug]);
+    if (found) return found;
+    if (hasShopQueryParam && currentShopSlug) {
+      return buildFallbackShopFromSlug(currentShopSlug);
+    }
+    return shops[0] || INITIAL_SHOPS[0];
+  }, [shops, currentShopSlug, hasShopQueryParam]);
+
+  // URL'de ?shop=herhangi-bir-isim varsa ve listede yoksa otomatik oluşturup state + localStorage'a kaydet
+  useEffect(() => {
+    if (!hydrated || !hasShopQueryParam || !currentShopSlug) return;
+    const exists = shops.some(
+      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
+    );
+    if (exists) return;
+
+    const recoveredShop = buildFallbackShopFromSlug(currentShopSlug);
+    setShops((prev) => {
+      if (prev.some((s) => s.slug.toLowerCase() === recoveredShop.slug.toLowerCase())) {
+        return prev;
+      }
+      const next = [...prev, recoveredShop];
+      void syncDirectlyToCloud(next);
+      return next;
+    });
+  }, [hydrated, hasShopQueryParam, currentShopSlug, shops, syncDirectlyToCloud]);
 
   // Dükkanın kendi telefon numarasının veya test numarasının yanlışlıkla kara listede kalmasını önleyen otomatik kilit
   useEffect(() => {
@@ -1018,14 +1111,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     });
   }, [currentShop.phone]);
 
-  // Is the requested shop (via ?shop=slug) actually registered? (false if deleted)
+  // Fallback kurtarma sayesinde URL'de ?shop=slug varsa dükkan her zaman mevcut kabul edilir
   const currentShopExists = useMemo(() => {
-    if (shops.length === 0) return false;
-    if (!hasShopQueryParam) return true;
-    return shops.some(
-      (s) => s.slug.toLowerCase() === currentShopSlug.toLowerCase()
-    );
-  }, [shops, currentShopSlug, hasShopQueryParam]);
+    if (hasShopQueryParam) return true;
+    return shops.length > 0;
+  }, [shops.length, hasShopQueryParam]);
 
   // Helper to update ONLY the current active shop in `shops` (Optimistic Local Update + Single Direct Cloud Write)
   const updateCurrentShop = useCallback(
