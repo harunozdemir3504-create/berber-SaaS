@@ -178,7 +178,12 @@ export async function runSmsReminderScan() {
     shops.map(async (shop) => {
       const isShopAutoSmsActive =
         shop.subscriptionStatus === "active" &&
-        Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled);
+        Boolean(
+          shop.auto_sms_enabled ??
+            shop.autoSmsEnabled ??
+            shop.shopSettings?.auto_sms_enabled ??
+            shop.shopSettings?.autoSmsEnabled
+        );
 
       if (!isShopAutoSmsActive || !Array.isArray(shop.appointments)) {
         return shop;

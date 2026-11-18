@@ -50,6 +50,7 @@ export interface ShopSettings {
   breakEnd: string; // e.g. "14:00"
   closedDays: number[]; // 0 = Pazar, 1 = Pazartesi, 2 = Salı, 3 = Çarşamba, 4 = Perşembe, 5 = Cuma, 6 = Cumartesi
   autoSmsEnabled?: boolean; // Otomatik 30 Dk Kala SMS Hatırlatma
+  auto_sms_enabled?: boolean;
 }
 
 export type SlotState = "available" | "booked" | "break";
@@ -198,6 +199,7 @@ export interface TenantShop {
   adminAlerts: AdminAlert[];
   stats: RevenueStats;
   autoSmsEnabled?: boolean;
+  auto_sms_enabled?: boolean;
   updatedAt?: number;
   isFallback?: boolean;
 }

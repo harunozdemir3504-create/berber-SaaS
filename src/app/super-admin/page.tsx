@@ -104,6 +104,7 @@ export default function SuperAdminPage() {
   const [newShopFee, setNewShopFee] = useState<string>("1000");
   const [newShopPin, setNewShopPin] = useState<string>("1234");
   const [newShopEndDate, setNewShopEndDate] = useState<string>("30 Kasım 2026");
+  const [newShopAutoSms, setNewShopAutoSms] = useState<boolean>(true);
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -358,6 +359,8 @@ export default function SuperAdminPage() {
       monthlyFee: Number(newShopFee) || 1000,
       adminPin: newShopPin.trim() || "1234",
       subscriptionEndDate: newShopEndDate.trim() || "30 Gün Sonra",
+      auto_sms_enabled: newShopAutoSms,
+      autoSmsEnabled: newShopAutoSms,
     });
 
     setCreatedShopSuccess(created);
@@ -1003,6 +1006,79 @@ export default function SuperAdminPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* 📲 OTOMATİK 30 DK KALA SMS AÇMA/KAPAMA ANAHTARI (Müşteri Linki, Berber Panel Linki ve Şifre Alanının Hemen Altında) */}
+                    {(() => {
+                      const isSmsActive = Boolean(
+                        shop.auto_sms_enabled ??
+                          shop.autoSmsEnabled ??
+                          shop.shopSettings?.auto_sms_enabled ??
+                          shop.shopSettings?.autoSmsEnabled
+                      );
+                      return (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-emerald-500/35 bg-[#101713] px-3 py-2.5">
+                          <div className="flex flex-wrap items-center gap-2 min-w-0">
+                            <span className="text-xs font-extrabold text-[#fdf8f5]">
+                              📲 Otomatik 30 Dk Kala SMS
+                            </span>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                isSmsActive
+                                  ? "border border-emerald-400/50 bg-emerald-500/20 text-emerald-300"
+                                  : "border border-white/15 bg-stone-500/20 text-stone-400"
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  isSmsActive ? "bg-emerald-400" : "bg-stone-400"
+                                }`}
+                              />
+                              {isSmsActive ? "Aktif" : "Kapalı"}
+                            </span>
+                            <span className="text-[11px] text-stone-400">
+                              • Randevuya 30 dk kala müşteriye otomatik hatırlatma SMS&apos;i gönderir
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isSmsActive}
+                            onClick={() => {
+                              const nextVal = !isSmsActive;
+                              toggleShopAutoSms(shop.slug, nextVal);
+                              showToast(
+                                nextVal
+                                  ? `📲 Otomatik 30 Dk Kala SMS Aktif: ${shop.name}`
+                                  : `📲 Otomatik 30 Dk Kala SMS Kapatıldı: ${shop.name}`,
+                                nextVal
+                                  ? "auto_sms_enabled = true olarak Supabase ve localStorage'a kaydedildi."
+                                  : "auto_sms_enabled = false olarak Supabase ve localStorage'a kaydedildi.",
+                                nextVal ? "success" : "warning"
+                              );
+                            }}
+                            className={`inline-flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-1.5 text-xs font-black transition cursor-pointer active:scale-95 ${
+                              isSmsActive
+                                ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                                : "border-white/15 bg-white/5 text-stone-300 hover:border-white/30 hover:text-white"
+                            }`}
+                          >
+                            <span>{isSmsActive ? "Aktif" : "Kapalı"}</span>
+                            <span
+                              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                                isSmsActive ? "bg-emerald-500" : "bg-stone-600"
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                                  isSmsActive ? "translate-x-4" : "translate-x-1"
+                                }`}
+                              />
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* SÜPER ADMİN DÜKKAN YETKİ PANELİ: 1) AÇIK YÖNETİM ŞİFRESİ, 2) ABONELİK DURUMU SEÇİMİ, 3) BİTİŞ TARİHİ ATAMA */}
@@ -1188,58 +1264,6 @@ export default function SuperAdminPage() {
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* 📲 OTOMATİK 30 DK KALA SMS HATIRLATMA ANAHTARI (İLETİMERKEZİ / VATANSMS) */}
-                  <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-emerald-500/30 bg-[#121714] px-3.5 py-2.5">
-                    <div className="min-w-0">
-                      <span className="flex items-center gap-1.5 text-xs font-extrabold text-[#fdf8f5]">
-                        <span>📲 Otomatik 30 Dk Kala SMS Aktif</span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
-                            Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                              : "bg-stone-500/20 text-stone-400 border border-white/10"
-                          }`}
-                        >
-                          {Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
-                            ? "AÇIK"
-                            : "KAPALI"}
-                        </span>
-                      </span>
-                      <p className="mt-0.5 text-[11px] text-stone-400">
-                        Randevuya 25–35 dk kala müşteriye otomatik SMS hatırlatması gönderir.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isCurrentlyOn = Boolean(
-                          shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled
-                        );
-                        toggleShopAutoSms(shop.slug, !isCurrentlyOn);
-                        showToast(
-                          !isCurrentlyOn
-                            ? `Otomatik SMS Aktif Edildi: ${shop.name}`
-                            : `Otomatik SMS Kapatıldı: ${shop.name}`,
-                          !isCurrentlyOn
-                            ? "Randevulara 30 dakika kala müşterilere otomatik hatırlatma SMS'i gönderilecek."
-                            : "Bu dükkan için otomatik 30 dk kala SMS gönderimi durduruldu.",
-                          !isCurrentlyOn ? "success" : "warning"
-                        );
-                      }}
-                      className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-black transition cursor-pointer active:scale-95 ${
-                        Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
-                          ? "border-emerald-400/60 bg-emerald-500 text-[#04130c] shadow-md shadow-emerald-500/20 hover:bg-emerald-400"
-                          : "border-white/15 bg-[#1b1714] text-stone-300 hover:border-emerald-400/50 hover:text-white"
-                      }`}
-                    >
-                      <span>
-                        {Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
-                          ? "✅ SMS Motoru Açık (Kapat)"
-                          : "⚪ SMS Motorunu Aktif Et"}
-                      </span>
-                    </button>
                   </div>
 
                   {/* Action Buttons on Each Shop Card */}
@@ -1481,6 +1505,43 @@ export default function SuperAdminPage() {
                   className="w-full rounded-xl border border-sky-400/40 bg-[#14100d] px-3 py-2.5 text-xs font-bold text-[#fdf8f5] outline-none focus:border-sky-400"
                 />
               </div>
+            </div>
+
+            {/* 📲 Otomatik 30 Dk Kala SMS Aktif Olsun Onay Kutusu / Toggle */}
+            <div
+              onClick={() => setNewShopAutoSms((prev) => !prev)}
+              className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition select-none ${
+                newShopAutoSms
+                  ? "border-emerald-500/50 bg-emerald-950/25"
+                  : "border-white/15 bg-[#14100d]"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <input
+                  type="checkbox"
+                  checked={newShopAutoSms}
+                  onChange={(e) => setNewShopAutoSms(e.target.checked)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-4 w-4 rounded border-emerald-400 accent-emerald-500 cursor-pointer"
+                />
+                <div className="min-w-0">
+                  <span className="block text-xs font-extrabold text-[#fdf8f5]">
+                    📲 Otomatik 30 Dk Kala SMS Aktif Olsun
+                  </span>
+                  <span className="block text-[10px] text-stone-400">
+                    Randevuya 30 dk kala müşteriye otomatik hatırlatma SMS&apos;i gönderilir
+                  </span>
+                </div>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                  newShopAutoSms
+                    ? "border border-emerald-400/50 bg-emerald-500/20 text-emerald-300"
+                    : "border border-white/15 bg-stone-500/20 text-stone-400"
+                }`}
+              >
+                {newShopAutoSms ? "Aktif" : "Kapalı"}
+              </span>
             </div>
 
             <div className="rounded-xl border border-[#c88a53]/25 bg-[#14100d] p-3 text-[11px] text-[#e6ccb2]/80">

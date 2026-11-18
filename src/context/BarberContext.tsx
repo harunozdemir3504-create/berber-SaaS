@@ -72,6 +72,8 @@ interface NewShopInput {
   monthlyFee: number;
   adminPin?: string;
   subscriptionEndDate?: string;
+  auto_sms_enabled?: boolean;
+  autoSmsEnabled?: boolean;
 }
 
 interface BlockedTimeRangeInput {
@@ -1541,6 +1543,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         breakStart: "13:00",
         breakEnd: "14:00",
         closedDays: [0],
+        autoSmsEnabled: Boolean(input.auto_sms_enabled ?? input.autoSmsEnabled ?? false),
+        auto_sms_enabled: Boolean(input.auto_sms_enabled ?? input.autoSmsEnabled ?? false),
       },
       appointments: [],
       waitlist: [],
@@ -1550,6 +1554,8 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         waitlistFilled: 0,
         preventedNoShows: 0,
       },
+      autoSmsEnabled: Boolean(input.auto_sms_enabled ?? input.autoSmsEnabled ?? false),
+      auto_sms_enabled: Boolean(input.auto_sms_enabled ?? input.autoSmsEnabled ?? false),
       updatedAt: Date.now(),
       isFallback: false,
     };
@@ -1631,14 +1637,19 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             return shop;
           }
           const currentVal = Boolean(
-            shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled
+            shop.auto_sms_enabled ??
+              shop.autoSmsEnabled ??
+              shop.shopSettings?.auto_sms_enabled ??
+              shop.shopSettings?.autoSmsEnabled
           );
           const nextVal = enabled !== undefined ? enabled : !currentVal;
           return {
             ...shop,
+            auto_sms_enabled: nextVal,
             autoSmsEnabled: nextVal,
             shopSettings: {
               ...shop.shopSettings,
+              auto_sms_enabled: nextVal,
               autoSmsEnabled: nextVal,
             },
             updatedAt: Date.now(),
@@ -2933,13 +2944,24 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             );
           }
 
+          const nextAutoSms =
+            updated.auto_sms_enabled !== undefined
+              ? updated.auto_sms_enabled
+              : updated.autoSmsEnabled !== undefined
+              ? updated.autoSmsEnabled
+              : shop.auto_sms_enabled ?? shop.autoSmsEnabled;
+
           return {
             ...shop,
-            autoSmsEnabled:
-              updated.autoSmsEnabled !== undefined
-                ? updated.autoSmsEnabled
-                : shop.autoSmsEnabled,
-            shopSettings: { ...shop.shopSettings, ...updated, breakEnabled: false },
+            auto_sms_enabled: nextAutoSms,
+            autoSmsEnabled: nextAutoSms,
+            shopSettings: {
+              ...shop.shopSettings,
+              ...updated,
+              auto_sms_enabled: nextAutoSms,
+              autoSmsEnabled: nextAutoSms,
+              breakEnabled: false,
+            },
             appointments: nextAppointments,
           };
         });
