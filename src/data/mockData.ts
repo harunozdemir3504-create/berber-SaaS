@@ -194,6 +194,8 @@ export interface TenantShop {
   waitlist: WaitlistEntry[];
   adminAlerts: AdminAlert[];
   stats: RevenueStats;
+  updatedAt?: number;
+  isFallback?: boolean;
 }
 
 export const INITIAL_SHOP_SETTINGS: ShopSettings = {

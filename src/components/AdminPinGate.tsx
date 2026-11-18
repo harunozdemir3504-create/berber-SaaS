@@ -17,7 +17,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { useBarber } from "@/context/BarberContext";
+import { useBarber, slugifyShopName } from "@/context/BarberContext";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
 import ShopLogo from "@/components/ShopLogo";
 
@@ -107,7 +107,7 @@ export default function AdminPinGate({
       const urlParams = new URLSearchParams(window.location.search);
       const paramSlug = urlParams.get("shop");
       if (paramSlug && paramSlug.trim()) {
-        urlSlug = paramSlug.trim().toLowerCase();
+        urlSlug = slugifyShopName(paramSlug) || paramSlug.trim().toLowerCase();
       }
     }
 

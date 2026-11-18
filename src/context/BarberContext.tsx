@@ -519,22 +519,111 @@ function sanitizeShopDates(shop: TenantShop): TenantShop {
 }
 
 /**
- * Supabase bulut verisini öncelikli ve kesin doğru kabul eder.
- * Silinen dükkan ve randevular ASLA geri diriltilmez.
+ * İki dükkan kaydının randevularını (appointments) veri kaybı olmadan birleştirir.
+ */
+function mergeAppointmentsLists(
+  primaryApts: Appointment[] = [],
+  secondaryApts: Appointment[] = []
+): Appointment[] {
+  const aptMap = new Map<string, Appointment>();
+  for (const apt of secondaryApts) {
+    if (apt && apt.id) aptMap.set(apt.id, apt);
+  }
+  // Primary (güncel/öncelikli) randevular aynı ID'de üstüne yazar, eksik olanlar korunur
+  for (const apt of primaryApts) {
+    if (apt && apt.id) aptMap.set(apt.id, apt);
+  }
+  return Array.from(aptMap.values());
+}
+
+/**
+ * Supabase bulut verisi ile yerel veriyi güvenli şekilde birleştirir:
+ * - Gerçek dükkanlar (isFallback !== true veya şifresi "1234" olmayanlar) her zaman otomatik üretilen fallback ("1234") dükkanları ezer.
+ * - Yerelde şifresi "1234" olmayan gerçek bir dükkan varsa ve buluttaki kopyası "1234" ile ezilmişse, yereldeki gerçek şifre, usta ve hizmetler kurtarılır.
+ * - Her iki taraftaki randevular (appointments) ID bazlı birleştirilerek hiçbir randevunun kaybolmaması sağlanır.
  */
 function mergeShopsSafely(
   localShops: TenantShop[],
   remoteShops: TenantShop[]
 ): TenantShop[] {
   const deletedSlugs = getDeletedShopSlugs();
-  if (!Array.isArray(remoteShops) || remoteShops.length === 0) {
-    return (localShops || []).filter(
-      (s) => !deletedSlugs.has(s.slug.toLowerCase())
-    );
-  }
-  return remoteShops
+  const safeLocal = (localShops || [])
     .map(sanitizeShopDates)
     .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
+  const safeRemote = (remoteShops || [])
+    .map(sanitizeShopDates)
+    .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
+
+  if (safeRemote.length === 0) return safeLocal;
+  if (safeLocal.length === 0) return safeRemote;
+
+  const mergedMap = new Map<string, TenantShop>();
+
+  // 1. Önce Supabase (remote) dükkanlarını baz al
+  for (const rShop of safeRemote) {
+    const key = slugifyShopName(rShop.slug) || rShop.slug.toLowerCase();
+    mergedMap.set(key, rShop);
+  }
+
+  // 2. Yerel dükkanları karşılaştır ve eksik dükkanları / gerçek şifreleri / randevuları kurtar
+  for (const lShop of safeLocal) {
+    const key = slugifyShopName(lShop.slug) || lShop.slug.toLowerCase();
+    const existingRemote = mergedMap.get(key);
+    if (!existingRemote) {
+      mergedMap.set(key, {
+        ...lShop,
+        isFallback: lShop.isFallback ?? false,
+        updatedAt: lShop.updatedAt || Date.now(),
+      });
+    } else {
+      // Otomatik kurtarma (isFallback: true) dükkanı ASLA gerçek Supabase dükkanını ezemez!
+      if (lShop.isFallback && !existingRemote.isFallback) {
+        continue;
+      }
+      if (!lShop.isFallback && existingRemote.isFallback) {
+        mergedMap.set(key, {
+          ...lShop,
+          appointments: mergeAppointmentsLists(
+            lShop.appointments,
+            existingRemote.appointments
+          ),
+          isFallback: false,
+          updatedAt: Math.max(Number(lShop.updatedAt) || 0, Date.now()),
+        });
+        continue;
+      }
+
+      // Yereldeki dükkanın şifresi özel bir şifreyse (!== "1234") ve buluttaki "1234" olarak kalmışsa, yereldeki gerçek dükkanı koru!
+      const localPin = (lShop.adminPin || "1234").trim();
+      const remotePin = (existingRemote.adminPin || "1234").trim();
+      const localHasRealCustomPin = localPin !== "1234" && remotePin === "1234";
+
+      const localTime = Number(lShop.updatedAt) || 0;
+      const remoteTime = Number(existingRemote.updatedAt) || 0;
+
+      if (localHasRealCustomPin || localTime > remoteTime) {
+        mergedMap.set(key, {
+          ...lShop,
+          appointments: mergeAppointmentsLists(
+            lShop.appointments,
+            existingRemote.appointments
+          ),
+          isFallback: false,
+          updatedAt: Math.max(localTime, remoteTime, Date.now()),
+        });
+      } else {
+        mergedMap.set(key, {
+          ...existingRemote,
+          appointments: mergeAppointmentsLists(
+            existingRemote.appointments,
+            lShop.appointments
+          ),
+        });
+      }
+    }
+  }
+
+  return Array.from(mergedMap.values());
 }
 
 // Helper component that syncs URL (both `/:slug` path and `?shop=:slug` query) with context state
@@ -636,6 +725,8 @@ function buildFallbackShopFromSlug(slug: string): TenantShop {
       waitlistFilled: 0,
       preventedNoShows: 0,
     },
+    isFallback: true,
+    updatedAt: 1,
   });
 }
 
@@ -673,15 +764,21 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
   const [masterPin, setMasterPinState] = useState<string>("2006");
   const [hydrated, setHydrated] = useState(false);
 
-  // Realtime çakışmasını (echo / ping-pong döngüsünü) önleyen istemci ve işlem kilitleri
+  // Realtime çakışmasını (echo / ping-pong döngüsünü) ve yüklenme öncesi race condition'ı önleyen kilitler
   const clientIdRef = useRef<string>(
     `client-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   );
   const inFlightWritesRef = useRef<number>(0);
   const lastLocalMutationAtRef = useRef<number>(0);
   const isApplyingRemoteRef = useRef<boolean>(false);
+  const supabaseLoadedRef = useRef<boolean>(false);
+  const shopsRef = useRef<TenantShop[]>(shops);
+  useEffect(() => {
+    shopsRef.current = shops;
+  }, [shops]);
 
-  const loadFromStorage = useCallback(() => {
+  const loadFromStorage = useCallback((): TenantShop[] => {
+    let loadedShops: TenantShop[] = [];
     try {
       const deletedSlugs = getDeletedShopSlugs();
       const savedShops = localStorage.getItem(STORAGE_KEYS.SHOPS);
@@ -694,11 +791,12 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
           const filtered = parsed
             .map(sanitizeShopDates)
             .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
-          // Sadece hafızada HİÇ dükkan yoksa başlangıç demo dükkanlarını yükle; mevcut veriyi ASLA ezme
           if (filtered.length > 0) {
+            loadedShops = filtered;
             setShops(filtered);
           } else {
-            setShops(INITIAL_SHOPS.map(sanitizeShopDates));
+            loadedShops = INITIAL_SHOPS.map(sanitizeShopDates);
+            setShops(loadedShops);
           }
         }
       }
@@ -720,18 +818,39 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore localStorage errors
     }
+    return loadedShops;
   }, []);
 
-  // Doğrudan hem localStorage'a hem de Supabase'e anında güvenli yazma fonksiyonu (Optimistic Update + Tek Seferlik DB Yazımı)
+  // Doğrudan hem localStorage'a hem de Supabase'e anında güvenli yazma fonksiyonu (Optimistic Update + Güvenli Bulut Birleştirmesi)
   const syncDirectlyToCloud = useCallback(
     async (
       nextShops: TenantShop[],
       nextBlacklist?: BlacklistEntry[],
       nextMasterPin?: string
     ): Promise<void> => {
-      lastLocalMutationAtRef.current = Date.now();
+      const nowTs = Date.now();
+      lastLocalMutationAtRef.current = nowTs;
+
+      // Değişen veya yeni eklenen gerçek dükkanlara updatedAt damgası vur (fallback dükkanları gerçek dükkanların üzerine yazma)
+      const prevMap = new Map<string, TenantShop>();
+      for (const p of shopsRef.current || []) {
+        prevMap.set(slugifyShopName(p.slug) || p.slug.toLowerCase(), p);
+      }
+
+      const stampedShops = nextShops.map((shop) => {
+        if (shop.isFallback) return shop;
+        const key = slugifyShopName(shop.slug) || shop.slug.toLowerCase();
+        const prevShop = prevMap.get(key);
+        if (!prevShop || JSON.stringify(prevShop) !== JSON.stringify(shop)) {
+          return { ...shop, updatedAt: nowTs, isFallback: false };
+        }
+        return shop;
+      });
+
+      shopsRef.current = stampedShops;
+
       try {
-        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(nextShops));
+        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(stampedShops));
         if (nextBlacklist) {
           localStorage.setItem(
             STORAGE_KEYS.GLOBAL_BLACKLIST,
@@ -741,29 +860,49 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         if (nextMasterPin) {
           localStorage.setItem(STORAGE_KEYS.MASTER_PIN, nextMasterPin);
         }
-      } catch {
-        // ignore
+      } catch (storageErr) {
+        console.error("[LocalStorage Sync Error]:", storageErr);
       }
 
       if (isSupabaseConfigured && supabase) {
         inFlightWritesRef.current += 1;
         lastLocalMutationAtRef.current = Date.now();
         try {
-          const { error } = await supabase.from("app_state").upsert({
-            key: "global_state",
-            data: {
-              shops: nextShops,
-              globalBlacklist: nextBlacklist || globalBlacklist,
-              masterPin: nextMasterPin || masterPin,
-              updatedByClientId: clientIdRef.current,
+          // Başka cihazda açılmış dükkanları veya gerçek şifreleri ezmemek için buluttaki son liste ile birleştir
+          let cloudsToSave = stampedShops;
+          const { data: existingRow, error: fetchErr } = await supabase
+            .from("app_state")
+            .select("key, data")
+            .eq("key", "global_state")
+            .maybeSingle();
+
+          if (fetchErr) {
+            console.error("[Supabase Pre-Sync Fetch Error]:", fetchErr);
+          } else if (existingRow?.data?.shops && Array.isArray(existingRow.data.shops)) {
+            cloudsToSave = mergeShopsSafely(stampedShops, existingRow.data.shops);
+            try {
+              localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(cloudsToSave));
+            } catch {}
+          }
+
+          const { error } = await supabase.from("app_state").upsert(
+            {
+              key: "global_state",
+              data: {
+                shops: cloudsToSave,
+                globalBlacklist: nextBlacklist || globalBlacklist,
+                masterPin: nextMasterPin || masterPin,
+                updatedByClientId: clientIdRef.current,
+              },
+              updated_at: new Date().toISOString(),
             },
-            updated_at: new Date().toISOString(),
-          });
+            { onConflict: "key" }
+          );
           if (error) {
-            console.warn("Supabase direct sync error:", error.message);
+            console.error("[Supabase Direct Upsert Error]:", error);
           }
         } catch (err) {
-          console.warn("Supabase direct sync exception:", err);
+          console.error("[Supabase Direct Sync Exception]:", err);
         } finally {
           inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
           lastLocalMutationAtRef.current = Date.now();
@@ -773,13 +912,13 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     [globalBlacklist, masterPin]
   );
 
-  // 1. Initial Load: First try Supabase, fallback to localStorage
+  // 1. Initial Load: Önce Supabase'den çekilmesini (await) bekle, tamamlanmadan ASLA fallback dükkan yaratma!
   useEffect(() => {
     let isMounted = true;
 
     async function initData() {
-      // Step A: Load from localStorage immediately so page is never empty
-      loadFromStorage();
+      // Step A: LocalStorage'daki önbelleği oku
+      const localLoaded = loadFromStorage();
 
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
@@ -814,7 +953,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Step B: Pull latest state from Supabase
+      // Step B: Supabase'den gerçek dükkanları, şifreleri ve randevuları çek (Tamamlanmadan hydrated=true olmaz!)
       if (isSupabaseConfigured && supabase) {
         try {
           const { data, error } = await supabase
@@ -824,8 +963,9 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle();
 
           if (error) {
-            console.warn("Supabase fetch error:", error.message);
+            console.error("[Supabase Init Fetch Error]:", error);
           } else if (data && data.data) {
+            supabaseLoadedRef.current = true;
             const remote = data.data as {
               shops?: TenantShop[];
               globalBlacklist?: BlacklistEntry[];
@@ -834,18 +974,49 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
             if (isMounted && Array.isArray(remote.shops) && remote.shops.length > 0) {
               const deletedSlugs = getDeletedShopSlugs();
-              const sanitizedRemote = remote.shops
+              const sanitizedRemoteOnly = remote.shops
                 .map(sanitizeShopDates)
                 .filter((s) => !deletedSlugs.has(s.slug.toLowerCase()));
-              if (sanitizedRemote.length > 0) {
+              const mergedShops = mergeShopsSafely(localLoaded, remote.shops);
+              if (mergedShops.length > 0) {
                 isApplyingRemoteRef.current = true;
-                setShops(sanitizedRemote);
+                shopsRef.current = mergedShops;
+                setShops(mergedShops);
                 try {
                   localStorage.setItem(
                     STORAGE_KEYS.SHOPS,
-                    JSON.stringify(sanitizedRemote)
+                    JSON.stringify(mergedShops)
                   );
                 } catch {}
+
+                // Yerelde olup Supabase'de henüz olmayan dükkan, gerçek şifre (!== '1234'), usta, hizmet veya randevu varsa ANINDA Supabase'e upsert et!
+                if (
+                  JSON.stringify(mergedShops) !==
+                  JSON.stringify(sanitizedRemoteOnly)
+                ) {
+                  const { error: migrateErr } = await supabase
+                    .from("app_state")
+                    .upsert(
+                      {
+                        key: "global_state",
+                        data: {
+                          shops: mergedShops,
+                          globalBlacklist:
+                            remote.globalBlacklist || globalBlacklist,
+                          masterPin: remote.masterPin || masterPin,
+                          updatedByClientId: clientIdRef.current,
+                        },
+                        updated_at: new Date().toISOString(),
+                      },
+                      { onConflict: "key" }
+                    );
+                  if (migrateErr) {
+                    console.error(
+                      "[Supabase Auto-Migrate Upsert Error]:",
+                      migrateErr
+                    );
+                  }
+                }
               }
             }
 
@@ -860,31 +1031,34 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             // Tablo boş ise mevcut localStorage verisini (yoksa varsayılan dükkanları) buluta ilk tohumlama olarak gönder
-            let seedShops = INITIAL_SHOPS;
-            try {
-              const localRaw = localStorage.getItem(STORAGE_KEYS.SHOPS);
-              if (localRaw) {
-                const parsedLocal: TenantShop[] = JSON.parse(localRaw);
-                if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
-                  seedShops = parsedLocal.map(sanitizeShopDates);
-                }
-              }
-            } catch {}
+            supabaseLoadedRef.current = true;
+            const seedShops =
+              localLoaded.length > 0
+                ? localLoaded
+                : INITIAL_SHOPS.map(sanitizeShopDates);
             const seedPayload = {
               shops: seedShops,
               globalBlacklist: INITIAL_GLOBAL_BLACKLIST,
               masterPin: "2006",
               updatedByClientId: clientIdRef.current,
             };
-            await supabase.from("app_state").upsert({
-              key: "global_state",
-              data: seedPayload,
-              updated_at: new Date().toISOString(),
-            });
+            const { error: seedErr } = await supabase.from("app_state").upsert(
+              {
+                key: "global_state",
+                data: seedPayload,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "key" }
+            );
+            if (seedErr) {
+              console.error("[Supabase Seed Upsert Error]:", seedErr);
+            }
           }
         } catch (err) {
-          console.warn("Supabase init error:", err);
+          console.error("[Supabase Init Exception]:", err);
         }
+      } else {
+        supabaseLoadedRef.current = true;
       }
 
       if (isMounted) {
@@ -931,19 +1105,17 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
             setShops((prevShops) => {
               if (Array.isArray(nextData.shops)) {
-                const deletedSlugs = getDeletedShopSlugs();
-                const sanitizedNext = nextData.shops
-                  .map(sanitizeShopDates)
-                  .filter((s: TenantShop) => !deletedSlugs.has(s.slug.toLowerCase()));
-                if (JSON.stringify(prevShops) !== JSON.stringify(sanitizedNext)) {
+                const mergedNext = mergeShopsSafely(prevShops, nextData.shops);
+                if (JSON.stringify(prevShops) !== JSON.stringify(mergedNext)) {
                   isApplyingRemoteRef.current = true;
+                  shopsRef.current = mergedNext;
                   try {
                     localStorage.setItem(
                       STORAGE_KEYS.SHOPS,
-                      JSON.stringify(sanitizedNext)
+                      JSON.stringify(mergedNext)
                     );
                   } catch {}
-                  return sanitizedNext;
+                  return mergedNext;
                 }
               }
               return prevShops;
@@ -1058,18 +1230,24 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         inFlightWritesRef.current += 1;
         lastLocalMutationAtRef.current = Date.now();
         try {
-          await supabase!.from("app_state").upsert({
-            key: "global_state",
-            data: {
-              shops,
-              globalBlacklist,
-              masterPin,
-              updatedByClientId: clientIdRef.current,
+          const { error } = await supabase!.from("app_state").upsert(
+            {
+              key: "global_state",
+              data: {
+                shops,
+                globalBlacklist,
+                masterPin,
+                updatedByClientId: clientIdRef.current,
+              },
+              updated_at: new Date().toISOString(),
             },
-            updated_at: new Date().toISOString(),
-          });
+            { onConflict: "key" }
+          );
+          if (error) {
+            console.error("[Supabase Background Sync Error]:", error);
+          }
         } catch (err) {
-          console.warn("Supabase sync write error:", err);
+          console.error("[Supabase Background Sync Exception]:", err);
         } finally {
           inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
           lastLocalMutationAtRef.current = Date.now();
@@ -1102,15 +1280,28 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       (s) => (slugifyShopName(s.slug) || s.slug.toLowerCase()) === targetSlug
     );
     if (found) return found;
-    if (hasShopQueryParam && targetSlug) {
+    // Supabase yüklenmeden (hydrated === false iken) ASLA varsayılan "1234" şifreli dükkan döndürme
+    if (hydrated && hasShopQueryParam && targetSlug) {
       return buildFallbackShopFromSlug(targetSlug);
     }
     return shops[0] || INITIAL_SHOPS[0];
-  }, [shops, currentShopSlug, hasShopQueryParam]);
+  }, [shops, currentShopSlug, hasShopQueryParam, hydrated]);
 
-  // URL'de ?shop=herhangi-bir-isim varsa ve listede yoksa mevcut listeyi SİLMEDEN otomatik ekle
+  // Otomatik Dükkan Yaratma (Fallback): SADECE Supabase sorgusu hatasız bittikten sonra (hydrated && supabaseLoadedRef)
+  // ve aranan slug hem Supabase'de hem localStorage'da gerçekten hiç yoksa çalıştır!
   useEffect(() => {
-    if (!hydrated || !hasShopQueryParam || !currentShopSlug) return;
+    if (!hydrated || !supabaseLoadedRef.current || !hasShopQueryParam || !currentShopSlug) {
+      return;
+    }
+    // Admin veya Süper Admin ekranında asla otomatik "1234" fallback dükkan üretme
+    if (
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/admin") ||
+        window.location.pathname.startsWith("/super-admin"))
+    ) {
+      return;
+    }
+
     const targetSlug = slugifyShopName(currentShopSlug) || currentShopSlug.toLowerCase();
     const exists = shops.some(
       (s) => (slugifyShopName(s.slug) || s.slug.toLowerCase()) === targetSlug
@@ -1307,12 +1498,20 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         waitlistFilled: 0,
         preventedNoShows: 0,
       },
+      updatedAt: Date.now(),
+      isFallback: false,
     };
 
     setShops((prev) => {
-      const exists = prev.some((s) => s.slug === cleanSlug);
+      const exists = prev.some(
+        (s) => (slugifyShopName(s.slug) || s.slug.toLowerCase()) === cleanSlug
+      );
       const nextShops = exists
-        ? prev.map((s) => (s.slug === cleanSlug ? newTenant : s))
+        ? prev.map((s) =>
+            (slugifyShopName(s.slug) || s.slug.toLowerCase()) === cleanSlug
+              ? newTenant
+              : s
+          )
         : [...prev, newTenant];
       void syncDirectlyToCloud(nextShops);
       return nextShops;
@@ -1374,8 +1573,11 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
       const cleaned = newPin.trim();
       if (!cleaned) return;
       setShops((prevShops) => {
+        const targetNorm = slugifyShopName(slug) || slug.trim().toLowerCase();
         const nextShops = prevShops.map((s) =>
-          s.slug === slug ? { ...s, adminPin: cleaned } : s
+          (slugifyShopName(s.slug) || s.slug.toLowerCase()) === targetNorm
+            ? { ...s, adminPin: cleaned, updatedAt: Date.now(), isFallback: false }
+            : s
         );
 
         void syncDirectlyToCloud(nextShops);
