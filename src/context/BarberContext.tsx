@@ -96,6 +96,7 @@ interface BarberContextType {
   addShop: (input: NewShopInput) => TenantShop;
   toggleShopSubscription: (slug: string) => void;
   updateShopSubscription: (slug: string, status: SubscriptionStatus, endDate?: string) => void;
+  toggleShopAutoSms: (slug: string, enabled?: boolean) => void;
   updateShopPinBySlug: (slug: string, newPin: string) => void;
   updateShopDetails: (slug: string, details: UpdateShopDetailsInput) => void;
   deleteShop: (slug: string) => void;
@@ -1187,6 +1188,57 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  // 1C. Arka Plan 30 Dakika Kala Otomatik SMS Hatırlatma Motoru (Her 5 dakikada bir aktif randevuları tarar)
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+
+    const triggerSmsCronCheck = async () => {
+      try {
+        const res = await fetch("/api/cron/sms-reminders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (
+          json?.ok &&
+          Array.isArray(json.sentAppointments) &&
+          json.sentAppointments.length > 0
+        ) {
+          const sentIds = new Set<string>(
+            json.sentAppointments.map(
+              (item: { appointmentId: string }) => item.appointmentId
+            )
+          );
+          const nowIso = new Date().toISOString();
+          setShops((prevShops) =>
+            prevShops.map((shop) => {
+              const hasMatch = shop.appointments.some((a) => sentIds.has(a.id));
+              if (!hasMatch) return shop;
+              return {
+                ...shop,
+                appointments: shop.appointments.map((a) =>
+                  sentIds.has(a.id)
+                    ? { ...a, sms_sent: true, sms_sent_at: nowIso, reminderSent: true }
+                    : a
+                ),
+              };
+            })
+          );
+        }
+      } catch {
+        // Arka plan kontrol hatasını yut, mevcut akışı bozma
+      }
+    };
+
+    const initialTimer = setTimeout(triggerSmsCronCheck, 5000);
+    const interval = setInterval(triggerSmsCronCheck, 5 * 60 * 1000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [hydrated]);
+
   // 2. State her değiştiğinde: LocalStorage'a kaydet; eğer doğrudan syncDirectlyToCloud çağrılmadıysa yedek olarak buluta yaz
   useEffect(() => {
     if (!hydrated) return;
@@ -1560,6 +1612,39 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
             : shop
         );
 
+        void syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [syncDirectlyToCloud]
+  );
+
+  // SUPER ADMIN & SHOP ADMIN: Toggle "Otomatik 30 Dk Kala SMS Aktif" (on/off)
+  const toggleShopAutoSms = useCallback(
+    (slug: string, enabled?: boolean) => {
+      const targetNorm = slugifyShopName(slug) || slug.trim().toLowerCase();
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (
+            (slugifyShopName(shop.slug) || shop.slug.toLowerCase()) !== targetNorm
+          ) {
+            return shop;
+          }
+          const currentVal = Boolean(
+            shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled
+          );
+          const nextVal = enabled !== undefined ? enabled : !currentVal;
+          return {
+            ...shop,
+            autoSmsEnabled: nextVal,
+            shopSettings: {
+              ...shop.shopSettings,
+              autoSmsEnabled: nextVal,
+            },
+            updatedAt: Date.now(),
+            isFallback: false,
+          };
+        });
         void syncDirectlyToCloud(nextShops);
         return nextShops;
       });
@@ -2850,6 +2935,10 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
 
           return {
             ...shop,
+            autoSmsEnabled:
+              updated.autoSmsEnabled !== undefined
+                ? updated.autoSmsEnabled
+                : shop.autoSmsEnabled,
             shopSettings: { ...shop.shopSettings, ...updated, breakEnabled: false },
             appointments: nextAppointments,
           };
@@ -3031,6 +3120,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         addShop,
         toggleShopSubscription,
         updateShopSubscription,
+        toggleShopAutoSms,
         updateShopPinBySlug,
         updateShopDetails,
         deleteShop,

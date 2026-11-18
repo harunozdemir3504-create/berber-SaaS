@@ -5066,6 +5066,58 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
+                {/* 📲 OTOMATİK 30 DK KALA SMS HATIRLATMA ANAHTARI */}
+                <div className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
+                        <span>📲 Otomatik 30 Dk Kala SMS Aktif</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
+                            Boolean(shopSettings.autoSmsEnabled || currentShop.autoSmsEnabled)
+                              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40"
+                              : "bg-stone-500/15 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-white/10"
+                          }`}
+                        >
+                          {Boolean(shopSettings.autoSmsEnabled || currentShop.autoSmsEnabled)
+                            ? "AÇIK"
+                            : "KAPALI"}
+                        </span>
+                      </span>
+                      <p className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                        Randevu saatine 30 dakika kala (25–35 dk aralığında) müşteriye otomatik hatırlatma SMS&apos;i gönderilir.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = !Boolean(
+                          shopSettings.autoSmsEnabled || currentShop.autoSmsEnabled
+                        );
+                        updateShopSettings({ autoSmsEnabled: nextState });
+                        triggerToast(
+                          nextState
+                            ? "Otomatik 30 Dk Kala SMS Açıldı"
+                            : "Otomatik 30 Dk Kala SMS Kapatıldı",
+                          nextState
+                            ? "Randevuya 30 dk kala müşterilere otomatik hatırlatma SMS'i gönderilecek."
+                            : "Otomatik SMS hatırlatma motoru bu salon için durduruldu.",
+                          "success"
+                        );
+                      }}
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95 cursor-pointer shadow-sm ${
+                        Boolean(shopSettings.autoSmsEnabled || currentShop.autoSmsEnabled)
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                          : "bg-stone-200 hover:bg-stone-300 dark:bg-white/10 dark:hover:bg-white/15 text-stone-800 dark:text-stone-200"
+                      }`}
+                    >
+                      {Boolean(shopSettings.autoSmsEnabled || currentShop.autoSmsEnabled)
+                        ? "✅ Otomatik SMS Aktif (Kapat)"
+                        : "⚪ Otomatik SMS'i Aktif Et"}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="rounded-2xl border border-stone-200 dark:border-white/10 bg-white dark:bg-[#141416] p-4">
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-stone-900 dark:text-[#fdf8f5]">
                     <CalendarOff className="h-4 w-4 text-rose-600 dark:text-rose-400" />

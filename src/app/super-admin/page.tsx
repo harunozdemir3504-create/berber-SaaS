@@ -60,6 +60,7 @@ export default function SuperAdminPage() {
     addShop,
     toggleShopSubscription,
     updateShopSubscription,
+    toggleShopAutoSms,
     updateShopPinBySlug,
     updateShopDetails,
     deleteShop,
@@ -1187,6 +1188,58 @@ export default function SuperAdminPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* 📲 OTOMATİK 30 DK KALA SMS HATIRLATMA ANAHTARI (İLETİMERKEZİ / VATANSMS) */}
+                  <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-emerald-500/30 bg-[#121714] px-3.5 py-2.5">
+                    <div className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-xs font-extrabold text-[#fdf8f5]">
+                        <span>📲 Otomatik 30 Dk Kala SMS Aktif</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
+                            Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              : "bg-stone-500/20 text-stone-400 border border-white/10"
+                          }`}
+                        >
+                          {Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
+                            ? "AÇIK"
+                            : "KAPALI"}
+                        </span>
+                      </span>
+                      <p className="mt-0.5 text-[11px] text-stone-400">
+                        Randevuya 25–35 dk kala müşteriye otomatik SMS hatırlatması gönderir.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isCurrentlyOn = Boolean(
+                          shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled
+                        );
+                        toggleShopAutoSms(shop.slug, !isCurrentlyOn);
+                        showToast(
+                          !isCurrentlyOn
+                            ? `Otomatik SMS Aktif Edildi: ${shop.name}`
+                            : `Otomatik SMS Kapatıldı: ${shop.name}`,
+                          !isCurrentlyOn
+                            ? "Randevulara 30 dakika kala müşterilere otomatik hatırlatma SMS'i gönderilecek."
+                            : "Bu dükkan için otomatik 30 dk kala SMS gönderimi durduruldu.",
+                          !isCurrentlyOn ? "success" : "warning"
+                        );
+                      }}
+                      className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-black transition cursor-pointer active:scale-95 ${
+                        Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
+                          ? "border-emerald-400/60 bg-emerald-500 text-[#04130c] shadow-md shadow-emerald-500/20 hover:bg-emerald-400"
+                          : "border-white/15 bg-[#1b1714] text-stone-300 hover:border-emerald-400/50 hover:text-white"
+                      }`}
+                    >
+                      <span>
+                        {Boolean(shop.autoSmsEnabled || shop.shopSettings?.autoSmsEnabled)
+                          ? "✅ SMS Motoru Açık (Kapat)"
+                          : "⚪ SMS Motorunu Aktif Et"}
+                      </span>
+                    </button>
                   </div>
 
                   {/* Action Buttons on Each Shop Card */}

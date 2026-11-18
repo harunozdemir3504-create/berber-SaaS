@@ -49,6 +49,7 @@ export interface ShopSettings {
   breakStart: string; // e.g. "13:00"
   breakEnd: string; // e.g. "14:00"
   closedDays: number[]; // 0 = Pazar, 1 = Pazartesi, 2 = Salı, 3 = Çarşamba, 4 = Perşembe, 5 = Cuma, 6 = Cumartesi
+  autoSmsEnabled?: boolean; // Otomatik 30 Dk Kala SMS Hatırlatma
 }
 
 export type SlotState = "available" | "booked" | "break";
@@ -115,6 +116,8 @@ export interface Appointment {
   status: AppointmentStatus;
   reminderSent: boolean;
   reminderSentAt?: string;
+  sms_sent?: boolean;
+  sms_sent_at?: string;
   notes?: string;
   bookingSource?: "online" | "phone" | "blocked";
   isBlockedSlot?: boolean;
@@ -194,6 +197,7 @@ export interface TenantShop {
   waitlist: WaitlistEntry[];
   adminAlerts: AdminAlert[];
   stats: RevenueStats;
+  autoSmsEnabled?: boolean;
   updatedAt?: number;
   isFallback?: boolean;
 }
