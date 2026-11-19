@@ -498,15 +498,19 @@ async function runWhatsAppReminderCron() {
         continue;
       }
 
-      const customerName = (apt.customerName || "Müşterimiz").trim();
+      const rawCustomerName = (apt.customerName || "").trim();
+      const customerName = rawCustomerName || "Müşterimiz";
+      const shopName = (shop.name || "Berberiniz").trim();
       const rawBarberName = (apt.barberName || "").trim();
       const barberDisplayName =
         rawBarberName && !rawBarberName.toLowerCase().startsWith("fark etmez")
           ? rawBarberName
-          : (shop.name || "Berberiniz").trim();
+          : shopName;
 
-      // İstenen mesaj formatı: "Merhaba [Müşteri Adı], [Berber Adı] için saat [Saat] randevunuza 30 dakika kaldı."
-      const wpMessage = `Merhaba ${customerName}, ${barberDisplayName} için saat ${aptTimeStr} randevunuza 30 dakika kaldı.`;
+      const customerGreeting = rawCustomerName
+        ? `Değerli müşterimiz ${rawCustomerName},`
+        : "Değerli müşterimiz,";
+      const wpMessage = `✂️ ${shopName}\n${customerGreeting} bugün saat ${aptTimeStr} randevunuza 30 dakika kalmıştır.\nSıkışıklık olmaması adına 5 dakika erken gelmenizi rica ederiz. Görüşmek üzere!`;
 
       const dispatchResult = await sendWhatsAppViaVatanSms({
         target: targetPhone,
