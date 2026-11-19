@@ -11,28 +11,19 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const VATANSMS_WP_BASE_URL = (
-  process.env.VATANSMS_WP_BASE_URL || "https://api.toplusmspaketleri.com"
-)
-  .trim()
-  .replace(/\/+$/, "");
+const VATANSMS_WP_NTON_URL = (
+  process.env.VATANSMS_WP_API_URL ||
+  "https://api.toplusmspaketleri.com/bulk/wp/nton"
+).trim();
 
-/**
- * VatanSMS / TopluSMSPaketleri WhatsApp mesaj gönderme endpoint adayları.
- * Eğer .env içinde tam adres olarak VATANSMS_WP_API_URL verilmişse doğrudan o kullanılır.
- * Aksi halde https://api.toplusmspaketleri.com Base URL üzerindeki WhatsApp gönderim uç noktası kullanılır.
- */
-function getVatanSmsWhatsAppEndpoints(): string[] {
-  const explicitUrl = (process.env.VATANSMS_WP_API_URL || "").trim();
-  if (explicitUrl) {
-    return [explicitUrl];
-  }
-  return [
-    `${VATANSMS_WP_BASE_URL}/api/v1/whatsapp/send`,
-    `${VATANSMS_WP_BASE_URL}/api/v1/messages/send`,
-    `${VATANSMS_WP_BASE_URL}/api/whatsapp/v1/messages/send`,
-    `${VATANSMS_WP_BASE_URL}/api/v1/wabusiness/message/send`,
-  ];
+function formatTurkeySendDate(trDate: Date): string {
+  const yyyy = trDate.getFullYear();
+  const mm = String(trDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(trDate.getDate()).padStart(2, "0");
+  const hh = String(trDate.getHours()).padStart(2, "0");
+  const min = String(trDate.getMinutes()).padStart(2, "0");
+  const ss = String(trDate.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}+03:00`;
 }
 
 function timeToMinutes(timeStr: string): number {
@@ -45,6 +36,9 @@ function timeToMinutes(timeStr: string): number {
   return h * 60 + m;
 }
 
+/**
+ * Müşteri telefon numarasını başında '+' olmadan '905XXXXXXXXX' formatına dönüştürür.
+ */
 function normalizePhoneForWhatsAppApi(rawPhone: string): string {
   const digits = (rawPhone || "").replace(/\D/g, "");
   if (digits.length === 10 && digits.startsWith("5")) {
@@ -55,6 +49,9 @@ function normalizePhoneForWhatsAppApi(rawPhone: string): string {
   }
   if (digits.length === 12 && digits.startsWith("905")) {
     return digits;
+  }
+  if (digits.length === 13 && digits.startsWith("0905")) {
+    return digits.slice(1);
   }
   return digits;
 }
@@ -125,7 +122,10 @@ function isApiBodySignalingError(parsed: unknown): {
     return {
       isError: true,
       reason: String(
-        obj.message || obj.error || obj.description || "API yanıtı başarısız (false) döndü."
+        obj.message ||
+          obj.error ||
+          obj.description ||
+          "API yanıtı başarısız (false) döndü."
       ),
     };
   }
@@ -163,126 +163,90 @@ function isApiBodySignalingError(parsed: unknown): {
   return { isError: false };
 }
 
+/**
+ * VatanSMS WhatsApp Resmi SEND-NtoN Gönderimi
+ * POST https://api.toplusmspaketleri.com/bulk/wp/nton
+ */
 async function sendWhatsAppViaVatanSms(params: {
-  phone: string;
+  target: string;
   message: string;
   apiKey: string;
+  regId: string;
+  sendDate: string;
 }): Promise<{
   ok: boolean;
-  endpointUsed?: string;
+  endpointUsed: string;
   status?: number;
-  responseText?: string;
+  responseText: string;
   error?: string;
 }> {
-  const { phone, message, apiKey } = params;
-  const endpoints = getVatanSmsWhatsAppEndpoints();
-  const deviceIdRaw = (process.env.VATANSMS_WP_DEVICE_ID || "").trim();
-  const numericDeviceId =
-    deviceIdRaw && /^\d+$/.test(deviceIdRaw) ? Number(deviceIdRaw) : undefined;
+  const { target, message, apiKey, regId, sendDate } = params;
 
-  const payload: Record<string, unknown> = {
-    phone,
-    number: phone,
-    to: phone,
-    receiver: phone,
-    phones: [phone],
-    message,
-    text: message,
-    message_type: "normal",
-    payload: {
-      text_message: {
+  const payload = {
+    send_date: sendDate,
+    messages: [
+      {
+        reg_id: regId,
+        target,
         message,
       },
-    },
-    ...(deviceIdRaw
-      ? {
-          device_id: numericDeviceId ?? deviceIdRaw,
-          business_device_id: numericDeviceId ?? deviceIdRaw,
-        }
-      : {}),
+    ],
   };
 
-  let lastResult: {
-    ok: boolean;
-    endpointUsed?: string;
-    status?: number;
-    responseText?: string;
-    error?: string;
-  } = {
-    ok: false,
-    error: "Hiçbir VatanSMS WhatsApp endpoint adayına ulaşılamadı.",
-  };
+  try {
+    const response = await fetch(VATANSMS_WP_NTON_URL, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-  for (let i = 0; i < endpoints.length; i++) {
-    const endpoint = endpoints[i];
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "X-Api-Key": apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const responseText = await response.text().catch(() => "");
-      let parsedBody: unknown = null;
-      if (responseText) {
-        try {
-          parsedBody = JSON.parse(responseText);
-        } catch {
-          parsedBody = null;
-        }
+    const responseText = await response.text().catch(() => "");
+    let parsedBody: unknown = null;
+    if (responseText) {
+      try {
+        parsedBody = JSON.parse(responseText);
+      } catch {
+        parsedBody = null;
       }
+    }
 
-      // Eğer varsayılan rotalardan biri 404 döndüyse ve sırada başka aday varsa bir sonrakini dene
-      if (response.status === 404 && i < endpoints.length - 1) {
-        lastResult = {
-          ok: false,
-          endpointUsed: endpoint,
-          status: response.status,
-          responseText,
-          error: `Endpoint 404 döndü (${endpoint})`,
-        };
-        continue;
-      }
-
-      const bodyErr = isApiBodySignalingError(parsedBody);
-      if (!response.ok || bodyErr.isError) {
-        return {
-          ok: false,
-          endpointUsed: endpoint,
-          status: response.status,
-          responseText,
-          error:
-            bodyErr.reason ||
-            `HTTP ${response.status}: ${responseText || response.statusText || "Bilinmeyen API hatası"}`,
-        };
-      }
-
+    const bodyErr = isApiBodySignalingError(parsedBody);
+    if (!response.ok || bodyErr.isError) {
       return {
-        ok: true,
-        endpointUsed: endpoint,
+        ok: false,
+        endpointUsed: VATANSMS_WP_NTON_URL,
         status: response.status,
         responseText,
-      };
-    } catch (err) {
-      lastResult = {
-        ok: false,
-        endpointUsed: endpoint,
         error:
-          (err as Error)?.message ||
-          "VatanSMS WhatsApp API ağ (network) hatası.",
+          bodyErr.reason ||
+          `HTTP ${response.status}: ${responseText || response.statusText || "VatanSMS API hatası"}`,
       };
     }
-  }
 
-  return lastResult;
+    return {
+      ok: true,
+      endpointUsed: VATANSMS_WP_NTON_URL,
+      status: response.status,
+      responseText,
+    };
+  } catch (err) {
+    const errMsg =
+      (err as Error)?.message || "VatanSMS WhatsApp API ağ (network) hatası.";
+    return {
+      ok: false,
+      endpointUsed: VATANSMS_WP_NTON_URL,
+      responseText: errMsg,
+      error: errMsg,
+    };
+  }
 }
 
 async function runWhatsAppReminderCron() {
   const wpApiKey = (process.env.VATANSMS_WP_API_KEY || "").trim();
+  const wpRegId = (process.env.VATANSMS_WP_REG_ID || "").trim();
   const rawActiveWpShopId = (process.env.ACTIVE_WP_SHOP_ID || "").trim();
   const activeWpShopIds = rawActiveWpShopId
     ? rawActiveWpShopId
@@ -297,11 +261,17 @@ async function runWhatsAppReminderCron() {
   const nowTimeLabel = `${String(nowTr.getHours()).padStart(2, "0")}:${String(
     nowTr.getMinutes()
   ).padStart(2, "0")}`;
+  const sendDateTr = formatTurkeySendDate(nowTr);
 
   // Eksik ortam değişkenlerini konsola detaylı logla ama 500 fırlatma
   if (!wpApiKey) {
     console.warn(
       "[VatanSMS WP Cron Uyarı]: VATANSMS_WP_API_KEY ortam değişkeni tanımlı değil! Mesaj gönderimi yapılamayacak."
+    );
+  }
+  if (!wpRegId) {
+    console.warn(
+      "[VatanSMS WP Cron Uyarı]: VATANSMS_WP_REG_ID ortam değişkeni tanımlı değil! Mesaj gönderimi yapılamayacak."
     );
   }
   if (activeWpShopIds.length === 0) {
@@ -319,6 +289,7 @@ async function runWhatsAppReminderCron() {
       status: "skipped",
       reason: "Supabase bağlantı değişkenleri tanımlı değil.",
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+      sendDate: sendDateTr,
       sentCount: 0,
       sentAppointments: [],
     };
@@ -337,6 +308,7 @@ async function runWhatsAppReminderCron() {
       status: "error",
       reason: `Supabase veri çekme hatası: ${fetchError.message}`,
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+      sendDate: sendDateTr,
       sentCount: 0,
       sentAppointments: [],
     };
@@ -359,6 +331,7 @@ async function runWhatsAppReminderCron() {
       status: "no_shops",
       reason: "Kayıtlı dükkan bulunamadı.",
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+      sendDate: sendDateTr,
       sentCount: 0,
       sentAppointments: [],
     };
@@ -379,8 +352,10 @@ async function runWhatsAppReminderCron() {
       reason:
         "WhatsApp hatırlatması aktif olan (whatsapp_enabled === true veya ACTIVE_WP_SHOP_ID ile eşleşen) dükkan bulunamadı. Mevcut dükkanlar korundu ve pas geçildi.",
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+      sendDate: sendDateTr,
       activeWpShopIdConfigured: Boolean(rawActiveWpShopId),
       apiKeyConfigured: Boolean(wpApiKey),
+      regIdConfigured: Boolean(wpRegId),
       totalShopsChecked: shops.length,
       authorizedShopCount: 0,
       sentCount: 0,
@@ -388,13 +363,20 @@ async function runWhatsAppReminderCron() {
     };
   }
 
-  if (!wpApiKey) {
+  if (!wpApiKey || !wpRegId) {
+    const missingVars = [
+      !wpApiKey ? "VATANSMS_WP_API_KEY" : null,
+      !wpRegId ? "VATANSMS_WP_REG_ID" : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     return {
       ok: false,
-      status: "missing_api_key",
-      reason:
-        "VATANSMS_WP_API_KEY tanımlı olmadığı için yetkili dükkanın yaklaşan randevularına WhatsApp mesajı gönderilemedi.",
+      status: "missing_credentials",
+      reason: `${missingVars} tanımlı olmadığı için yetkili dükkanın yaklaşan randevularına WhatsApp mesajı gönderilemedi.`,
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+      sendDate: sendDateTr,
       authorizedShops: authorizedShops.map((s) => s.slug),
       sentCount: 0,
       sentAppointments: [],
@@ -419,21 +401,26 @@ async function runWhatsAppReminderCron() {
     shopName: string;
     appointmentId: string;
     customerName: string;
-    phone: string;
+    target: string;
     barberName: string;
     time: string;
     remainingMinutes: number;
     message: string;
-    endpointUsed?: string;
+    endpointUsed: string;
+    status?: number;
+    responseText: string;
   }[] = [];
 
   const failedAppointments: {
     shopSlug: string;
     appointmentId: string;
     customerName: string;
-    phone: string;
+    target: string;
     time: string;
+    endpointUsed: string;
+    status?: number;
     error: string;
+    responseText: string;
   }[] = [];
 
   for (const shop of authorizedShops) {
@@ -474,8 +461,8 @@ async function runWhatsAppReminderCron() {
         continue;
       }
 
-      const phone = normalizePhoneForWhatsAppApi(apt.customerPhone);
-      if (!phone || phone.length < 10) {
+      const targetPhone = normalizePhoneForWhatsAppApi(apt.customerPhone);
+      if (!targetPhone || targetPhone.length < 10) {
         console.warn(
           `[VatanSMS WP Cron Uyarı]: Geçersiz müşteri telefon numarası atlandı (Dükkan=${shop.slug}, Randevu=${apt.id}, Telefon="${apt.customerPhone}").`
         );
@@ -493,25 +480,29 @@ async function runWhatsAppReminderCron() {
       const wpMessage = `Merhaba ${customerName}, ${barberDisplayName} için saat ${aptTimeStr} randevunuza 30 dakika kaldı.`;
 
       const dispatchResult = await sendWhatsAppViaVatanSms({
-        phone,
+        target: targetPhone,
         message: wpMessage,
         apiKey: wpApiKey,
+        regId: wpRegId,
+        sendDate: formatTurkeySendDate(getTurkeyNow()),
       });
 
       if (!dispatchResult.ok) {
         console.error(
-          `[VatanSMS WP API Gönderim Hatası] Dükkan=${shop.slug} | Randevu=${apt.id} | Müşteri=${customerName} (${phone}) | Saat=${aptTimeStr} | Endpoint=${dispatchResult.endpointUsed || VATANSMS_WP_BASE_URL} | Hata=${dispatchResult.error || dispatchResult.responseText}`
+          `[VatanSMS WP API Gönderim Hatası] Dükkan=${shop.slug} | Randevu=${apt.id} | Müşteri=${customerName} (${targetPhone}) | Saat=${aptTimeStr} | Endpoint=${dispatchResult.endpointUsed} | HTTP=${dispatchResult.status ?? "N/A"} | Hata=${dispatchResult.error} | RawResponse=${dispatchResult.responseText}`
         );
         failedAppointments.push({
           shopSlug: shop.slug,
           appointmentId: apt.id,
           customerName,
-          phone,
+          target: targetPhone,
           time: aptTimeStr,
+          endpointUsed: dispatchResult.endpointUsed,
+          status: dispatchResult.status,
           error:
             dispatchResult.error ||
-            dispatchResult.responseText ||
-            "WhatsApp API gönderim hatası (Cihaz bağlı olmayabilir veya API anahtarı geçersiz).",
+            "WhatsApp API gönderim hatası (Cihaz bağlı olmayabilir veya API bilgileri geçersiz).",
+          responseText: dispatchResult.responseText,
         });
         continue;
       }
@@ -528,12 +519,14 @@ async function runWhatsAppReminderCron() {
         shopName: shop.name,
         appointmentId: apt.id,
         customerName,
-        phone,
+        target: targetPhone,
         barberName: barberDisplayName,
         time: aptTimeStr,
         remainingMinutes,
         message: wpMessage,
         endpointUsed: dispatchResult.endpointUsed,
+        status: dispatchResult.status,
+        responseText: dispatchResult.responseText,
       });
     }
   }
@@ -610,6 +603,7 @@ async function runWhatsAppReminderCron() {
         status: "db_update_error",
         reason: `Mesaj gönderildi ancak reminder_sent güncellenirken hata oluştu: ${upsertError.message}`,
         checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+        sendDate: sendDateTr,
         authorizedShops: authorizedShops.map((s) => s.slug),
         sentCount: sentAppointments.length,
         sentAppointments,
@@ -620,9 +614,11 @@ async function runWhatsAppReminderCron() {
   }
 
   return {
-    ok: true,
-    status: "completed",
+    ok: failedAppointments.length === 0,
+    status: failedAppointments.length > 0 ? "completed_with_errors" : "completed",
     checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
+    sendDate: sendDateTr,
+    endpoint: VATANSMS_WP_NTON_URL,
     windowMinutes: `${minWindowMinutes}-${maxWindowMinutes}`,
     authorizedShops: authorizedShops.map((s) => s.slug),
     sentCount: sentAppointments.length,
@@ -650,6 +646,7 @@ export async function GET() {
         error:
           (error as Error)?.message ||
           "WhatsApp hatırlatma cron çalışırken beklenmeyen bir hata oluştu.",
+        responseText: (error as Error)?.stack || String(error),
         sentCount: 0,
         sentAppointments: [],
       },
@@ -682,6 +679,7 @@ export async function POST() {
         error:
           (error as Error)?.message ||
           "WhatsApp hatırlatma cron çalışırken beklenmeyen bir hata oluştu.",
+        responseText: (error as Error)?.stack || String(error),
         sentCount: 0,
         sentAppointments: [],
       },
