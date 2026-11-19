@@ -99,6 +99,10 @@ interface BarberContextType {
   toggleShopSubscription: (slug: string) => void;
   updateShopSubscription: (slug: string, status: SubscriptionStatus, endDate?: string) => void;
   toggleShopAutoSms: (slug: string, enabled?: boolean) => void;
+  updateShopWhatsAppConfig: (
+    slug: string,
+    config: { whatsapp_enabled?: boolean; whatsapp_reg_id?: string | null }
+  ) => void;
   updateShopPinBySlug: (slug: string, newPin: string) => void;
   updateShopDetails: (slug: string, details: UpdateShopDetailsInput) => void;
   deleteShop: (slug: string) => void;
@@ -621,8 +625,28 @@ function mergeShopsSafely(
       const remoteTime = Number(existingRemote.updatedAt) || 0;
 
       if (localHasRealCustomPin || localTime > remoteTime) {
+        const mergedWpEnabled =
+          lShop.whatsapp_enabled !== undefined
+            ? lShop.whatsapp_enabled
+            : existingRemote.whatsapp_enabled;
+        const mergedWpRegId =
+          lShop.whatsapp_reg_id !== undefined && lShop.whatsapp_reg_id !== null
+            ? lShop.whatsapp_reg_id
+            : existingRemote.whatsapp_reg_id;
         mergedMap.set(key, {
           ...lShop,
+          ...(mergedWpEnabled !== undefined
+            ? {
+                whatsapp_enabled: mergedWpEnabled,
+                whatsappEnabled: mergedWpEnabled,
+              }
+            : {}),
+          ...(mergedWpRegId !== undefined
+            ? {
+                whatsapp_reg_id: mergedWpRegId,
+                whatsappRegId: mergedWpRegId,
+              }
+            : {}),
           appointments: mergeAppointmentsLists(
             lShop.appointments,
             existingRemote.appointments
@@ -631,8 +655,29 @@ function mergeShopsSafely(
           updatedAt: Math.max(localTime, remoteTime, Date.now()),
         });
       } else {
+        const mergedWpEnabled =
+          existingRemote.whatsapp_enabled !== undefined
+            ? existingRemote.whatsapp_enabled
+            : lShop.whatsapp_enabled;
+        const mergedWpRegId =
+          existingRemote.whatsapp_reg_id !== undefined &&
+          existingRemote.whatsapp_reg_id !== null
+            ? existingRemote.whatsapp_reg_id
+            : lShop.whatsapp_reg_id;
         mergedMap.set(key, {
           ...existingRemote,
+          ...(mergedWpEnabled !== undefined
+            ? {
+                whatsapp_enabled: mergedWpEnabled,
+                whatsappEnabled: mergedWpEnabled,
+              }
+            : {}),
+          ...(mergedWpRegId !== undefined
+            ? {
+                whatsapp_reg_id: mergedWpRegId,
+                whatsappRegId: mergedWpRegId,
+              }
+            : {}),
           appointments: mergeAppointmentsLists(
             existingRemote.appointments,
             lShop.appointments
@@ -1667,6 +1712,71 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
               ...shop.shopSettings,
               auto_sms_enabled: nextVal,
               autoSmsEnabled: nextVal,
+            },
+            updatedAt: Date.now(),
+            isFallback: false,
+          };
+        });
+        void syncDirectlyToCloud(nextShops);
+        return nextShops;
+      });
+    },
+    [syncDirectlyToCloud]
+  );
+
+  // SUPER ADMIN: Update Specific Shop's VatanSMS WhatsApp Reminder Config (whatsapp_enabled & whatsapp_reg_id)
+  const updateShopWhatsAppConfig = useCallback(
+    (
+      slug: string,
+      config: { whatsapp_enabled?: boolean; whatsapp_reg_id?: string | null }
+    ) => {
+      const targetNorm = slugifyShopName(slug) || slug.trim().toLowerCase();
+      setShops((prevShops) => {
+        const nextShops = prevShops.map((shop) => {
+          if (
+            (slugifyShopName(shop.slug) || shop.slug.toLowerCase()) !==
+            targetNorm
+          ) {
+            return shop;
+          }
+          const currentEnabled = Boolean(
+            shop.whatsapp_enabled ??
+              shop.whatsappEnabled ??
+              shop.shopSettings?.whatsapp_enabled ??
+              shop.shopSettings?.whatsappEnabled ??
+              false
+          );
+          const currentRegId =
+            shop.whatsapp_reg_id ??
+            shop.whatsappRegId ??
+            shop.shopSettings?.whatsapp_reg_id ??
+            shop.shopSettings?.whatsappRegId ??
+            null;
+
+          const nextEnabled =
+            config.whatsapp_enabled !== undefined
+              ? Boolean(config.whatsapp_enabled)
+              : currentEnabled;
+
+          const nextRegId =
+            config.whatsapp_reg_id !== undefined
+              ? config.whatsapp_reg_id && config.whatsapp_reg_id.trim() !== ""
+                ? config.whatsapp_reg_id.trim()
+                : null
+              : currentRegId;
+
+          return {
+            ...shop,
+            whatsapp_enabled: nextEnabled,
+            whatsappEnabled: nextEnabled,
+            whatsapp_reg_id: nextRegId,
+            whatsappRegId: nextRegId,
+            shopSettings: {
+              ...shop.shopSettings,
+              whatsapp_enabled: nextEnabled,
+              whatsappEnabled: nextEnabled,
+              whatsapp_reg_id: nextRegId,
+              whatsappRegId: nextRegId,
             },
             updatedAt: Date.now(),
             isFallback: false,
@@ -3159,6 +3269,7 @@ export function BarberProvider({ children }: { children: React.ReactNode }) {
         toggleShopSubscription,
         updateShopSubscription,
         toggleShopAutoSms,
+        updateShopWhatsAppConfig,
         updateShopPinBySlug,
         updateShopDetails,
         deleteShop,

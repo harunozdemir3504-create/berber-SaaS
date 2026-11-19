@@ -53,6 +53,8 @@ export interface ShopSettings {
   auto_sms_enabled?: boolean;
   whatsapp_enabled?: boolean; // Varsayılan: false (Otomatik 30 Dk Kala WhatsApp Hatırlatma)
   whatsappEnabled?: boolean;
+  whatsapp_reg_id?: string | null; // VatanSMS WhatsApp Cihaz ID (reg_id)
+  whatsappRegId?: string | null;
 }
 
 export type SlotState = "available" | "booked" | "break";
@@ -207,6 +209,8 @@ export interface TenantShop {
   auto_sms_enabled?: boolean;
   whatsapp_enabled?: boolean;
   whatsappEnabled?: boolean;
+  whatsapp_reg_id?: string | null;
+  whatsappRegId?: string | null;
   updatedAt?: number;
   isFallback?: boolean;
 }

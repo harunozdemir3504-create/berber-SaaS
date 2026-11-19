@@ -21,3 +21,25 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE app_state;
   END IF;
 END $$;
+
+-- 4. Çoklu Berber VatanSMS WhatsApp Hatırlatma Alanları (Mevcut kayıtlara dokunmadan güvenli ekleme)
+-- Not: app_state.data JSONB içerisindeki shops dizisinde whatsapp_enabled (default: false) ve whatsapp_reg_id (nullable) olarak tutulur.
+-- Eğer ilişkisel shops veya tenants tablosu mevcutsa güvenli şekilde sütunları ekler:
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'shops'
+  ) THEN
+    ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT FALSE;
+    ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS whatsapp_reg_id TEXT DEFAULT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'tenants'
+  ) THEN
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT FALSE;
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS whatsapp_reg_id TEXT DEFAULT NULL;
+  END IF;
+END $$;

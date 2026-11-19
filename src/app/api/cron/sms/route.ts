@@ -70,34 +70,62 @@ function getAppointmentIso(apt: Appointment): string {
 }
 
 /**
- * Bir dükkanın WhatsApp otomatik hatırlatma için yetkili/aktif olup olmadığını kontrol eder.
- * GÜVENLİK KURALI:
- * - Varsayılan olarak tüm mevcut dükkanlarda whatsapp_enabled = false kabul edilir.
- * - Sadece whatsapp_enabled === true olan VEYA .env içindeki ACTIVE_WP_SHOP_ID ile eşleşen dükkanlar çalışır.
- * - Diğer tüm mevcut dükkanlar tamamen pas geçilir.
+ * Bir dükkanın WhatsApp otomatik hatırlatma yetkisini ve kullanacağı VatanSMS Cihaz ID (reg_id) değerini belirler.
+ *
+ * KURAL:
+ * a) Veritabanında whatsapp_enabled === true VE whatsapp_reg_id doluysa -> Dükkanın kendi whatsapp_reg_id değerini kullanır.
+ * b) (Geriye dönük uyumluluk) Veritabanında henüz ayarlanmamışsa ama dükkanın slug/id değeri Vercel'deki ACTIVE_WP_SHOP_ID
+ *    ile eşleşiyorsa -> Vercel'deki VATANSMS_WP_REG_ID değerini kullanır (salon-eren-ozkol kesintiye uğramaz).
+ * c) Bu iki şarta uymayan (whatsapp_enabled false olan veya reg_id boş olan) diğer tüm dükkanlar KESİNLİKLE pas geçilir.
  */
-function isShopAuthorizedForWhatsApp(
+function resolveShopWhatsAppAuth(
   shop: TenantShop,
-  activeWpShopIds: string[]
-): boolean {
-  if (!shop) return false;
+  activeWpShopIds: string[],
+  envWpRegId: string
+): {
+  authorized: boolean;
+  regId: string;
+  source: "database" | "env_fallback" | "none";
+} {
+  if (!shop) {
+    return { authorized: false, regId: "", source: "none" };
+  }
   if (
     shop.subscriptionStatus === "suspended" ||
     shop.subscriptionStatus === "expired"
   ) {
-    return false;
+    return { authorized: false, regId: "", source: "none" };
   }
 
-  // 1) Veritabanında açıkça whatsapp_enabled === true olarak işaretlenmiş mi? (Varsayılan: false)
-  const explicitFlag = Boolean(
+  const rawDbEnabled =
     shop.whatsapp_enabled ??
-      shop.whatsappEnabled ??
-      shop.shopSettings?.whatsapp_enabled ??
-      shop.shopSettings?.whatsappEnabled ??
-      false
-  );
+    shop.whatsappEnabled ??
+    shop.shopSettings?.whatsapp_enabled ??
+    shop.shopSettings?.whatsappEnabled;
 
-  // 2) .env içindeki ACTIVE_WP_SHOP_ID ile eşleşiyor mu? (id, slug veya name)
+  const dbRegId = String(
+    shop.whatsapp_reg_id ??
+      shop.whatsappRegId ??
+      shop.shopSettings?.whatsapp_reg_id ??
+      shop.shopSettings?.whatsappRegId ??
+      ""
+  ).trim();
+
+  // a) Veritabanında whatsapp_enabled === true VE whatsapp_reg_id doluysa -> O dükkanın kendi whatsapp_reg_id değerini kullan
+  if (rawDbEnabled === true && dbRegId.length > 0) {
+    return {
+      authorized: true,
+      regId: dbRegId,
+      source: "database",
+    };
+  }
+
+  // Eğer veritabanında açıkça whatsapp_enabled === false yapılmışsa pas geç
+  if (rawDbEnabled === false) {
+    return { authorized: false, regId: "", source: "none" };
+  }
+
+  // b) (Geriye dönük uyumluluk) Veritabanında henüz ayarlanmamışsa ama dükkanın slug/id değeri ACTIVE_WP_SHOP_ID ile eşleşiyorsa
   const shopIdentifiers = [shop.id, shop.slug, shop.name]
     .filter((val): val is string => Boolean(val && typeof val === "string"))
     .map((val) => val.trim().toLowerCase());
@@ -106,7 +134,15 @@ function isShopAuthorizedForWhatsApp(
     activeWpShopIds.length > 0 &&
     activeWpShopIds.some((envId) => shopIdentifiers.includes(envId));
 
-  return explicitFlag || matchesEnvShopId;
+  if (matchesEnvShopId && envWpRegId.length > 0) {
+    return {
+      authorized: true,
+      regId: envWpRegId,
+      source: "env_fallback",
+    };
+  }
+
+  return { authorized: false, regId: "", source: "none" };
 }
 
 function isApiBodySignalingError(parsed: unknown): {
@@ -246,7 +282,7 @@ async function sendWhatsAppViaVatanSms(params: {
 
 async function runWhatsAppReminderCron() {
   const wpApiKey = (process.env.VATANSMS_WP_API_KEY || "").trim();
-  const wpRegId = (process.env.VATANSMS_WP_REG_ID || "").trim();
+  const envWpRegId = (process.env.VATANSMS_WP_REG_ID || "").trim();
   const rawActiveWpShopId = (process.env.ACTIVE_WP_SHOP_ID || "").trim();
   const activeWpShopIds = rawActiveWpShopId
     ? rawActiveWpShopId
@@ -263,20 +299,9 @@ async function runWhatsAppReminderCron() {
   ).padStart(2, "0")}`;
   const sendDateTr = formatTurkeySendDate(nowTr);
 
-  // Eksik ortam değişkenlerini konsola detaylı logla ama 500 fırlatma
   if (!wpApiKey) {
     console.warn(
       "[VatanSMS WP Cron Uyarı]: VATANSMS_WP_API_KEY ortam değişkeni tanımlı değil! Mesaj gönderimi yapılamayacak."
-    );
-  }
-  if (!wpRegId) {
-    console.warn(
-      "[VatanSMS WP Cron Uyarı]: VATANSMS_WP_REG_ID ortam değişkeni tanımlı değil! Mesaj gönderimi yapılamayacak."
-    );
-  }
-  if (activeWpShopIds.length === 0) {
-    console.warn(
-      "[VatanSMS WP Cron Uyarı]: ACTIVE_WP_SHOP_ID ortam değişkeni tanımlı değil! Sadece veritabanında whatsapp_enabled === true olan dükkanlar kontrol edilecek."
     );
   }
 
@@ -337,25 +362,30 @@ async function runWhatsAppReminderCron() {
     };
   }
 
-  // SADECE WhatsApp hatırlatması açık olan veya ACTIVE_WP_SHOP_ID ile eşleşen dükkanları filtrele
-  const authorizedShops = shops.filter((shop) =>
-    isShopAuthorizedForWhatsApp(shop, activeWpShopIds)
-  );
+  // SADECE:
+  // a) Veritabanında whatsapp_enabled === true VE whatsapp_reg_id dolu olanları VEYA
+  // b) Veritabanında henüz ayarlanmamış ama ACTIVE_WP_SHOP_ID ile eşleşip VATANSMS_WP_REG_ID'si olanları seç
+  const authorizedShopEntries = shops
+    .map((shop) => ({
+      shop,
+      auth: resolveShopWhatsAppAuth(shop, activeWpShopIds, envWpRegId),
+    }))
+    .filter((entry) => entry.auth.authorized && entry.auth.regId.length > 0);
 
-  if (authorizedShops.length === 0) {
+  if (authorizedShopEntries.length === 0) {
     console.info(
-      `[VatanSMS WP Cron Bilgi]: Aktif WhatsApp hatırlatması açık dükkan bulunamadı (ACTIVE_WP_SHOP_ID="${rawActiveWpShopId || "BOŞ"}", toplam dükkan=${shops.length}). Diğer tüm dükkanlar güvenlik kuralı gereği pas geçildi.`
+      `[VatanSMS WP Cron Bilgi]: WhatsApp hatırlatması yetkili/aktif dükkan bulunamadı (ACTIVE_WP_SHOP_ID="${rawActiveWpShopId || "BOŞ"}", toplam dükkan=${shops.length}). Diğer tüm dükkanlar güvenlik kuralı gereği pas geçildi.`
     );
     return {
       ok: true,
       status: "no_authorized_shop",
       reason:
-        "WhatsApp hatırlatması aktif olan (whatsapp_enabled === true veya ACTIVE_WP_SHOP_ID ile eşleşen) dükkan bulunamadı. Mevcut dükkanlar korundu ve pas geçildi.",
+        "WhatsApp hatırlatması aktif ve reg_id tanımlı olan (veya ACTIVE_WP_SHOP_ID ile eşleşen) dükkan bulunamadı. Mevcut dükkanlar korundu ve pas geçildi.",
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
       sendDate: sendDateTr,
       activeWpShopIdConfigured: Boolean(rawActiveWpShopId),
       apiKeyConfigured: Boolean(wpApiKey),
-      regIdConfigured: Boolean(wpRegId),
+      envRegIdConfigured: Boolean(envWpRegId),
       totalShopsChecked: shops.length,
       authorizedShopCount: 0,
       sentCount: 0,
@@ -363,27 +393,24 @@ async function runWhatsAppReminderCron() {
     };
   }
 
-  if (!wpApiKey || !wpRegId) {
-    const missingVars = [
-      !wpApiKey ? "VATANSMS_WP_API_KEY" : null,
-      !wpRegId ? "VATANSMS_WP_REG_ID" : null,
-    ]
-      .filter(Boolean)
-      .join(", ");
-
+  if (!wpApiKey) {
     return {
       ok: false,
       status: "missing_credentials",
-      reason: `${missingVars} tanımlı olmadığı için yetkili dükkanın yaklaşan randevularına WhatsApp mesajı gönderilemedi.`,
+      reason:
+        "VATANSMS_WP_API_KEY tanımlı olmadığı için yetkili dükkanların yaklaşan randevularına WhatsApp mesajı gönderilemedi.",
       checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
       sendDate: sendDateTr,
-      authorizedShops: authorizedShops.map((s) => s.slug),
+      authorizedShops: authorizedShopEntries.map((e) => ({
+        slug: e.shop.slug,
+        source: e.auth.source,
+      })),
       sentCount: 0,
       sentAppointments: [],
     };
   }
 
-  // Önümüzdeki 30-35 dakika penceresi (cron-job.org 1-5 dk gecikme toleransı için varsayılan 25-35 dk, env ile özelleştirilebilir)
+  // Önümüzdeki 25-35 dakika penceresi
   const minWindowMinutes = Number(process.env.WP_REMINDER_MIN_MINUTES) || 25;
   const maxWindowMinutes = Number(process.env.WP_REMINDER_MAX_MINUTES) || 35;
 
@@ -399,6 +426,7 @@ async function runWhatsAppReminderCron() {
   const sentAppointments: {
     shopSlug: string;
     shopName: string;
+    regIdSource: "database" | "env_fallback" | "none";
     appointmentId: string;
     customerName: string;
     target: string;
@@ -413,6 +441,7 @@ async function runWhatsAppReminderCron() {
 
   const failedAppointments: {
     shopSlug: string;
+    regIdSource: "database" | "env_fallback" | "none";
     appointmentId: string;
     customerName: string;
     target: string;
@@ -423,7 +452,7 @@ async function runWhatsAppReminderCron() {
     responseText: string;
   }[] = [];
 
-  for (const shop of authorizedShops) {
+  for (const { shop, auth } of authorizedShopEntries) {
     if (!Array.isArray(shop.appointments)) continue;
 
     for (const apt of shop.appointments) {
@@ -483,16 +512,17 @@ async function runWhatsAppReminderCron() {
         target: targetPhone,
         message: wpMessage,
         apiKey: wpApiKey,
-        regId: wpRegId,
+        regId: auth.regId,
         sendDate: formatTurkeySendDate(getTurkeyNow()),
       });
 
       if (!dispatchResult.ok) {
         console.error(
-          `[VatanSMS WP API Gönderim Hatası] Dükkan=${shop.slug} | Randevu=${apt.id} | Müşteri=${customerName} (${targetPhone}) | Saat=${aptTimeStr} | Endpoint=${dispatchResult.endpointUsed} | HTTP=${dispatchResult.status ?? "N/A"} | Hata=${dispatchResult.error} | RawResponse=${dispatchResult.responseText}`
+          `[VatanSMS WP API Gönderim Hatası] Dükkan=${shop.slug} (${auth.source}) | Randevu=${apt.id} | Müşteri=${customerName} (${targetPhone}) | Saat=${aptTimeStr} | Endpoint=${dispatchResult.endpointUsed} | HTTP=${dispatchResult.status ?? "N/A"} | Hata=${dispatchResult.error} | RawResponse=${dispatchResult.responseText}`
         );
         failedAppointments.push({
           shopSlug: shop.slug,
+          regIdSource: auth.source,
           appointmentId: apt.id,
           customerName,
           target: targetPhone,
@@ -517,6 +547,7 @@ async function runWhatsAppReminderCron() {
       sentAppointments.push({
         shopSlug: shop.slug,
         shopName: shop.name,
+        regIdSource: auth.source,
         appointmentId: apt.id,
         customerName,
         target: targetPhone,
@@ -604,7 +635,10 @@ async function runWhatsAppReminderCron() {
         reason: `Mesaj gönderildi ancak reminder_sent güncellenirken hata oluştu: ${upsertError.message}`,
         checkedAtTurkeyTime: `${todayIso} ${nowTimeLabel}`,
         sendDate: sendDateTr,
-        authorizedShops: authorizedShops.map((s) => s.slug),
+        authorizedShops: authorizedShopEntries.map((e) => ({
+          slug: e.shop.slug,
+          source: e.auth.source,
+        })),
         sentCount: sentAppointments.length,
         sentAppointments,
         failedCount: failedAppointments.length,
@@ -620,7 +654,10 @@ async function runWhatsAppReminderCron() {
     sendDate: sendDateTr,
     endpoint: VATANSMS_WP_NTON_URL,
     windowMinutes: `${minWindowMinutes}-${maxWindowMinutes}`,
-    authorizedShops: authorizedShops.map((s) => s.slug),
+    authorizedShops: authorizedShopEntries.map((e) => ({
+      slug: e.shop.slug,
+      source: e.auth.source,
+    })),
     sentCount: sentAppointments.length,
     sentAppointments,
     failedCount: failedAppointments.length,
