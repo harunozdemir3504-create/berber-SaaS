@@ -801,6 +801,45 @@ export default function SuperAdminPage() {
                               SÜRESİ DOLDU • YENİLEME BEKLENİYOR
                             </span>
                           )}
+
+                          {/* ÜST BAŞLIKTA TEK TIKLA 30 DK KALA SMS DURUM BUTONU */}
+                          {(() => {
+                            const isSmsOn = Boolean(
+                              shop.auto_sms_enabled ??
+                                shop.autoSmsEnabled ??
+                                shop.shopSettings?.auto_sms_enabled ??
+                                shop.shopSettings?.autoSmsEnabled
+                            );
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextVal = !isSmsOn;
+                                  toggleShopAutoSms(shop.slug, nextVal);
+                                  showToast(
+                                    nextVal
+                                      ? `📲 Otomatik 30 Dk Kala SMS: AKTİF (${shop.name})`
+                                      : `📲 Otomatik 30 Dk Kala SMS: KAPALI (${shop.name})`,
+                                    nextVal
+                                      ? "Randevuya 30 dk kala müşterilere otomatik hatırlatma SMS'i gönderilecek."
+                                      : "Bu dükkan için otomatik 30 dk kala SMS hatırlatma kapatıldı.",
+                                    nextVal ? "success" : "warning"
+                                  );
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider transition cursor-pointer active:scale-95 ${
+                                  isSmsOn
+                                    ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                                    : "border-white/15 bg-stone-500/20 text-stone-400 hover:border-white/30 hover:text-stone-200"
+                                }`}
+                                title="Tek tıkla Otomatik 30 Dk Kala SMS özelliğini aç/kapat"
+                              >
+                                <span>
+                                  📲 Otomatik 30 Dk Kala SMS:{" "}
+                                  {isSmsOn ? "AKTİF" : "KAPALI"}
+                                </span>
+                              </button>
+                            );
+                          })()}
                         </div>
 
                         {/* İLETİŞİM VE DÜKKAN METRİKLERİ */}
@@ -1081,8 +1120,8 @@ export default function SuperAdminPage() {
                     })()}
                   </div>
 
-                  {/* SÜPER ADMİN DÜKKAN YETKİ PANELİ: 1) AÇIK YÖNETİM ŞİFRESİ, 2) ABONELİK DURUMU SEÇİMİ, 3) BİTİŞ TARİHİ ATAMA */}
-                  <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-[#110f0d] p-3.5 sm:grid-cols-3">
+                  {/* SÜPER ADMİN DÜKKAN YETKİ PANELİ: 1) AÇIK YÖNETİM ŞİFRESİ, 2) ABONELİK DURUMU SEÇİMİ, 3) BİTİŞ TARİHİ ATAMA, 4) OTOMATİK 30 DK KALA SMS */}
+                  <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-[#110f0d] p-3.5 sm:grid-cols-2 lg:grid-cols-4">
                     {/* 1. YÖNETİM ŞİFRESİ (DÜZ METİN & DÜZENLENEBİLİR) */}
                     <div className="flex flex-col justify-between rounded-xl border border-purple-500/30 bg-purple-950/15 p-2.5">
                       <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-300">
@@ -1264,6 +1303,71 @@ export default function SuperAdminPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* 4. OTOMATİK 30 DK KALA SMS AÇ / KAPAT (AKTİF YEŞİL / KAPALI GRİ) */}
+                    {(() => {
+                      const isSmsActive = Boolean(
+                        shop.auto_sms_enabled ??
+                          shop.autoSmsEnabled ??
+                          shop.shopSettings?.auto_sms_enabled ??
+                          shop.shopSettings?.autoSmsEnabled
+                      );
+                      return (
+                        <div className="flex flex-col justify-between rounded-xl border border-emerald-500/30 bg-emerald-950/15 p-2.5">
+                          <span className="flex items-center justify-between gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                            <span>📲 Otomatik 30 Dk Kala SMS</span>
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${
+                                isSmsActive
+                                  ? "bg-emerald-500/25 text-emerald-300 border border-emerald-400/40"
+                                  : "bg-stone-500/25 text-stone-400 border border-white/10"
+                              }`}
+                            >
+                              {isSmsActive ? "AKTİF" : "KAPALI"}
+                            </span>
+                          </span>
+                          <div className="mt-2 grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                toggleShopAutoSms(shop.slug, true);
+                                showToast(
+                                  `📲 Otomatik 30 Dk Kala SMS: AKTİF (${shop.name})`,
+                                  "auto_sms_enabled = true olarak Supabase ve localStorage'a kaydedildi.",
+                                  "success"
+                                );
+                              }}
+                              className={`flex items-center justify-center gap-1 rounded-lg border py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                                isSmsActive
+                                  ? "border-emerald-400 bg-emerald-500 text-[#0c1410] shadow-sm"
+                                  : "border-white/10 bg-[#110f0d] text-stone-400 hover:border-emerald-500/40 hover:text-emerald-300"
+                              }`}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>AKTİF</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                toggleShopAutoSms(shop.slug, false);
+                                showToast(
+                                  `📲 Otomatik 30 Dk Kala SMS: KAPALI (${shop.name})`,
+                                  "auto_sms_enabled = false olarak Supabase ve localStorage'a kaydedildi.",
+                                  "warning"
+                                );
+                              }}
+                              className={`flex items-center justify-center gap-1 rounded-lg border py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                                !isSmsActive
+                                  ? "border-stone-400/60 bg-stone-600 text-white shadow-sm"
+                                  : "border-white/10 bg-[#110f0d] text-stone-400 hover:border-stone-400/40 hover:text-stone-200"
+                              }`}
+                            >
+                              <span>KAPALI</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Action Buttons on Each Shop Card */}
@@ -1507,12 +1611,12 @@ export default function SuperAdminPage() {
               </div>
             </div>
 
-            {/* 📲 Otomatik 30 Dk Kala SMS Aktif Olsun Onay Kutusu / Toggle */}
+            {/* 📲 Otomatik 30 Dk Kala SMS Hatırlatma Aktif Onay Kutusu / Toggle */}
             <div
               onClick={() => setNewShopAutoSms((prev) => !prev)}
               className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition select-none ${
                 newShopAutoSms
-                  ? "border-emerald-500/50 bg-emerald-950/25"
+                  ? "border-emerald-500/60 bg-emerald-950/30"
                   : "border-white/15 bg-[#14100d]"
               }`}
             >
@@ -1526,7 +1630,7 @@ export default function SuperAdminPage() {
                 />
                 <div className="min-w-0">
                   <span className="block text-xs font-extrabold text-[#fdf8f5]">
-                    📲 Otomatik 30 Dk Kala SMS Aktif Olsun
+                    {newShopAutoSms ? "[✔]" : "[ ]"} Otomatik 30 Dk Kala SMS Hatırlatma Aktif
                   </span>
                   <span className="block text-[10px] text-stone-400">
                     Randevuya 30 dk kala müşteriye otomatik hatırlatma SMS&apos;i gönderilir
@@ -1540,7 +1644,7 @@ export default function SuperAdminPage() {
                     : "border border-white/15 bg-stone-500/20 text-stone-400"
                 }`}
               >
-                {newShopAutoSms ? "Aktif" : "Kapalı"}
+                {newShopAutoSms ? "AKTİF" : "KAPALI"}
               </span>
             </div>
 
