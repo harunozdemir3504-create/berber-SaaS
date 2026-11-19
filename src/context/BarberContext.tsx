@@ -532,9 +532,25 @@ function mergeAppointmentsLists(
   for (const apt of secondaryApts) {
     if (apt && apt.id) aptMap.set(apt.id, apt);
   }
-  // Primary (güncel/öncelikli) randevular aynı ID'de üstüne yazar, eksik olanlar korunur
+  // Primary (güncel/öncelikli) randevular aynı ID'de üstüne yazar, eksik olanlar ve reminder_sent bayrağı korunur
   for (const apt of primaryApts) {
-    if (apt && apt.id) aptMap.set(apt.id, apt);
+    if (apt && apt.id) {
+      const existing = aptMap.get(apt.id);
+      if (existing) {
+        aptMap.set(apt.id, {
+          ...existing,
+          ...apt,
+          reminder_sent: Boolean(apt.reminder_sent || existing.reminder_sent),
+          reminder_sent_at: apt.reminder_sent_at || existing.reminder_sent_at,
+          sms_sent: Boolean(apt.sms_sent || existing.sms_sent),
+          sms_sent_at: apt.sms_sent_at || existing.sms_sent_at,
+          reminderSent: Boolean(apt.reminderSent || existing.reminderSent),
+          reminderSentAt: apt.reminderSentAt || existing.reminderSentAt,
+        });
+      } else {
+        aptMap.set(apt.id, apt);
+      }
+    }
   }
   return Array.from(aptMap.values());
 }

@@ -51,6 +51,8 @@ export interface ShopSettings {
   closedDays: number[]; // 0 = Pazar, 1 = Pazartesi, 2 = Salı, 3 = Çarşamba, 4 = Perşembe, 5 = Cuma, 6 = Cumartesi
   autoSmsEnabled?: boolean; // Otomatik 30 Dk Kala SMS Hatırlatma
   auto_sms_enabled?: boolean;
+  whatsapp_enabled?: boolean; // Varsayılan: false (Otomatik 30 Dk Kala WhatsApp Hatırlatma)
+  whatsappEnabled?: boolean;
 }
 
 export type SlotState = "available" | "booked" | "break";
@@ -117,6 +119,8 @@ export interface Appointment {
   status: AppointmentStatus;
   reminderSent: boolean;
   reminderSentAt?: string;
+  reminder_sent?: boolean; // Varsayılan: false (VatanSMS WhatsApp hatırlatması gönderildi mi?)
+  reminder_sent_at?: string;
   sms_sent?: boolean;
   sms_sent_at?: string;
   notes?: string;
@@ -177,6 +181,7 @@ export type SubscriptionStatus = "active" | "suspended" | "expired";
 export type DepositPolicyType = "require_deposit" | "block_booking";
 
 export interface TenantShop {
+  id?: string;
   slug: string;
   name: string;
   subtitle: string;
@@ -200,6 +205,8 @@ export interface TenantShop {
   stats: RevenueStats;
   autoSmsEnabled?: boolean;
   auto_sms_enabled?: boolean;
+  whatsapp_enabled?: boolean;
+  whatsappEnabled?: boolean;
   updatedAt?: number;
   isFallback?: boolean;
 }
