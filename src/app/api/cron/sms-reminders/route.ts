@@ -102,7 +102,7 @@ async function dispatchSmsViaGateway(params: {
   }
 }
 
-export async function runSmsReminderScan() {
+async function runSmsReminderScan() {
   const smsApiKey = (process.env.SMS_API_KEY || "").trim();
   const smsApiHash = (process.env.SMS_API_HASH || "").trim();
   const smsSender = (process.env.SMS_SENDER || "APITEST").trim();
