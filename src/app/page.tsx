@@ -1712,9 +1712,14 @@ export default function CustomerBookingPage() {
                               <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
                             </div>
 
-                            <h3 className="text-xl font-black text-emerald-300 sm:text-2xl">
-                              ✅ Randevunuz Başarıyla Oluşturuldu!
-                            </h3>
+                            <div className="space-y-1.5">
+                              <h3 className="text-xl font-black text-emerald-300 sm:text-2xl">
+                                ✅ Randevunuz Onaylandı!
+                              </h3>
+                              <p className="text-sm font-bold text-emerald-100/90 sm:text-base">
+                                Lütfen saatinden önce burada olunuz.
+                              </p>
+                            </div>
 
                             {summaryCardEl}
 
