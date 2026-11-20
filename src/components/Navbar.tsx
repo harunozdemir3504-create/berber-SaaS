@@ -228,9 +228,12 @@ export default function Navbar() {
             <button
               type="button"
               onClick={() => {
-                lockAdminSession(currentShop.slug);
+                const targetShopSlug = currentShop?.slug;
+                lockAdminSession(targetShopSlug);
                 if (typeof window !== "undefined") {
-                  window.location.href = "/";
+                  window.location.href = targetShopSlug
+                    ? `/s/${encodeURIComponent(targetShopSlug)}`
+                    : "/admin";
                 }
               }}
               title="Oturumu Kapat / Çıkış Yap"

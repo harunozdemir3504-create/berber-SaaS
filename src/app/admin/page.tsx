@@ -2000,9 +2000,12 @@ export default function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => {
-                  lockAdminSession(currentShop.slug);
+                  const targetShopSlug = currentShop?.slug;
+                  lockAdminSession(targetShopSlug);
                   if (typeof window !== "undefined") {
-                    window.location.href = "/";
+                    window.location.href = targetShopSlug
+                      ? `/s/${encodeURIComponent(targetShopSlug)}`
+                      : "/admin";
                   }
                 }}
                 title="Güvenli Çıkış Yap"
@@ -4387,9 +4390,12 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      lockAdminSession(currentShop.slug);
+                      const targetShopSlug = currentShop?.slug;
+                      lockAdminSession(targetShopSlug);
                       if (typeof window !== "undefined") {
-                        window.location.href = "/";
+                        window.location.href = targetShopSlug
+                          ? `/s/${encodeURIComponent(targetShopSlug)}`
+                          : "/admin";
                       }
                     }}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400 dark:border-rose-500/40 bg-rose-100 dark:bg-rose-500/15 px-3.5 py-2.5 text-xs font-black text-rose-900 dark:text-rose-300"

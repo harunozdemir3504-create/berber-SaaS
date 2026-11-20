@@ -26,7 +26,6 @@ export const metadata: Metadata = {
   title: "VIP Berber Online Randevu",
   description:
     "VIP berber ve kuaför salonları için hızlı ve güvenli online randevu sistemi.",
-  manifest: "/manifest.json?v=2",
   applicationName: "VIP Randevu",
   appleWebApp: {
     capable: true,
@@ -59,7 +58,6 @@ export default function RootLayout({
   return (
     <html lang="tr" className="dark touch-manipulation">
       <head>
-        <link rel="manifest" href="/manifest.json?v=2" />
         <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
@@ -74,6 +72,57 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                // Dinamik PWA Manifest Bağlama: Kök /manifest.json SADECE ana tanıtım sayfasında (/) yüklenir.
+                // /s/[slug], /[slug] ve /admin?shop=[slug] sayfaları /api/manifest/[slug] kullanır.
+                try {
+                  var p = new URLSearchParams(location.search);
+                  var shopParam = (p.get('shop') || '').trim();
+                  var pathname = location.pathname || '/';
+                  var manifestHref = '';
+
+                  if (pathname.indexOf('/s/') === 0) {
+                    var sSlug = pathname.slice(3).split('/')[0];
+                    if (sSlug) manifestHref = '/api/manifest/' + encodeURIComponent(decodeURIComponent(sSlug));
+                  } else if (pathname === '/admin' || pathname.indexOf('/admin/') === 0) {
+                    var adminSlug = shopParam;
+                    if (!adminSlug) {
+                      try {
+                        var ls = JSON.parse(localStorage.getItem('vip_barber_persistent_admin_session_v1') || 'null');
+                        adminSlug = localStorage.getItem('pwa_locked_shop_id') || (ls && ls.shopSlug) || '';
+                      } catch(e) {}
+                    }
+                    if (adminSlug) {
+                      manifestHref = '/api/manifest/' + encodeURIComponent(adminSlug) + '?mode=admin';
+                    }
+                  } else if (pathname === '/') {
+                    if (shopParam) {
+                      manifestHref = '/api/manifest/' + encodeURIComponent(shopParam);
+                    } else {
+                      manifestHref = '/manifest.json?v=2';
+                    }
+                  } else {
+                    var firstSeg = pathname.replace(/^\\/+/, '').split('/')[0];
+                    var reserved = ['admin', 'super-admin', 'api', 'reels'];
+                    if (firstSeg && reserved.indexOf(firstSeg.toLowerCase()) === -1) {
+                      manifestHref = '/api/manifest/' + encodeURIComponent(decodeURIComponent(firstSeg));
+                    }
+                  }
+
+                  if (manifestHref) {
+                    var existingManifest = document.querySelector('link[rel="manifest"]');
+                    if (existingManifest) {
+                      if (existingManifest.getAttribute('href') !== manifestHref) {
+                        existingManifest.setAttribute('href', manifestHref);
+                      }
+                    } else {
+                      var linkEl = document.createElement('link');
+                      linkEl.rel = 'manifest';
+                      linkEl.href = manifestHref;
+                      document.head.appendChild(linkEl);
+                    }
+                  }
+                } catch(e) {}
+
                 // Berber girişi kilitliyse (pwa_locked_role === 'barber_admin') parametresiz '/' açılışında doğrudan berber paneline git; ?shop= her zaman 1. önceliktir
                 try {
                   var params = new URLSearchParams(location.search);
