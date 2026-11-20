@@ -529,42 +529,6 @@ export default function VipLandingPage({
                       </span>
                     </div>
 
-                    {/* Aktif Dükkan Vitrinleri (Müşteri Randevu Ekranı Hızlı Geçiş) */}
-                    {shops.length > 0 && onOpenShop && (
-                      <div className="mt-7 w-full max-w-2xl mx-auto rounded-2xl border border-white/[0.08] bg-[#0d0e14]/85 p-3.5 sm:p-4 backdrop-blur-xl">
-                        <div className="mb-2.5 flex items-center justify-between">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-[#FBBF24]">
-                            ✂️ Aktif Salon Vitrinleri (Müşteri Randevu)
-                          </span>
-                          <span className="text-[10px] font-semibold text-slate-400">
-                            {shops.filter((s) => s.subscriptionStatus === "active").length} Salon Açık
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          {shops
-                            .filter((s) => s.subscriptionStatus === "active")
-                            .map((shop) => (
-                              <button
-                                key={shop.slug}
-                                type="button"
-                                onClick={() => onOpenShop(shop.slug)}
-                                className="group flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-[#131825] px-3 py-2.5 text-left transition hover:border-[#F59E0B]/60 hover:bg-[#161c2c] active:scale-[0.98] cursor-pointer"
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate text-xs font-extrabold text-slate-100 group-hover:text-[#FBBF24]">
-                                    {shop.name}
-                                  </p>
-                                  <p className="truncate text-[10px] text-slate-400">
-                                    {shop.district}
-                                  </p>
-                                </div>
-                                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#F59E0B] transition-transform group-hover:translate-x-0.5" />
-                              </button>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* ============================================================= */}
                     {/* HAREKETLİ CANLI TELEFON & BİLDİRİM VİTRİNİ (GÖRSEL ŞOV)       */}
                     {/* ============================================================= */}
